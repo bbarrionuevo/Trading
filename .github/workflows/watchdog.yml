@@ -1,0 +1,25 @@
+name: Vigilante (alertas por mail)
+on:
+  schedule: [{cron: "23 * * * *"}]
+  workflow_dispatch:
+permissions: {contents: read, issues: write, actions: read}
+concurrency: watchdog
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with: {python-version: "3.12"}
+      - run: pip install -r local/requirements.txt
+      - name: Latido del PC y estado del CI de main
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: |
+          git fetch -q origin pc-status && git show FETCH_HEAD:pc_status.json > /tmp/pc.json || echo "sin latido"
+          echo "CI_MAIN=$(gh run list -w ci.yml -b main -L 1 --json conclusion -q '.[0].conclusion' 2>/dev/null)" >> $GITHUB_ENV
+      - name: Evaluar y avisar
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          NEXUS_OWNER: ${{ github.repository_owner }}
+        run: cd local && python -m nexus.monitor watchdog /tmp/pc.json "$CI_MAIN"
