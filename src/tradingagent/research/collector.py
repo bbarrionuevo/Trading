@@ -141,6 +141,10 @@ class _Telegram:
         self.sent += r.ok
         return r.ok
 
+    async def send_alert(self, alert: Alert) -> bool:
+        """Una alerta ya armada (HTML escapado) del operador paper, con el mismo cuidado que `send`."""
+        return await self.send(alert.text, silent=alert.silent)
+
 
 def digest(day: str, events: list[dict], reactions: list[dict], health: dict) -> str:
     """Resumen de un día UTC: noticias por fuente, corroboradas y los mayores movimientos a 15 minutos."""

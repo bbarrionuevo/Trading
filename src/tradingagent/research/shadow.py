@@ -22,6 +22,7 @@ Archivos:
 
 Un archivo `KILL` en la carpeta de datos (la rama `data`) frena las entradas.
 """
+import asyncio
 import json
 import logging
 import time
@@ -54,6 +55,7 @@ STOP_SLIPPAGE_BPS = 20
 EXIT_SLIPPAGE_BPS = 50
 FEE_BPS = D("10")                                   # Binance spot estándar: 0,10 % maker y taker
 INFO_TTL_S = 86_400
+MAX_GAP_MIN = 48 * 60                               # velas hacia atrás como máximo si las corridas se cortaron
 
 
 def _month(ts: float) -> str:
@@ -66,6 +68,13 @@ def _append(path: Path, rows: list[dict]) -> None:
         with path.open("a", encoding="utf-8", newline="\n") as f:
             for r in rows:
                 f.write(json.dumps(r, ensure_ascii=False, sort_keys=True, default=str) + "\n")
+
+
+def _save(data: Path, now: float, st: dict, trades: list[dict], decisions: list[dict]) -> None:
+    """Todo al final de la corrida (en un hilo): operaciones, decisiones y el estado."""
+    _append(data / DIR / TRADES / f"{_month(now)}.jsonl", trades)
+    _append(data / DIR / DECISIONS / f"{_month(now)}.jsonl", decisions)
+    paths.write_json_atomic(data / DIR / STATE, st)
 
 
 def parse_symbol_info(s: dict) -> dict:
@@ -139,8 +148,12 @@ class _Run:
         meta = self.st["positions"][sym]
         inst = self.reg.get(sym)
         qty = self.pf.qty(sym)
-        if inst is None or qty <= 0:
+        if qty <= 0:                                                   # registro sin cantidad: se limpia
             self.st["positions"].pop(sym)
+            return
+        if inst is None:                                               # sin filtros del par: no se puede vender,
+            self.counts["salida_sin_filtros"] += 1                     # la posición sigue (y su valor también)
+            log.warning("no se pudo cerrar %s (%s): el par no tiene filtros del exchange", sym, reason)
             return
         if price is not None:
             fee = inst.fee(qty * price, liquidity)
@@ -158,10 +171,10 @@ class _Run:
             sold, avg, fees = order.filled_qty, order.avg_price, order.fees
             realized = sum((f.realized_pnl for f in order.fills), D(0))
         entry_fee = D(meta["entry_fee"]) * sold / D(meta["qty"])
-        net = realized - fees - entry_fee
+        net = round(realized - fees - entry_fee, 8)                    # lo mismo en el registro y en el total
         left = self.pf.qty(sym)
         row = {"tipo": "salida", "motivo": reason, "symbol": sym, "qty": str(sold), "price": str(avg),
-               "fee": str(fees), "pnl_neto": str(round(net, 6)), "entry_price": meta["avg_price"],
+               "fee": str(fees), "pnl_neto": str(net), "entry_price": meta["avg_price"],
                "entry_ts": meta["entry_ts"], "ts": round(ts or self.now, 3), "event_id": meta["event_id"],
                "category": meta["category"], "strategy_tag": meta.get("strategy_tag", STRATEGY_TAG), "modo": "paper"}
         self.trades.append(row)
@@ -181,19 +194,29 @@ class _Run:
             await self._alert(trade_alert(sym, "sell", sold, avg, why=why or reason, role="exit", pnl=round(net, 4)))
 
     async def oco(self) -> None:
-        """Stops y take-profits en reposo: lo que el exchange habría ejecutado entre corridas."""
+        """Stops y take-profits en reposo: lo que el exchange habría ejecutado entre corridas.
+
+        Vela por vela desde la anterior corrida. Si una vela toca los dos, cuenta el stop. En el minuto de
+        la entrada no se sabe si el mínimo fue antes o después de comprar: ahí solo cuenta el cierre (que sí
+        es posterior), para no inventar stops ni take-profits."""
         end = minute(self.now) - MIN                                   # última vela cerrada
+        slip = 1 - D(STOP_SLIPPAGE_BPS) / D(10_000)
         for sym, meta in list(self.st["positions"].items()):
             c = self.store.candles.get(sym) or {}
-            start = max(minute(meta["entry_ts"]) + MIN, minute(self.st["last_check"]))
+            inst = self.reg.get(sym)
+            entry_m = minute(meta["entry_ts"])
+            start = max(entry_m, minute(self.st["last_check"]))
             stop, tp = D(meta["stop"]), D(meta["tp"])
             for m in range(start, end + MIN, MIN):
                 k = c.get(m)
                 if k is None:
                     continue
-                o, h, lo = D(str(k[0])), D(str(k[1])), D(str(k[2]))
+                o, h, lo, cl = (D(str(x)) for x in k[:4])
+                if m == entry_m:
+                    o = h = lo = cl                                    # solo el cierre es seguro posterior
                 if lo <= stop:
-                    px = min(stop, o) * (1 - D(STOP_SLIPPAGE_BPS) / D(10_000))
+                    px = min(stop, o) * slip                           # salto por debajo: desde la apertura
+                    px = inst.round_price(px, up=False) if inst else px
                     await self.close(sym, "stop_loss", price=px, ts=m / 1000 + 60)
                     break
                 if h > tp:
@@ -275,7 +298,8 @@ async def run_paper(data_dir, items: list[tuple[dict, object]], *, clock, sessio
     urls = {"depth": DEPTH_URL, "info": INFO_URL, **(urls or {})}
     data = Path(data_dir)
     now = clock.time()
-    st = paths.read_json(data / DIR / STATE, None) or new_state(capital, now)
+    st = await asyncio.to_thread(paths.read_json, data / DIR / STATE, None) or new_state(capital, now)
+    killed = await asyncio.to_thread((data / "KILL").exists)
     pf = _portfolio(st)
     held = list(st["positions"])
     positives, negatives = [], {}
@@ -293,8 +317,8 @@ async def run_paper(data_dir, items: list[tuple[dict, object]], *, clock, sessio
     symbols = sorted(set(held) | {p[2] for p in positives if not p[3]})
     registry = await load_instruments(session, symbols, st["instruments"], now, urls["info"])
     store = CandleStore(session, urls=candle_urls)
-    needs = {s: [(min(minute(st["last_check"]), minute(now) - 70 * MIN), minute(now))] for s in symbols}
-    await store.load(needs)
+    since = max(min(minute(st["last_check"]), minute(now) - 70 * MIN), minute(now) - MAX_GAP_MIN * MIN)
+    await store.load({s: [(since, minute(now))] for s in symbols})
     books = RestBookProvider("binance", session, clock, base_url=urls["depth"], depth=100, max_rps=5)
     venue = PaperVenue(registry, books, pf, clock, paper_config or PaperConfig(
         max_book_age_s=float(limits["market"]["max_book_age_s"]), stop_slippage_bps=D(STOP_SLIPPAGE_BPS)))
@@ -320,15 +344,13 @@ async def run_paper(data_dir, items: list[tuple[dict, object]], *, clock, sessio
                                   "motivos": news_why, "strategy_tag": STRATEGY_TAG})
             run.counts["descartada"] += 1
             continue
-        await run.enter(ev, sig, sym, [("killed", "interruptor_KILL")] if (data / "KILL").exists() else blocks)
+        await run.enter(ev, sig, sym, [("killed", "interruptor_KILL")] if killed else blocks)
     equity = run.equity()
     st.update(cash=str(pf.cash), fees=str(pf.fees_total), realized=str(pf.realized_total), risk=run.risk.as_dict(),
               last_check=now, equity=str(round(equity, 6)), updated_at=round(now))
     for sym, meta in st["positions"].items():
         meta["avg_price"] = str(pf.positions[sym].avg_price) if sym in pf.positions else meta["avg_price"]
-    _append(data / DIR / TRADES / f"{_month(now)}.jsonl", run.trades)
-    _append(data / DIR / DECISIONS / f"{_month(now)}.jsonl", run.decisions)
-    paths.write_json_atomic(data / DIR / STATE, st)
+    await asyncio.to_thread(_save, data, now, st, run.trades, run.decisions)
     day_pnl = float(equity) - run.risk.day_start if run.risk.day_start else 0.0
     return {"equity": round(float(equity), 4), "cash": round(float(pf.cash), 4), "abiertas": sorted(st["positions"]),
             "pnl_dia": round(day_pnl, 4), "frenos": [why for _, why in blocks], **dict(run.counts),

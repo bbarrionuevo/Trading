@@ -1,0 +1,214 @@
+"""Operador paper por corridas (research/shadow.py) contra un Binance falso: entradas contra el libro, OCO con
+velas de 1 minuto entre corridas, salidas del agente, frenos (A-4), KILL (E-1) y registros (F-1, F-2)."""
+import calendar
+import contextlib
+import copy
+import json
+from decimal import Decimal as D
+
+import aiohttp
+import pytest
+
+from conftest import serve
+from fake_exchange import FakeBinance
+from fake_telegram import TOKEN, FakeTelegram
+from tradingagent import limits as limits_mod
+from tradingagent.alerts.telegram import TelegramTransport
+from tradingagent.core.clock import ManualClock
+from tradingagent.execution.paper import LatencyModel, PaperConfig
+from tradingagent.intelligence.classifier import classify
+from tradingagent.research.collector import _Telegram
+from tradingagent.research.shadow import run_paper
+
+T0 = calendar.timegm((2026, 11, 2, 12, 0, 0))              # lunes 2-nov-2026 12:00 UTC
+BASES = {"BTCUSDT": 100_000.0, "ETHUSDT": 4_000.0, "SOLUSDT": 150.0}
+LISTING = "Binance will list Solana (SOL) on its new spot trading pairs"
+
+
+def step_price(moves: dict[str, list[tuple[float, float]]]):
+    """Precio de apertura de cada minuto: base, con saltos (hora en segundos, factor) acumulativos por par."""
+    def price(sym: str, m: int) -> float:
+        p = BASES[sym]
+        for t, factor in moves.get(sym, []):
+            if m >= t * 1000:
+                p *= factor
+        return p
+    return price
+
+
+def ev(eid, title, t, *, source="media", tier=2, pub_lag=60, cluster=None, cluster_sources=1):
+    return {"id": eid, "title": title, "source": source, "tier": tier, "cluster": cluster or eid,
+            "cluster_sources": cluster_sources, "published_at": t - pub_lag, "received_at": t - 5}
+
+
+class Paper:
+    """Una carpeta de datos, un reloj y un Binance falso: `await p.run(items)` es una corrida del cron."""
+
+    def __init__(self, tmp_path, moves=None, limits=None):
+        self.clock = ManualClock(T0)
+        self.data = tmp_path / "datos"
+        self.mk = FakeBinance(step_price(moves or {}), self.clock)
+        self.tg = FakeTelegram()
+        self.limits = limits or copy.deepcopy(limits_mod.load())
+        self.cfg = PaperConfig(latency=LatencyModel(median_ms=0), max_book_age_s=5.0, stop_slippage_bps=D(20))
+
+    async def __aenter__(self):
+        self.stack = contextlib.AsyncExitStack()
+        url = await self.stack.enter_async_context(serve(self.mk.app()))
+        turl = await self.stack.enter_async_context(serve(self.tg.app()))
+        self.session = await self.stack.enter_async_context(aiohttp.ClientSession())
+        transport = TelegramTransport(TOKEN, "4242", base_url=turl)
+        self.stack.push_async_callback(transport.close)
+        self.telegram = _Telegram(transport, 0)
+        self.urls, self.candle_urls = FakeBinance.urls(url), FakeBinance.candle_urls(url)
+        return self
+
+    async def __aexit__(self, *exc):
+        await self.stack.aclose()
+
+    async def run(self, events=(), **kw):
+        items = [(e, classify(e["title"], tier=e["tier"], cluster_sources=e["cluster_sources"])) for e in events]
+        return await run_paper(self.data, items, clock=self.clock, session=self.session, limits=self.limits,
+                               telegram=self.telegram, capital=120.0, urls=self.urls, candle_urls=self.candle_urls,
+                               paper_config=self.cfg, **kw)
+
+    def state(self):
+        return json.loads((self.data / "paper" / "estado.json").read_text(encoding="utf-8"))
+
+    def rows(self, kind):
+        f = self.data / "paper" / kind / "2026-11.jsonl"
+        return [json.loads(x) for x in f.read_text(encoding="utf-8").splitlines()] if f.exists() else []
+
+    def texts(self):
+        return [m["text"] for m in self.tg.messages]
+
+
+async def test_entrada_contra_el_libro_y_take_profit_entre_corridas(tmp_path):
+    t1 = T0 + 10 * 60 + 30
+    async with Paper(tmp_path, {"SOLUSDT": [(T0 + 12 * 60, 1.02)]}) as p:          # +2 % a las 12:12
+        p.clock.set(t1)
+        s1 = await p.run([ev("e1", LISTING, t1)])
+        assert s1["entradas"] == 1 and s1["abiertas"] == ["SOLUSDT"]
+        st = p.state()
+        pos = st["positions"]["SOLUSDT"]
+        # 48 USDT (tope 40 % de 120) al mejor ask; stop a 0,6 % (mínimo) y take-profit a 2R, al tick
+        assert D(pos["qty"]) == D("0.319") and D(pos["avg_price"]) == D("150.02")
+        assert D(pos["stop"]) == D("149.11") and D(pos["tp"]) == D("151.83")
+        assert pos["until"] == round(t1) + 3600 and pos["category"] == "listado"
+        assert D(st["cash"]) == D("120") - D("0.319") * D("150.02") * D("1.001")
+        entry = p.rows("operaciones")[0]
+        assert entry["tipo"] == "entrada" and entry["modo"] == "paper" and entry["strategy_tag"]
+        assert p.rows("decisiones")[0]["decision"] == "entrar"
+        assert "LONG" in p.texts()[-1] and "SOLUSDT" in p.texts()[-1] and "listado" in p.texts()[-1]
+
+        p.clock.set(t1 + 5 * 60)                                                    # siguiente corrida del cron
+        s2 = await p.run()
+        assert s2["take_profit"] == 1 and s2["abiertas"] == [] and s2["operaciones"] == 1
+        out = p.rows("operaciones")[-1]
+        assert (out["motivo"], D(out["price"])) == ("take_profit", D("151.83"))
+        gross = D("0.319") * (D("151.83") - D("150.02"))
+        fees = D("0.319") * (D("151.83") + D("150.02")) * D("0.001")
+        assert D(out["pnl_neto"]) == pytest.approx(gross - fees, abs=D("0.000001"))
+        assert D(p.state()["cash"]) == pytest.approx(D("120") + gross - fees, abs=D("0.000001"))
+        assert "TAKE-PROFIT" in p.texts()[-1]
+
+
+async def test_stop_con_salto_noticia_negativa_y_horizonte(tmp_path):
+    t1 = T0 + 10 * 60 + 30
+    async with Paper(tmp_path, {"SOLUSDT": [(T0 + 13 * 60, 0.97)]}) as p:               # -3 % a las 12:13...
+        p.mk.overrides[("SOLUSDT", (T0 + 12 * 60) * 1000)] = (150.0, 150.1, 149.9, 150.0)   # ...de un salto
+        p.clock.set(t1)
+        await p.run([ev("e1", LISTING, t1), ev("e2", "Coinbase will list Ethereum (ETH) futures", t1)])
+        assert sorted(p.state()["positions"]) == ["ETHUSDT", "SOLUSDT"]          # 2 × 48: tope de exposición
+
+        p.clock.set(t1 + 5 * 60)
+        s2 = await p.run([ev("n1", "Ethereum foundation wallet hacked, ETH drained", t1 + 5 * 60)])
+        rows = {r["symbol"]: r for r in p.rows("operaciones") if r["tipo"] == "salida"}
+        assert rows["SOLUSDT"]["motivo"] == "stop_loss"                          # abrió debajo del stop: desde ahí
+        assert D(rows["SOLUSDT"]["price"]) == D("145.20")                        # 145,5 − 20 bps, al tick de abajo
+        assert rows["ETHUSDT"]["motivo"] == "noticia_negativa" and s2["noticia_negativa"] == 1
+        assert s2["abiertas"] == [] and "STOP-LOSS" in "\n".join(p.texts())
+
+        t3 = t1 + 10 * 60
+        p.clock.set(t3)
+        s3 = await p.run([ev("e3", "Kraken adds trading for Bitcoin (BTC) options", t3)])
+        assert s3["entradas"] == 1 and s3["abiertas"] == ["BTCUSDT"]
+        p.clock.set(t3 + 61 * 60)                                               # vence el horizonte (60 min)
+        s4 = await p.run()
+        assert s4["horizonte"] == 1 and s4["abiertas"] == []
+        stats = p.state()["stats"]
+        assert stats["operaciones"] == 3 and stats["perdidas"] == 3
+        assert D(stats["pnl_neto"]) == sum(D(r["pnl_neto"]) for r in p.rows("operaciones") if r["tipo"] == "salida")
+
+
+async def test_enfriamiento_y_kill(tmp_path):
+    lim = copy.deepcopy(limits_mod.load())
+    lim["loss"]["max_consecutive_losses"] = 1                                   # más estricto: siempre se puede
+    t1 = T0 + 10 * 60 + 30
+    async with Paper(tmp_path, {"SOLUSDT": [(T0 + 13 * 60, 0.97)]}, limits=lim) as p:
+        p.clock.set(t1)
+        await p.run([ev("e1", LISTING, t1)])
+        p.clock.set(t1 + 5 * 60)
+        s2 = await p.run([ev("e2", "Coinbase will list Ethereum (ETH) futures", t1 + 5 * 60)])
+        assert s2["stop_loss"] == 1 and s2.get("entradas", 0) == 0               # el stop dispara el enfriamiento
+        assert any("enfriamiento" in f for f in s2["frenos"])
+        assert sum("CIRCUIT BREAKER" in x for x in p.texts()) == 1
+        why = p.rows("decisiones")[-1]
+        assert why["decision"] == "no_entrar" and "enfriamiento" in why["motivos"][0]
+        p.clock.set(t1 + 10 * 60)
+        await p.run([ev("e3", "Kraken adds trading for Bitcoin (BTC) options", t1 + 10 * 60)])
+        assert sum("CIRCUIT BREAKER" in x for x in p.texts()) == 1               # un solo aviso por freno
+
+        p.clock.set(t1 + 80 * 60)                                               # pasó el enfriamiento
+        (p.data / "KILL").write_text("")
+        s4 = await p.run([ev("e4", "Kraken adds trading for Bitcoin (BTC) options", t1 + 80 * 60)])
+        assert s4.get("entradas", 0) == 0 and p.rows("decisiones")[-1]["motivos"] == ["interruptor_KILL"]
+        (p.data / "KILL").unlink()
+        s5 = await p.run([ev("e5", "Kraken adds trading for Bitcoin (BTC) options", t1 + 80 * 60)])
+        assert s5["entradas"] == 1
+
+
+async def test_drawdown_halt_hasta_el_rearme(tmp_path):
+    lim = copy.deepcopy(limits_mod.load())
+    lim["loss"]["max_drawdown_pct"] = 0.3                                       # más estricto, para probarlo
+    t1 = T0 + 10 * 60 + 30
+    async with Paper(tmp_path, {"SOLUSDT": [(T0 + 13 * 60, 0.97)]}, limits=lim) as p:
+        p.clock.set(t1)
+        await p.run([ev("e1", LISTING, t1)])
+        p.clock.set(t1 + 5 * 60)
+        s2 = await p.run()
+        assert s2["stop_loss"] == 1 and any(f.startswith("HALT") for f in s2["frenos"])
+        p.clock.set(t1 + 3 * 86400)                                             # días después sigue en halt
+        s3 = await p.run([ev("e2", "Kraken adds trading for Bitcoin (BTC) options", t1 + 3 * 86400)])
+        assert s3.get("entradas", 0) == 0 and p.rows("decisiones")[-1]["motivos"][0].startswith("HALT")
+        assert p.state()["risk"]["halted"]
+        s4 = await p.run([ev("e3", "Kraken adds trading for Bitcoin (BTC) options", t1 + 3 * 86400)], rearm=True)
+        assert s4["entradas"] == 1 and p.state()["risk"]["halted"] == ""
+
+
+async def test_noticias_que_no_se_operan_quedan_registradas_con_su_motivo(tmp_path):
+    t1 = T0 + 10 * 60 + 30
+    async with Paper(tmp_path) as p:
+        p.clock.set(t1)
+        p.mk.down.add("info")                                                   # sin filtros del par
+        s = await p.run([
+            ev("v", LISTING, t1, pub_lag=900),                                    # vieja (B-2)
+            ev("r", "Kraken reportedly plans to list Solana", t1),                # rumor: poca convicción
+            ev("u", LISTING, t1, tier=3),                                         # nivel 3 sin corroborar (B-1)
+            ev("f", "Coinbase will list Ethereum (ETH) futures", t1),             # sin filtros: no se opera
+        ])
+        motives = {d["event_id"]: d["motivos"] for d in p.rows("decisiones")}
+        assert motives["v"][0].startswith("noticia_vieja") and motives["r"] == ["conviccion_baja:0.24"]
+        assert "nivel3_sin_corroboracion" in motives["u"] and motives["f"] == ["par_sin_filtros"]
+        assert s.get("entradas", 0) == 0 and s["descartada"] == 4 and p.state()["positions"] == {}
+
+        p.mk.down.discard("info")
+        p.mk.spread_bps = 45                                                    # spread fuera del sobre (30 bps)
+        s = await p.run([ev("w", LISTING, t1)])
+        assert s.get("entradas", 0) == 0 and p.rows("decisiones")[-1]["motivos"][0].startswith("spread:")
+        p.mk.spread_bps = 2
+        s = await p.run([ev("w2", LISTING, t1, cluster="w")])                    # otra copia de la misma historia
+        assert s["entradas"] == 1
+        p.clock.set(t1 + 300)
+        s = await p.run([ev("w3", LISTING, t1 + 300, cluster="w")])
+        assert s.get("entradas", 0) == 0 and p.rows("decisiones")[-1]["motivos"] == ["historia_ya_operada"]
