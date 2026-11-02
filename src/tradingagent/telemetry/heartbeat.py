@@ -50,3 +50,7 @@ class Heartbeat:
                 await asyncio.wait_for(stop.wait(), timeout=self.interval)
             except TimeoutError:
                 pass
+        try:                                                      # último latido: el estado con el que cerró
+            await self.beat()
+        except Exception:                                         # noqa: BLE001 (cerrar nunca falla por el latido)
+            log.warning("no se pudo escribir el último latido")

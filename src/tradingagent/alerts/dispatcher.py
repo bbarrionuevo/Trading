@@ -5,7 +5,8 @@ caído, lento, devuelve 429 o se cuelga, lo único que se atrasa es la cola de a
 de trading no comparte ni una tarea ni un socket con este hilo.
 
 - Cola con prioridad: RISK sale antes que TRADE, SYSTEM e INFO. Acotada: si se llena se descarta lo
-  menos urgente (las de RISK nunca se descartan por espacio).
+  menos urgente y más nuevo, en O(1) (contadores y colas por prioridad, sin recorrer la cola). Las RISK
+  pasan aunque la cola esté llena, hasta un tope duro de 2 × max_queue (más que eso es un bucle roto).
 - Alertas con la misma `key` se fusionan (la más nueva reemplaza a la vieja en la cola).
 - Ritmo: token bucket por chat (Telegram tolera ~1 mensaje/s por chat con ráfagas cortas).
 - 429: espera lo que pide Telegram. Red o 5xx: espera exponencial. 401/403/404: credenciales o chat
@@ -19,7 +20,7 @@ import itertools
 import logging
 import threading
 import time
-from collections import Counter
+from collections import Counter, deque
 from dataclasses import dataclass, field
 
 from ..core.redact import redact
@@ -63,12 +64,15 @@ class AlertDispatcher:
         self.retry_base_s = retry_base_s
         self.bucket = TokenBucket(rate_per_s, burst)
         self._heap: list[_Item] = []
+        self._levels: list[deque] = [deque() for _ in Priority]    # por prioridad, para descartar en O(1)
+        self._count = [0] * len(Priority)                          # vivas por prioridad
         self._by_key: dict[str, _Item] = {}
         self._alive = 0
         self._seq = itertools.count()
         self._lock = threading.Lock()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._wake: asyncio.Event | None = None
+        self._wake_requested = False      # ya hay un aviso en camino: no se manda otro (menos cruces de hilo)
         self._thread: threading.Thread | None = None
         self._stopping = False
         self._deadline = 0.0
@@ -81,38 +85,58 @@ class AlertDispatcher:
         self.submit_ns_max = 0
 
     # -- productor (cualquier hilo) -----------------------------------------------------------
+    def _kill(self, item: _Item) -> None:
+        """Marca una alerta encolada como descartada (la saca de la cuenta; el heap la ignora al salir)."""
+        item.dead = True
+        self._alive -= 1
+        self._count[item.priority] -= 1
+
+    def _evict_worst(self, worse_than: int) -> bool:
+        """Descarta la alerta viva más nueva de la peor prioridad, si es menos urgente que `worse_than`."""
+        for p in range(len(Priority) - 1, worse_than, -1):
+            if self._count[p] == 0:
+                continue
+            q = self._levels[p]
+            while q:
+                item = q.pop()
+                if not item.dead:
+                    self._kill(item)
+                    return True
+        return False
+
     def submit(self, alert: Alert) -> bool:
         """Encola sin esperar. Devuelve False si la alerta se descartó (cola llena con cosas más urgentes)."""
         t0 = time.perf_counter_ns()
-        accepted = True
+        prio = int(alert.priority)
         with self._lock:
             if self._stopping:
+                self.stats["rechazadas_al_cerrar"] += 1
                 accepted = False
             else:
                 old = self._by_key.get(alert.key) if alert.key else None
                 if old is not None and not old.dead:
-                    old.dead = True
-                    self._alive -= 1
+                    self._kill(old)
                     self.stats["fusionadas"] += 1
-                if self._alive >= self.max_queue and alert.priority is not Priority.RISK:
-                    worst = max((i for i in self._heap if not i.dead), default=None)
-                    if worst is None or worst.priority <= alert.priority:
-                        accepted = False                          # lo nuevo es lo menos urgente: se descarta
+                accepted = True
+                if self._alive >= self.max_queue:
+                    if alert.priority is Priority.RISK:
+                        accepted = self._alive < 2 * self.max_queue      # tope duro: algo está en un bucle
                     else:
-                        worst.dead = True
-                        self._alive -= 1
+                        accepted = self._evict_worst(prio)               # solo si había algo menos urgente
+                    if not accepted or alert.priority is not Priority.RISK:
                         self.stats["descartadas_por_espacio"] += 1
                 if accepted:
-                    item = _Item(int(alert.priority), next(self._seq), alert, time.monotonic())
+                    item = _Item(prio, next(self._seq), alert, time.monotonic())
                     heapq.heappush(self._heap, item)
+                    self._levels[prio].append(item)
+                    self._count[prio] += 1
                     self._alive += 1
                     if alert.key:
                         self._by_key[alert.key] = item
                     self.stats["encoladas"] += 1
-                else:
-                    self.stats["descartadas_por_espacio"] += 1
         loop, wake = self._loop, self._wake
-        if accepted and loop is not None and wake is not None:
+        if accepted and loop is not None and wake is not None and not self._wake_requested:
+            self._wake_requested = True
             try:
                 loop.call_soon_threadsafe(wake.set)
             except RuntimeError:                                  # el bucle del hilo ya cerró
@@ -160,15 +184,21 @@ class AlertDispatcher:
                 item = heapq.heappop(self._heap)
                 if item.dead:
                     continue
-                self._alive -= 1
+                self._kill(item)                                   # consumida: sale de las cuentas
                 if item.alert.key and self._by_key.get(item.alert.key) is item:
                     del self._by_key[item.alert.key]
+                q = self._levels[item.priority]
+                if len(q) > 2 * self._count[item.priority] + 64:   # compacta referencias consumidas
+                    self._levels[item.priority] = deque(i for i in q if not i.dead)
                 return item
         return None
 
     def _requeue(self, item: _Item) -> None:
         with self._lock:
+            item.dead = False
             heapq.heappush(self._heap, item)
+            self._levels[item.priority].append(item)
+            self._count[item.priority] += 1
             self._alive += 1
             if item.alert.key and item.alert.key not in self._by_key:
                 self._by_key[item.alert.key] = item
@@ -205,11 +235,14 @@ class AlertDispatcher:
             while True:
                 if self._stopping and (self._alive == 0 or time.monotonic() > self._deadline):
                     break
+                # Primero se limpia el aviso y DESPUÉS se mira la cola: una alerta que llegue en el medio
+                # deja el aviso puesto y no espera el timeout.
+                self._wake_requested = False
+                self._wake.clear()
                 item = self._pop()
                 if item is None:
                     if self._stopping:
                         break
-                    self._wake.clear()
                     try:
                         await asyncio.wait_for(self._wake.wait(), timeout=1.0)
                     except TimeoutError:
