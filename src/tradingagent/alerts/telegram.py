@@ -45,6 +45,7 @@ class TelegramTransport:
         self.base = base_url.rstrip("/")
         self.timeout = aiohttp.ClientTimeout(total=timeout_s, connect=min(5.0, timeout_s))
         self.session: aiohttp.ClientSession | None = None
+        self.last_updates: int | None = None       # cuántos mensajes devolvió el último getUpdates
 
     async def open(self) -> None:
         if self.session is None:
@@ -115,18 +116,24 @@ class TelegramTransport:
         return SendResult(False, error=f"{code} {desc}", latency_ms=ms)
 
     async def recent_chats(self) -> list[dict]:
-        """Chats que le escribieron al bot (para averiguar TELEGRAM_CHAT_ID)."""
-        data, _, err = await self.call("getUpdates", {"limit": 50, "timeout": 0})
+        """Chats que le escribieron al bot en las últimas 24 h (para averiguar TELEGRAM_CHAT_ID), con sus
+        últimos textos. No confirma nada: lo leído sigue disponible para cualquier otro programa del bot."""
+        data, _, err = await self.call("getUpdates", {"limit": 100, "timeout": 0})
         if not data or not data.get("ok"):
             raise RuntimeError(err or self._safe(data.get("description", "error")))
-        chats = {}
-        for upd in data.get("result") or []:
-            msg = upd.get("message") or upd.get("channel_post") or upd.get("my_chat_member") or {}
+        updates = data.get("result") or []
+        self.last_updates = len(updates)
+        chats: dict = {}
+        for upd in updates:
+            msg = (upd.get("message") or upd.get("edited_message") or upd.get("channel_post")
+                   or upd.get("my_chat_member") or {})
             chat = msg.get("chat") or {}
-            if "id" in chat:
-                chats[chat["id"]] = {"id": chat["id"], "type": chat.get("type"),
-                                     "name": chat.get("title") or chat.get("username") or chat.get("first_name"),
-                                     "text": str(msg.get("text") or "")[:100]}     # el último mensaje del chat
+            if "id" not in chat:
+                continue
+            c = chats.setdefault(chat["id"], {"id": chat["id"], "type": chat.get("type"), "texts": [],
+                                              "name": chat.get("title") or chat.get("username") or chat.get("first_name")})
+            if msg.get("text"):                                    # los eventos sin texto no tapan un /id anterior
+                c["texts"] = [*c["texts"], str(msg["text"])[:100]][-10:]
         return list(chats.values())
 
 

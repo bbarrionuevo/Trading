@@ -91,6 +91,10 @@ def cmd_telegram_chats(args) -> int:
     async def main():
         t = TelegramTransport(token, "0", base_url=api_base(os.environ))
         try:
+            me = await t.get_me()
+            if not me.ok:
+                print(f"El bot no responde con ese token: {me.error}")
+                return 1
             chats = await t.recent_chats()
         finally:
             await t.close()
@@ -100,8 +104,21 @@ def cmd_telegram_chats(args) -> int:
             for c in chats:
                 print(f"TELEGRAM_CHAT_ID={c['id']}   ({c['type']}: {c['name']})")
             return 0
-        # --avisar: el número va POR TELEGRAM a quien lo pidió; en pantalla (log público en GitHub) solo la cuenta
-        asked = [c for c in chats if c["type"] == "private" and c["text"].strip().lower().startswith(ASK_ID)]
+        # --avisar: el número va POR TELEGRAM a quien lo pidió; en pantalla (log público en GitHub) solo cuentas
+        bot = me.error                                              # "@usuario" del bot (es público)
+        private = [c for c in chats if c["type"] == "private"]
+        asked = [c for c in private if any(x.strip().lower().startswith(ASK_ID) for x in c["texts"])]
+        print(f"Bot {bot} · Telegram devolvió {t.last_updates} mensajes de las últimas 24 h: {len(chats)} chats, "
+              f"{len(private)} privados, {len(asked)} con /id o /start.")
+        if not asked:
+            if not t.last_updates:
+                print(f"No le llegó ningún mensaje a {bot}. Si le escribiste /id a ESE bot hace un rato, otro programa "
+                      "que usa el mismo bot (con getUpdates) se lo llevó primero. Alternativa: pedile tu número a "
+                      "@userinfobot y guardalo como secreto TELEGRAM_CHAT_ID.")
+            else:
+                print(f"Ningún chat privado le mandó /id a {bot}: mandale /id a ese bot y volvé a correrlo, o pedile "
+                      "tu número a @userinfobot.")
+            return 1
         ok = 0
         for c in asked[:MAX_NOTIFY]:
             dm = TelegramTransport(token, str(c["id"]), base_url=api_base(os.environ))
@@ -112,10 +129,8 @@ def cmd_telegram_chats(args) -> int:
             finally:
                 await dm.close()
             ok += r.ok
-        print(f"Avisé su número a {ok} de {len(asked)} chats que escribieron /id o /start "
-              f"({len(chats)} chats con mensajes recientes)." if asked else
-              "Nadie le escribió /id al bot en las últimas 24 h: escribile /id y volvé a correrlo.")
-        return 0 if ok == len(asked[:MAX_NOTIFY]) and asked else 1
+        print(f"Avisé su número a {ok} de {min(len(asked), MAX_NOTIFY)} chats que lo pidieron.")
+        return 0 if ok == min(len(asked), MAX_NOTIFY) else 1
 
     return asyncio.run(main())
 
