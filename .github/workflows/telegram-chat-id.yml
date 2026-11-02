@@ -1,0 +1,21 @@
+name: Telegram · averiguar mi chat
+# Manual. Escribile /id al bot en Telegram y corré este workflow: el bot te contesta tu número de chat
+# por Telegram. En el log (público) solo queda cuántos avisos mandó, nunca el número.
+on: workflow_dispatch
+permissions: {contents: read}
+jobs:
+  avisar:
+    if: github.repository == 'bbarrionuevo/Trading'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with: {python-version: "3.12"}
+      - run: pip install -e .              # editable, como el CI: lee config/limits.yaml del repo
+      - name: Avisar el número a quien escribió /id
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.CHARBIS_BOT_TOKEN }}
+          TRADING_HOME: ${{ runner.temp }}/trading-home
+        run: python -m tradingagent telegram-chats --avisar

@@ -24,6 +24,7 @@
 | `execution/` | Intenciones de orden, venue paper, cartera, servicio, harness | `orders`, `instruments`, `paper`, `portfolio`, `service`, `harness` |
 | `alerts/` | Telegram fail-safe | `model`, `telegram`, `dispatcher` |
 | `telemetry/` | Diario, latido, logs | `journal`, `heartbeat`, `logs` |
+| `research/` | Recolector de datos de entrenamiento: activos mencionados, reacción del precio con velas públicas, corridas cortas con estado | `assets`, `labeler`, `collector` |
 | `limits.py` · `safety.py` | **Sobre de riesgo y núcleo de seguridad** (rutas protegidas) | |
 | `config.py` · `paths.py` · `app.py` · `__main__.py` | Configuración, carpeta privada, ensamblado, CLI | |
 

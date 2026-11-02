@@ -17,6 +17,7 @@ class FakeTelegram:
         self.messages: list[dict] = []           # mensajes aceptados (como los vería el chat)
         self.requests: list[tuple[str, dict]] = []
         self.release = asyncio.Event()
+        self.updates = [{"update_id": 1, "message": {"chat": {"id": 4242, "type": "private", "first_name": "Ana"}}}]
 
     def app(self) -> web.Application:
         a = web.Application()
@@ -32,8 +33,7 @@ class FakeTelegram:
         if method == "getMe":
             return web.json_response({"ok": True, "result": {"id": 1, "is_bot": True, "username": "test_bot"}})
         if method == "getUpdates":
-            return web.json_response({"ok": True, "result": [
-                {"update_id": 1, "message": {"chat": {"id": 4242, "type": "private", "first_name": "Ana"}}}]})
+            return web.json_response({"ok": True, "result": self.updates})
         mode = self.script.pop(0) if self.script else "ok"
         if mode == "hang":
             await self.release.wait()

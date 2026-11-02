@@ -82,3 +82,62 @@ solo. El paper se puede ejercitar con el harness:
   posiciones. Para reanudar, borralo.
 - **Diario:** `.\.venv\Scripts\python -m tradingagent journal-verify` dice si alguien lo alteró.
 - **Estado:** `%LOCALAPPDATA%\TRADING\state\heartbeat.json`. Logs en `%LOCALAPPDATA%\TRADING\logs\agent.log`.
+
+## Entrenamiento en la nube (GitHub Actions, sin la PC)
+
+Mientras el agente no corre en la PC, un workflow junta los datos con los que se entrena la etapa 2
+(`.github/workflows/recoleccion.yml`). Corre cada 15 minutos, a los :04, :19, :34 y :49 (GitHub a veces
+lo demora unos minutos), y en cada corrida:
+
+1. Lee las fuentes y guarda las noticias nuevas de hasta 3 horas en la rama `data`. Las copias de otras
+   fuentes y lo que parece ruido también quedan, marcados.
+2. Una hora después de cada noticia, mide la reacción del precio con velas públicas de 1 minuto
+   (Binance; si no responde, Coinbase) a 1, 5, 15 y 60 minutos desde la publicación.
+3. Por Telegram: un aviso al activarse, las noticias de la Fed y la SEC, y un resumen por día.
+
+No opera, ni en paper (REGLAS G-6).
+
+**Secretos** (en GitHub: Settings → Secrets and variables → Actions):
+
+| Secreto | Para qué | Estado |
+|---|---|---|
+| `CHARBIS_BOT_TOKEN` | El bot que manda los avisos | ✅ cargado |
+| `TELEGRAM_CHAT_ID` | A qué chat los manda | Falta: ver los pasos de abajo |
+| `SEC_USER_AGENT` | Habilita las dos fuentes de la SEC. Formato: `Nombre Apellido tu-mail@dominio` (norma de la SEC) | Opcional |
+
+Las claves de exchange **no se usan**: las velas públicas no las necesitan (REGLAS G-1). El CI rechaza un
+workflow que use cualquier secreto fuera de esa tabla.
+
+**Averiguar `TELEGRAM_CHAT_ID`** (una vez):
+
+1. En Telegram, abrí tu bot y mandale `/id`.
+2. En GitHub: Actions → **Telegram · averiguar mi chat** → Run workflow.
+3. El bot te contesta "🔑 Tu TELEGRAM_CHAT_ID es …". En el log, que es público, solo queda cuántos avisos
+   mandó, nunca el número.
+4. Guardá ese número como secreto `TELEGRAM_CHAT_ID`. En el siguiente cuarto de hora llega
+   "✅ Recolector de TRADING activo".
+
+Otra forma: @userinfobot te dice tu número. Igual tenés que mandarle `/start` a tu bot, porque un bot no
+puede escribirle a alguien que nunca le escribió.
+
+**Dónde quedan los datos:** en la rama `data`:
+
+| Archivo | Contenido |
+|---|---|
+| `eventos/AAAA-MM.jsonl` | Las noticias |
+| `reacciones/AAAA-MM.jsonl` | Las reacciones del precio |
+| `estado.json` | La salud de cada fuente y los conteos por día |
+| `LEEME.md` | Qué es cada campo |
+
+**Pausar:** Actions → Recolector de entrenamiento → ⋯ → Disable workflow. **Correrlo ya:** Run workflow.
+
+**A tener en cuenta:**
+
+- El repo es público: los minutos de Actions son gratis, pero los logs y la rama `data` están a la vista.
+  Por eso solo hay datos públicos (titulares, enlaces, fragmentos cortos y precios).
+- GitHub puede pausar los workflows programados de un repo público después de 60 días sin actividad.
+  Si pasa, llega un mail y se reactiva con Enable workflow.
+- Algunas fuentes pueden bloquear a los servidores de GitHub. `estado.json` muestra la salud de cada una,
+  y el resumen diario lista las que fallan.
+- En la PC se puede correr lo mismo a mano: `.\.venv\Scripts\python -m tradingagent collect` (guarda en
+  `%LOCALAPPDATA%\TRADING\datos`).

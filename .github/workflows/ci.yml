@@ -1,6 +1,7 @@
 name: CI (tests + reglas)
 on:
   push:
+    branches-ignore: [data]          # la rama data solo tiene datos del recolector
   pull_request:
 permissions: {contents: read}
 jobs:

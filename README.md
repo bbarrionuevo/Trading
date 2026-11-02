@@ -12,7 +12,8 @@ Es un proyecto aparte de nexus: carpeta, datos y claves propias. Ver [docs/OPERA
 
 | Etapa | Qué | Estado |
 |---|---|---|
-| 1 | Ingesta (RSS/Atom, webhook, dedup semántica-léxica, ruido, staleness) · paper trading riguroso · Telegram fail-safe · diario encadenado · latido · reglas v2 | ✅ 84 tests (Python 3.11 y 3.13) |
+| 1 | Ingesta (RSS/Atom, webhook, dedup semántica-léxica, ruido, staleness) · paper trading riguroso · Telegram fail-safe · diario encadenado · latido · reglas v2 | ✅ |
+| 1½ | **Recolector de entrenamiento** en GitHub Actions: noticias + reacción del precio cada 15 min, en la rama `data` ([cómo activarlo](docs/OPERACION.md#entrenamiento-en-la-nube-github-actions-sin-la-pc)) | ✅ 99 tests (3.11 y 3.13) |
 | 2 | Inteligencia: entidades, categoría, polaridad y convicción, con grounding y calibración | Siguiente |
 | 3 | Decisión y riesgo: tamaño por ATR y convicción, brackets, circuit breakers, validación de mercado | — |
 | 4 | Conector real (CEX) con conciliación y armado local | — |
@@ -33,6 +34,7 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python -m tradingagent sources --check    # lee cada fuente una vez
 .\.venv\Scripts\python -m tradingagent run                # agente completo en paper
 .\.venv\Scripts\python -m tradingagent paper-sim examples\escenario_noticia.jsonl
+.\.venv\Scripts\python -m tradingagent collect           # una pasada del recolector de entrenamiento
 ```
 
 ## Estructura
@@ -45,10 +47,11 @@ src/tradingagent/
   execution/    órdenes, instrumentos, venue paper, cartera, servicio de ejecución, harness
   alerts/       Telegram: modelo, cliente de la Bot API, despachador en hilo propio
   telemetry/    diario encadenado, latido, logs
+  research/     recolector de entrenamiento: activos mencionados, reacción del precio, corridas con estado
   limits.py     sobre de riesgo (protegido)      safety.py   núcleo de seguridad (protegido)
 config/limits.yaml   el sobre (protegido)        config/agent.example.yaml   ejemplo de configuración
 tools/               chequeos del CI (protegidos)
-tests/               84 tests, entre ellos los de las reglas (test_rules.py, protegido)
+tests/               99 tests, entre ellos los de las reglas (test_rules.py, protegido)
 ```
 
 ## Desarrollo

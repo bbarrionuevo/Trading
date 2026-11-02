@@ -125,7 +125,8 @@ class TelegramTransport:
             chat = msg.get("chat") or {}
             if "id" in chat:
                 chats[chat["id"]] = {"id": chat["id"], "type": chat.get("type"),
-                                     "name": chat.get("title") or chat.get("username") or chat.get("first_name")}
+                                     "name": chat.get("title") or chat.get("username") or chat.get("first_name"),
+                                     "text": str(msg.get("text") or "")[:100]}     # el último mensaje del chat
         return list(chats.values())
 
 

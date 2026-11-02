@@ -3,6 +3,8 @@
   python -m tradingagent run                 agente completo en paper (Ctrl+C para cerrar)
   python -m tradingagent telegram-test       verifica TELEGRAM_BOT_TOKEN/CHAT_ID y manda un mensaje de prueba
   python -m tradingagent telegram-chats      lista los chats que le escribieron al bot (para el CHAT_ID)
+  python -m tradingagent telegram-chats --avisar   el bot le manda a cada chat que le escribió /id su número
+  python -m tradingagent collect [--data DIR]       una pasada del recolector de datos de entrenamiento
   python -m tradingagent sources [--check]   fuentes y su estado; --check lee cada una una vez
   python -m tradingagent journal-verify      verifica la cadena de hashes del diario
   python -m tradingagent paper-sim ESCENARIO reproduce libros + órdenes de un escenario JSONL
@@ -73,8 +75,13 @@ def cmd_telegram_test(args) -> int:
     return asyncio.run(main())
 
 
+ASK_ID = ("/id", "/start")
+MAX_NOTIFY = 5
+
+
 def cmd_telegram_chats(args) -> int:
     _setup()
+    from .alerts.model import system_alert
     from .alerts.telegram import TelegramTransport, api_base
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if not token:
@@ -87,13 +94,53 @@ def cmd_telegram_chats(args) -> int:
             chats = await t.recent_chats()
         finally:
             await t.close()
-        if not chats:
-            print("No hay mensajes recientes: escribile algo al bot (por ejemplo /start) y repetí el comando.")
-        for c in chats:
-            print(f"TELEGRAM_CHAT_ID={c['id']}   ({c['type']}: {c['name']})")
-        return 0
+        if not args.avisar:
+            if not chats:
+                print("No hay mensajes recientes: escribile algo al bot (por ejemplo /start) y repetí el comando.")
+            for c in chats:
+                print(f"TELEGRAM_CHAT_ID={c['id']}   ({c['type']}: {c['name']})")
+            return 0
+        # --avisar: el número va POR TELEGRAM a quien lo pidió; en pantalla (log público en GitHub) solo la cuenta
+        asked = [c for c in chats if c["type"] == "private" and c["text"].strip().lower().startswith(ASK_ID)]
+        ok = 0
+        for c in asked[:MAX_NOTIFY]:
+            dm = TelegramTransport(token, str(c["id"]), base_url=api_base(os.environ))
+            try:
+                r = await dm.send(system_alert(
+                    f"🔑 Tu TELEGRAM_CHAT_ID es <code>{c['id']}</code>\nGuardalo en GitHub: Settings → Secrets and "
+                    "variables → Actions → New repository secret, con el nombre TELEGRAM_CHAT_ID.", silent=False))
+            finally:
+                await dm.close()
+            ok += r.ok
+        print(f"Avisé su número a {ok} de {len(asked)} chats que escribieron /id o /start "
+              f"({len(chats)} chats con mensajes recientes)." if asked else
+              "Nadie le escribió /id al bot en las últimas 24 h: escribile /id y volvé a correrlo.")
+        return 0 if ok == len(asked[:MAX_NOTIFY]) and asked else 1
 
     return asyncio.run(main())
+
+
+def cmd_collect(args) -> int:
+    _setup("WARNING")
+    cfg = config.load(args.config or paths.home() / "config.yaml")
+    from .alerts.telegram import TelegramTransport, api_base
+    from .research.collector import collect
+    token, chat = os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID")
+    use_tg = bool(token and chat and cfg["alerts"].get("telegram") and not args.no_telegram)
+    if not use_tg and not args.no_telegram:
+        print("Telegram apagado: falta TELEGRAM_BOT_TOKEN y/o TELEGRAM_CHAT_ID (los datos se juntan igual).",
+              file=sys.stderr)
+
+    async def main():
+        t = TelegramTransport(token, chat, base_url=api_base(os.environ)) if use_tg else None
+        try:
+            return await collect(args.data or paths.home() / "datos", cfg, os.environ, telegram=t)
+        finally:
+            if t is not None:
+                await t.close()
+
+    print(json.dumps(asyncio.run(main()), ensure_ascii=False, sort_keys=True))
+    return 0
 
 
 def cmd_sources(args) -> int:
@@ -158,7 +205,12 @@ def main(argv=None) -> int:
     r.add_argument("--config")
     r.add_argument("--seconds", type=float, help="cerrar solo después de N segundos")
     sub.add_parser("telegram-test")
-    sub.add_parser("telegram-chats")
+    tc = sub.add_parser("telegram-chats")
+    tc.add_argument("--avisar", action="store_true", help="mandarle a cada chat que escribió /id su número")
+    c = sub.add_parser("collect")
+    c.add_argument("--data", help="carpeta de datos (por defecto TRADING_HOME/datos)")
+    c.add_argument("--config")
+    c.add_argument("--no-telegram", action="store_true")
     s = sub.add_parser("sources")
     s.add_argument("--check", action="store_true")
     s.add_argument("--config")
@@ -168,7 +220,8 @@ def main(argv=None) -> int:
     p.add_argument("--cash", default="10000")
     args = ap.parse_args(argv)
     handlers = {"run": cmd_run, "telegram-test": cmd_telegram_test, "telegram-chats": cmd_telegram_chats,
-                "sources": cmd_sources, "journal-verify": cmd_journal_verify, "paper-sim": cmd_paper_sim}
+                "sources": cmd_sources, "journal-verify": cmd_journal_verify, "paper-sim": cmd_paper_sim,
+                "collect": cmd_collect}
     if args.cmd not in handlers:
         ap.print_help()
         return 2

@@ -50,6 +50,12 @@ En dos capas:
 **Calibración:** cada clasificación se guarda con el movimiento real del precio a 1, 5, 15 y 60 minutos.
 Así la "confianza" pasa a ser una probabilidad medida.
 
+**Datos (desde el 2-nov-2026):** el recolector de GitHub Actions (`research/`, REGLAS G-6) junta cada
+15 minutos las noticias, sus copias en otras fuentes y la reacción del precio. Todo queda en la rama
+`data`. Con eso se arma el conjunto etiquetado, y se mide qué fuentes y categorías mueven el precio,
+cuánto ya se movió antes de publicarse (`pre_10m`) y cuánto queda por capturar según la latencia
+(`r_recv_*`). También se mide si el filtro de ruido descarta lo que no mueve nada.
+
 **Criterios:**
 
 - Exactitud de categoría ≥ 85% sobre un conjunto etiquetado de noticias reales.
