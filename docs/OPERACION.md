@@ -120,6 +120,12 @@ workflow que use cualquier secreto fuera de esa tabla.
 Otra forma: @userinfobot te dice tu número. Igual tenés que mandarle `/start` a tu bot, porque un bot no
 puede escribirle a alguien que nunca le escribió.
 
+Si el workflow falla, el log dice a qué bot se conectó y cuántos mensajes vio:
+
+- **"devolvió 0 mensajes"**: otro programa que usa el mismo bot (otras alertas, otro proyecto) se lleva los
+  mensajes antes. Usá @userinfobot.
+- **"Ningún chat privado le mandó /id a @…"**: el `/id` fue a otro bot. Revisá el nombre que muestra el log.
+
 **Dónde quedan los datos:** en la rama `data`:
 
 | Archivo | Contenido |

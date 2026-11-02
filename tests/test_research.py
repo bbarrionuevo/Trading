@@ -379,17 +379,28 @@ async def test_cli_collect_imprime_solo_conteos_y_avisa_por_telegram(tmp_path, m
 
 async def test_cli_avisar_manda_el_numero_por_telegram_y_no_lo_imprime(monkeypatch, capsys):
     tg = FakeTelegram()
+    owner = {"id": 5150, "type": "private", "first_name": "Dueño"}
     tg.updates = [
-        {"update_id": 1, "message": {"chat": {"id": 5150, "type": "private", "first_name": "Dueño"}, "text": "/id"}},
-        {"update_id": 2, "message": {"chat": {"id": 6160, "type": "private", "first_name": "Otro"}, "text": "hola"}},
-        {"update_id": 3, "message": {"chat": {"id": -100777, "type": "group", "title": "Grupo"}, "text": "/id"}}]
+        {"update_id": 1, "message": {"chat": owner, "text": "/id"}},
+        {"update_id": 2, "message": {"chat": owner, "text": "listo"}},          # escribió algo después del /id
+        {"update_id": 3, "my_chat_member": {"chat": owner}},                    # y un evento sin texto
+        {"update_id": 4, "message": {"chat": {"id": 6160, "type": "private", "first_name": "Otro"}, "text": "hola"}},
+        {"update_id": 5, "message": {"chat": {"id": -100777, "type": "group", "title": "Grupo"}, "text": "/id"}}]
     async with serve(tg.app()) as turl:
         monkeypatch.setenv("TELEGRAM_BOT_TOKEN", TOKEN)
         monkeypatch.setenv("TELEGRAM_API_BASE", turl)
         assert await asyncio.to_thread(cli, ["telegram-chats", "--avisar"]) == 0
-        tg.updates = tg.updates[1:2]
+        out1 = capsys.readouterr().out
+        tg.updates = tg.updates[3:4]
         assert await asyncio.to_thread(cli, ["telegram-chats", "--avisar"]) == 1     # nadie pidió /id
-    out = capsys.readouterr().out
+        out2 = capsys.readouterr().out
+        tg.updates = []
+        assert await asyncio.to_thread(cli, ["telegram-chats", "--avisar"]) == 1     # otro programa se los llevó
+        out3 = capsys.readouterr().out
     assert [m["chat_id"] for m in tg.messages] == ["5150"] and "5150" in tg.messages[0]["text"]
-    assert "Avisé su número a 1 de 1" in out and "escribile /id" in out
-    assert "5150" not in out and "6160" not in out and "777" not in out and TOKEN not in out
+    assert "Bot @test_bot · Telegram devolvió 5 mensajes" in out1 and "3 chats, 2 privados, 1 con /id" in out1
+    assert "Avisé su número a 1 de 1" in out1
+    assert "Ningún chat privado le mandó /id a @test_bot" in out2
+    assert "devolvió 0 mensajes" in out3 and "otro programa" in out3 and "@userinfobot" in out3
+    for out in (out1, out2, out3):
+        assert "5150" not in out and "6160" not in out and "777" not in out and TOKEN not in out
