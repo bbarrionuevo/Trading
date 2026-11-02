@@ -93,6 +93,18 @@ class PollingSource:
         self._seen_max = seen_max
         self._first = True
 
+    # -- estado entre corridas (recolector de corridas cortas) ---------------------------------
+    def export_state(self, keep: int = 200) -> dict:
+        """ETag, Last-Modified y lo ya visto (huellas de las últimas `keep` entradas) para la próxima corrida."""
+        return {"etag": self._etag, "last_modified": self._last_modified, "seen": list(self._seen)[-keep:],
+                "first_done": not self._first}
+
+    def import_state(self, d: dict) -> None:
+        self._etag, self._last_modified = d.get("etag"), d.get("last_modified")
+        for k in (d.get("seen") or [])[-self._seen_max:]:
+            self._seen[k] = None
+        self._first = not d.get("first_done", False)
+
     # -- red ----------------------------------------------------------------------------------
     async def fetch(self) -> bytes | None:
         """Cuerpo del feed, o None si no cambió (304). Lanza FetchError ante cualquier falla."""
@@ -144,8 +156,9 @@ class PollingSource:
     def _new_entries(self, entries: list[FeedEntry]) -> list[FeedEntry]:
         fresh = []
         for e in entries:
-            k = e.guid or e.link or e.title
+            k = stable_id(e.guid or e.link or e.title, n=16)       # huella corta: el estado ocupa poco
             if k in self._seen:
+                self._seen.move_to_end(k)                          # sigue en el feed: no se olvida
                 continue
             self._seen[k] = None
             if len(self._seen) > self._seen_max:

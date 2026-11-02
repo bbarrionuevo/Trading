@@ -93,11 +93,12 @@ Cuanto más evidencia junta, más sube de nivel. Cuando algo sale mal, baja de n
 
 | ID | Regla |
 |---|---|
-| G-1 | **Secretos** solo en `TRADING_HOME/.env` (Windows: `%LOCALAPPDATA%\TRADING\.env`). Nunca en el repo, los logs, las alertas ni el diario: todo texto de error se redacta (test `test_g1_*`) |
+| G-1 | **Secretos** solo en `TRADING_HOME/.env` (Windows: `%LOCALAPPDATA%\TRADING\.env`). Nunca en el repo, los logs, las alertas ni el diario: todo texto de error se redacta (test `test_g1_*`). **Única excepción:** secretos cifrados de GitHub Actions, y solo para credenciales **sin poder sobre el dinero**: el token del bot de Telegram (`CHARBIS_BOT_TOKEN`), el chat (`TELEGRAM_CHAT_ID`) y el User-Agent de la SEC (`SEC_USER_AGENT`). Nunca claves de trading ni de retiro, y tampoco claves de exchange de solo lectura mientras no hagan falta (los datos de mercado públicos no las necesitan). La lista de secretos que un workflow puede usar está en un test; el repo es público y sus logs también, así que ningún workflow imprime un secreto |
 | G-2 | **Rutas protegidas (categoría C):** `.github/`, `docs/REGLAS.md`, `config/limits.yaml`, `src/tradingagent/limits.py`, `safety.py`, `paths.py`, `execution/live/`, `tests/test_rules.py` y `tools/`. Un PR que las toca deja en rojo el control `protected-paths`; **solo el dueño lo aprueba y fusiona** |
 | G-3 | **Autonomía de desarrollo (propuesta):** Claude desarrolla, prueba y abre PRs por su cuenta. Fusiona solo los de **categoría B** (no tocan rutas protegidas) con CI verde, y nunca uno con `protected-paths` en rojo. El dueño puede revocar esta regla con una línea en el PR o en el chat |
 | G-4 | Dependencias con versión fija; acciones de GitHub fijadas por SHA; permisos mínimos en cada workflow |
 | G-5 | **Separación de proyectos:** TRADING usa su propia carpeta (`%USERPROFILE%\TRADING`), sus datos (`%LOCALAPPDATA%\TRADING`) y sus claves. **Nunca usa ni toca nada de nexus**, que es otro proyecto del dueño en la misma PC. Si `TRADING_HOME` apunta a una carpeta de nexus, el agente no arranca (test `test_g5_*`) |
+| G-6 | **GitHub Actions** solo para trabajos **cortos y periódicos** que no operan: hoy, el recolector de datos de entrenamiento (cada 15 min, tope de 10 min por corrida, una corrida a la vez, solo en este repo). Nunca para operar, ni siquiera en paper, ni como servicio 24/7. Los datos van a la rama `data`, que es **pública**: solo datos públicos (titulares, enlaces, fragmentos cortos, precios) y nada personal. El único permiso de escritura de un workflow es guardar en esa rama (test `test_g6_*` y `test_g4_*`) |
 
 ## Categorías de cambios
 
@@ -111,3 +112,4 @@ Cuanto más evidencia junta, más sube de nivel. Cuando algo sale mal, baja de n
 |---|---|---|
 | 24 a 26-oct-2026 | Reglas v1 y límites para 100 € (nexus) | Ver el historial de la v1 (commit `aeca87b`) |
 | 2-nov-2026 | Pedido: rehacer las reglas para la máxima autonomía e inteligencia | Mensaje del dueño; esta v2 queda aprobada al fusionar su PR |
+| 2-nov-2026 | Recolector de entrenamiento en GitHub Actions con el bot `CHARBIS_BOT_TOKEN` (G-1 enmendada, G-6 nueva) | Pedido del dueño ("quiero que se vaya entrenando", con los secretos ya cargados); queda aprobado al fusionar su PR |

@@ -143,3 +143,44 @@ def test_g2_autoprueba_de_rutas_protegidas():
     r = subprocess.run([sys.executable, str(ROOT / "tools" / "protected_paths.py"), "--self-test"],
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+# -- G-1 / G-4 / G-6. Workflows de GitHub Actions ---------------------------------------------------
+WORKFLOWS = sorted((ROOT / ".github" / "workflows").glob("*.y*ml"))
+# Solo credenciales sin poder sobre el dinero: el bot de Telegram, el chat, el User-Agent de la SEC y el
+# token propio del workflow. Nunca claves de exchange (ni de solo lectura) mientras no hagan falta.
+ALLOWED_SECRETS = {"CHARBIS_BOT_TOKEN", "TELEGRAM_CHAT_ID", "SEC_USER_AGENT", "GITHUB_TOKEN"}
+
+
+def test_g1_los_workflows_solo_usan_secretos_sin_poder_sobre_el_dinero():
+    assert WORKFLOWS
+    text = "\n".join(f.read_text(encoding="utf-8") for f in WORKFLOWS)
+    used = set(re.findall(r"secrets\.([A-Za-z0-9_]+)", text))
+    assert used <= ALLOWED_SECRETS, sorted(used - ALLOWED_SECRETS)
+    assert not re.search(r"secrets\s*\[|toJSON\(\s*secrets", text)       # nada de volcar todos los secretos
+    assert not re.search(r"(?i)echo[^\n]*secrets\.", text)                # ni imprimirlos
+
+
+def test_g4_acciones_fijadas_por_sha_y_permisos_minimos():
+    for f in WORKFLOWS:
+        text = f.read_text(encoding="utf-8")
+        for ref in re.findall(r"uses:\s*([^\s#]+)", text):
+            assert re.fullmatch(r"[\w.-]+/[\w./-]+@[0-9a-f]{40}", ref), f"{f.name}: {ref} sin SHA fijo"
+        assert re.search(r"(?m)^permissions:\s*\{contents: read\}", text), f"{f.name}: permisos por defecto"
+        writes = re.findall(r"([\w-]+):\s*write", text)
+        if f.name == "recoleccion.yml":                                   # solo guarda datos en la rama data
+            assert writes == ["contents"], writes
+            assert re.findall(r"git push[^\n]*", text) == ["git push -q origin HEAD:data"]
+        else:
+            assert writes == [], f"{f.name}: {writes}"
+
+
+def test_g6_trabajos_cortos_y_solo_en_este_repo():
+    for f in WORKFLOWS:
+        wf = yaml.safe_load(f.read_text(encoding="utf-8"))
+        for name, job in wf["jobs"].items():
+            assert 0 < job.get("timeout-minutes", 0) <= 15, f"{f.name}:{name} sin tope de tiempo corto"
+        trigger = wf.get("on", wf.get(True)) or {}
+        if isinstance(trigger, dict) and "schedule" in trigger:
+            assert all(job.get("if") == "github.repository == 'bbarrionuevo/Trading'" for job in wf["jobs"].values())
+            assert wf.get("concurrency", {}).get("cancel-in-progress") is False    # una corrida a la vez, sin cortes
