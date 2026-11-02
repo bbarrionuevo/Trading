@@ -2,19 +2,21 @@
 
 La inteligencia y el riesgo encolan `OrderIntent` con `submit()` (no bloquea); el servicio las ejecuta
 con concurrencia acotada y publica cada evento de orden en el bus ("orders"), el diario y las alertas.
-Antes de ejecutar aplica los frenos que no dependen de ninguna estrategia:
-- interruptor de emergencia (archivo KILL): solo pasan órdenes reduce_only (salir siempre se puede);
-- tope de órdenes por minuto (un error de lógica no puede inundar el exchange);
-- cola acotada: si se llena, la intención se rechaza al instante (nunca se espera).
+Antes de ejecutar aplica los frenos del núcleo de seguridad (safety.py, protegido) con el sobre de
+riesgo (limits.py): KILL, tope de órdenes por minuto y tope de precio de cada orden. La cola es acotada:
+si se llena, la intención se rechaza al instante (nunca se espera).
 """
 import asyncio
+import dataclasses
 import logging
 from collections import deque
 from decimal import Decimal
 from pathlib import Path
 
+from .. import limits as limits_mod
+from .. import safety
 from ..alerts.model import risk_alert, system_alert, trade_alert
-from .orders import OrderEvent, OrderIntent
+from .orders import OrderEvent, OrderIntent, OrderType
 
 log = logging.getLogger("tradingagent.execution")
 TOPIC_ORDERS = "orders"
@@ -23,10 +25,14 @@ RISK_ROLES = {"stop_loss", "take_profit"}
 
 class ExecutionService:
     def __init__(self, venue, bus, clock, *, kill_file: Path | None = None, journal=None, alerts=None,
-                 mode: str = "PAPER", max_queue: int = 100, max_orders_per_min: int = 30, max_concurrent: int = 4):
+                 mode: str = "PAPER", max_queue: int = 100, max_orders_per_min: int = 30, max_concurrent: int = 4,
+                 limits: dict | None = None):
         self.venue, self.bus, self.clock = venue, bus, clock
         self.kill_file, self.journal, self.alerts, self.mode = kill_file, journal, alerts, mode
-        self.max_per_min = max_orders_per_min
+        lim = limits if limits is not None else limits_mod.load()
+        # la configuración solo puede achicar el sobre, nunca agrandarlo
+        per_min = min(max_orders_per_min, lim["execution"]["max_orders_per_min"])
+        self.limits = {**lim, "execution": {**lim["execution"], "max_orders_per_min": per_min}}
         self.queue: asyncio.Queue = asyncio.Queue(max_queue)
         self._sent: deque[float] = deque()
         self._sem = asyncio.Semaphore(max_concurrent)
@@ -43,11 +49,14 @@ class ExecutionService:
         now = self.clock.time()
         while self._sent and now - self._sent[0] >= 60:
             self._sent.popleft()
-        if self.killed() and not intent.reduce_only:
-            reason = "interruptor_de_emergencia"
-        elif len(self._sent) >= self.max_per_min:
-            reason = "tope_de_ordenes_por_minuto"
+        blocks = safety.intent_block_reasons(intent, killed=self.killed(), orders_last_min=len(self._sent),
+                                             limits=self.limits)
+        if blocks:
+            reason = blocks[0]
         else:
+            if intent.type in (OrderType.MARKET, OrderType.STOP_MARKET):
+                intent = dataclasses.replace(intent, max_slippage_bps=safety.slippage_cap(intent.max_slippage_bps,
+                                                                                           self.limits))
             try:
                 self.queue.put_nowait(intent)
             except asyncio.QueueFull:

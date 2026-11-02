@@ -7,7 +7,8 @@
   python -m tradingagent journal-verify      verifica la cadena de hashes del diario
   python -m tradingagent paper-sim ESCENARIO reproduce libros + órdenes de un escenario JSONL
 
-Todo lee TRADING_HOME/.env y TRADING_HOME/config.yaml (TRADING_HOME por defecto %LOCALAPPDATA%\\trading).
+Todo lee TRADING_HOME/.env y TRADING_HOME/config.yaml (TRADING_HOME por defecto %LOCALAPPDATA%\\TRADING).
+Este proyecto (TRADING) nunca usa ni toca las carpetas de nexus.
 """
 import argparse
 import asyncio

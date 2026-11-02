@@ -1,38 +1,58 @@
-# nexus
+# TRADING · agente autónomo guiado por noticias
 
-Sistema de investigación y trading automatizado con capital pequeño (100 €). **Estado actual: Fase 5 — paper
-trading.** No existe código que envíe órdenes reales; activar dinero real exige construirlo y la autorización
-explícita del dueño ([docs/REGLAS.md](docs/REGLAS.md)).
+Agente de trading que lee noticias críticas en tiempo real: Fed, SEC, presentaciones 8-K y medios cripto.
+Filtra el ruido y lo viejo, modela el impacto en el mercado y opera **solo, dentro de un sobre de riesgo**
+que fija el dueño. Avisa cada operación por Telegram. **Esta versión opera en paper**: los libros de
+órdenes son reales y los llenados son simulados con latencia, deslizamiento y comisiones. El dinero real
+llega en la etapa 4, con armado del dueño.
 
-## Qué hace hoy (verificado)
-| Componente | Dónde corre | Qué hace |
+Es un proyecto aparte de nexus: carpeta, datos y claves propias. Ver [docs/OPERACION.md](docs/OPERACION.md).
+
+## Estado
+
+| Etapa | Qué | Estado |
 |---|---|---|
-| Agente de market making (`nexus.agent.maker_agent`) | PC Windows 11 | Paper trading en MEXC (BONK, AI) con modelo de cola sobre datos reales; riesgo con veto y persistente |
-| Actualizador seguro (`local/windows/update.py`) | PC, cada 10 min | Instala solo `main` con CI en verde, sin posiciones abiertas, con tests locales y vuelta atrás |
-| Vigilante y informe diario (`nexus.monitor`) | GitHub Actions | Alertas cada hora e informe diario como issues → mail |
-| Descubrimiento (`discover.yml`) | GitHub Actions | Escanea arbitraje triangular, entre exchanges, paridad de stablecoins, spreads y ARS (datos públicos) |
-| Investigación (`research-maker.yml`, `trading-backtest.yml`, `live-paper.yml`) | GitHub Actions | Backtests walk-forward y paper en vivo; resultados en la rama `data` |
+| 1 | Ingesta (RSS/Atom, webhook, dedup semántica-léxica, ruido, staleness) · paper trading riguroso · Telegram fail-safe · diario encadenado · latido · reglas v2 | ✅ 84 tests (Python 3.11 y 3.13) |
+| 2 | Inteligencia: entidades, categoría, polaridad y convicción, con grounding y calibración | Siguiente |
+| 3 | Decisión y riesgo: tamaño por ATR y convicción, brackets, circuit breakers, validación de mercado | — |
+| 4 | Conector real (CEX) con conciliación y armado local | — |
+| 5-6 | Tablero, comandos de Telegram, promoción a real por evidencia | — |
 
-## Evidencia hasta ahora
-| Estrategia | Resultado |
-|---|---|
-| Arbitraje triangular, entre exchanges, EUR↔ARS, P2P/Fiwind, paridad EURC | Negativo neto, descartadas |
-| Trading direccional (RSI/SMA/breakout, 20 monedas, walk-forward) | Sin ventaja robusta |
-| Market making con maker 0,1% o en pares FDUSD | Negativo |
-| **Market making con maker 0% en MEXC (BONK, AI)** | Señal positiva débil en ~6,5 h de paper → **en validación** en el PC |
+Plan y criterios de cada etapa: [docs/PLAN.md](docs/PLAN.md). Arquitectura: [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
+Reglas: [docs/REGLAS.md](docs/REGLAS.md). Qué se aprovechó de la base anterior: [docs/LEGADO.md](docs/LEGADO.md).
 
-## Documentación
-- [docs/REGLAS.md](docs/REGLAS.md): reglas inquebrantables, estado de cada una y criterios de fase.
-- [docs/LIMITES.md](docs/LIMITES.md): límites de riesgo para 100 € y su derivación.
-- [docs/OPERACION_WINDOWS.md](docs/OPERACION_WINDOWS.md): instalación, parada de emergencia, actualización y rearme.
-- [docs/SESION_DIARIA.md](docs/SESION_DIARIA.md): qué hace (y qué no) la sesión diaria automática de Claude.
-- [docs/SESION_PC.md](docs/SESION_PC.md): instrucciones para la sesión de Claude en el PC (canal: rama `pc-sesion`).
+## Uso rápido
+
+```powershell
+git clone https://github.com/bbarrionuevo/Trading.git $env:USERPROFILE\TRADING
+cd $env:USERPROFILE\TRADING
+py -3.12 -m venv .venv
+.\.venv\Scripts\python -m pip install -e ".[dev]"
+.\.venv\Scripts\python -m pytest                          # todo verde
+.\.venv\Scripts\python -m tradingagent telegram-test      # con el .env en %LOCALAPPDATA%\TRADING
+.\.venv\Scripts\python -m tradingagent sources --check    # lee cada fuente una vez
+.\.venv\Scripts\python -m tradingagent run                # agente completo en paper
+.\.venv\Scripts\python -m tradingagent paper-sim examples\escenario_noticia.jsonl
+```
+
+## Estructura
+
+```
+src/tradingagent/
+  core/         reloj, bus con colas acotadas, lag del bucle, eventos, redacción de secretos
+  ingestion/    parser seguro, fuentes por sondeo, webhook, replay, normalización, dedup, ruido, motor
+  marketdata/   libro L2 (Decimal) y proveedores
+  execution/    órdenes, instrumentos, venue paper, cartera, servicio de ejecución, harness
+  alerts/       Telegram: modelo, cliente de la Bot API, despachador en hilo propio
+  telemetry/    diario encadenado, latido, logs
+  limits.py     sobre de riesgo (protegido)      safety.py   núcleo de seguridad (protegido)
+config/limits.yaml   el sobre (protegido)        config/agent.example.yaml   ejemplo de configuración
+tools/               chequeos del CI (protegidos)
+tests/               84 tests, entre ellos los de las reglas (test_rules.py, protegido)
+```
 
 ## Desarrollo
-```
-pip install -r local/requirements.txt
-python backtest/run.py           # control de seguridad (límites y modo real)
-cd local && python -m pytest -q  # tests, incluidas las reglas
-```
-Ramas: desarrollo en `claude/nice-sagan-inp0u8` → PR a `main` (lo que instala el PC). `data` y `pc-status`
-son ramas de datos escritas por bots.
+
+`pip install -e ".[dev]"`, `ruff check src tests tools`, `python -m pytest`. Se desarrolla en la rama
+`claude/nice-sagan-inp0u8` y se abre PR a `main`. Si el PR toca rutas protegidas, el control
+`protected-paths` queda en rojo y solo lo fusiona el dueño (REGLAS G-2).

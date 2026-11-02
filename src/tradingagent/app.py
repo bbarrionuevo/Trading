@@ -14,7 +14,8 @@ from decimal import Decimal as D
 
 import aiohttp
 
-from . import __version__, paths
+from . import __version__, paths, safety
+from . import limits as limits_mod
 from .alerts.dispatcher import AlertDispatcher
 from .alerts.model import startup_alert
 from .alerts.telegram import LogTransport, TelegramTransport, api_base
@@ -38,9 +39,10 @@ from .telemetry.journal import Journal
 log = logging.getLogger("tradingagent")
 
 
-def build_sources(cfg: dict, env) -> tuple[list[SourceSpec], dict[str, str]]:
-    """(fuentes habilitadas, {id: motivo} de las apagadas)."""
+def build_sources(cfg: dict, env, limits: dict | None = None) -> tuple[list[SourceSpec], dict[str, str]]:
+    """(fuentes habilitadas, {id: motivo} de las apagadas). La edad máxima de cada una se recorta al sobre."""
     ing = cfg["ingestion"]
+    limits = limits if limits is not None else limits_mod.load()
     specs = list(DEFAULT_SOURCES)
     for s in ing.get("extra_sources") or []:
         specs.append(SourceSpec(id=s["id"], url=s["url"], tier=int(s.get("tier", 2)),
@@ -51,6 +53,7 @@ def build_sources(cfg: dict, env) -> tuple[list[SourceSpec], dict[str, str]]:
         o = (ing.get("sources") or {}).get(spec.id) or {}
         spec = with_overrides(spec, enabled=o.get("enabled"), interval_s=o.get("interval_s"),
                               max_age_s=o.get("max_age_s"))
+        spec = with_overrides(spec, max_age_s=safety.news_max_age(spec.max_age_s, limits))
         spec, why = resolve(spec, env)
         if why:
             off[spec.id] = why
@@ -105,10 +108,11 @@ class Agent:
 
     async def run(self) -> None:
         cfg, env = self.cfg, self.env
+        lim = limits_mod.load()                       # sobre inválido o más laxo que la línea base: no arranca
         home = paths.home()
         self.journal = Journal(home / "journal", self.clock).start()
         self.bus = EventBus()
-        enabled, self.sources_off = build_sources(cfg, env)
+        enabled, self.sources_off = build_sources(cfg, env, lim)
         if self._sources_override is not None:
             enabled = self._sources_override
         boot = startup_alert(cfg["mode"].upper(), len(enabled), len(enabled) + len(self.sources_off), __version__,
@@ -120,60 +124,64 @@ class Agent:
         self.alerts.start()
         self.journal.record("start", version=__version__, mode=cfg["mode"], sources=[s.id for s in enabled],
                             sources_off=self.sources_off)
-        ing = cfg["ingestion"]
-        dedup = DedupIndex(self.clock, ttl_s=ing["dedup"]["ttl_hours"] * 3600, max_items=ing["dedup"]["max_items"],
-                           threshold=ing["dedup"]["threshold"])
-        self.ingestion = IngestionEngine(self.bus, self.clock, dedup, NoiseFilter(NoiseConfig(ing["noise"]["threshold"])),
-                                         journal=self.journal, default_max_age_s=ing["default_max_age_s"],
-                                         max_future_skew_s=ing["max_future_skew_s"])
-        self.lag = LoopLagMonitor()
-        tasks: list[asyncio.Task] = []
-        webhook = None
-        async with aiohttp.ClientSession() as session:
-            rng = random.Random()
-            self.pollers = [PollingSource(s, session, self.clock, self.ingestion.on_source_items, rng=rng)
-                            for s in enabled]
-            p = cfg["paper"]
-            books = self._book_provider or RestBookProvider(p["venue"], session, self.clock)
-            self.venue = PaperVenue(InstrumentRegistry(), books, Portfolio(D(str(p["cash_usdt"]))), self.clock,
-                                    PaperConfig(latency=LatencyModel(median_ms=p["latency_ms"]),
-                                                participation=D(str(p["participation"])),
-                                                max_book_age_s=p["max_book_age_s"],
-                                                default_max_slippage_bps=D(str(p["default_max_slippage_bps"])),
-                                                stop_slippage_bps=D(str(p["stop_slippage_bps"]))),
-                                    seed=p["seed"])
-            self.execution = ExecutionService(self.venue, self.bus, self.clock, kill_file=paths.kill_file(),
-                                              journal=self.journal, alerts=self.alerts, mode=cfg["mode"].upper(),
-                                              max_orders_per_min=cfg["execution"]["max_orders_per_min"],
-                                              max_queue=cfg["execution"]["max_queue"])
-            wh = ing["webhook"]
-            if wh.get("enabled"):
-                webhook = WebhookSource(env.get("WEBHOOK_SECRET", ""), self.ingestion.handle, self.clock,
-                                        host=wh["host"], port=wh["port"], senders=wh.get("senders") or {})
-                await webhook.start()
-            hb = Heartbeat(self.collect, interval_s=cfg["heartbeat_s"], printer=self.printer)
-            tasks += [asyncio.create_task(p.run(self.stop_event), name=f"fuente-{p.spec.id}") for p in self.pollers]
-            tasks += [asyncio.create_task(self.execution.run(self.stop_event), name="ejecucion"),
-                      asyncio.create_task(self.venue.run_monitor(self.stop_event), name="monitor-ordenes"),
-                      asyncio.create_task(self.lag.run(), name="lag"),
-                      asyncio.create_task(hb.run(self.stop_event), name="latido"),
-                      asyncio.create_task(self._print_accepted(), name="consola")]
-            log.info("agente %s en modo %s: %d fuentes activas, %d apagadas", __version__, cfg["mode"], len(enabled),
-                     len(self.sources_off))
-            for sid, why in self.sources_off.items():
-                log.info("fuente %s apagada: %s", sid, why)
-            try:
-                await self.stop_event.wait()
-            finally:
-                for t in tasks:
-                    if t.get_name() in ("lag", "consola") or t.get_name().startswith("fuente-"):
-                        t.cancel()
-                await asyncio.wait(tasks, timeout=15)
-                if webhook:
-                    await webhook.stop()
-        self.journal.record("stop", uptime_s=round(time.time() - self.started, 1))
-        self.alerts.stop(timeout=5)
-        self.journal.stop()
+        try:
+            ing = cfg["ingestion"]
+            dedup = DedupIndex(self.clock, ttl_s=ing["dedup"]["ttl_hours"] * 3600, max_items=ing["dedup"]["max_items"],
+                               threshold=ing["dedup"]["threshold"])
+            self.ingestion = IngestionEngine(self.bus, self.clock, dedup, NoiseFilter(NoiseConfig(ing["noise"]["threshold"])),
+                                             journal=self.journal,
+                                             default_max_age_s=safety.news_max_age(ing["default_max_age_s"], lim),
+                                             max_future_skew_s=ing["max_future_skew_s"])
+            self.lag = LoopLagMonitor()
+            tasks: list[asyncio.Task] = []
+            webhook = None
+            async with aiohttp.ClientSession() as session:
+                rng = random.Random()
+                self.pollers = [PollingSource(s, session, self.clock, self.ingestion.on_source_items, rng=rng)
+                                for s in enabled]
+                p = cfg["paper"]
+                books = self._book_provider or RestBookProvider(p["venue"], session, self.clock)
+                self.venue = PaperVenue(InstrumentRegistry(), books, Portfolio(D(str(p["cash_usdt"]))), self.clock,
+                                        PaperConfig(latency=LatencyModel(median_ms=p["latency_ms"]),
+                                                    participation=D(str(p["participation"])),
+                                                    max_book_age_s=min(p["max_book_age_s"], lim["market"]["max_book_age_s"]),
+                                                    default_max_slippage_bps=safety.slippage_cap(p["default_max_slippage_bps"], lim),
+                                                    stop_slippage_bps=safety.slippage_cap(p["stop_slippage_bps"], lim)),
+                                        seed=p["seed"])
+                self.execution = ExecutionService(self.venue, self.bus, self.clock, kill_file=paths.kill_file(),
+                                                  journal=self.journal, alerts=self.alerts, mode=cfg["mode"].upper(),
+                                                  max_orders_per_min=cfg["execution"]["max_orders_per_min"],
+                                                  max_queue=cfg["execution"]["max_queue"], limits=lim)
+                wh = ing["webhook"]
+                if wh.get("enabled"):
+                    webhook = WebhookSource(env.get("WEBHOOK_SECRET", ""), self.ingestion.handle, self.clock,
+                                            host=wh["host"], port=wh["port"], senders=wh.get("senders") or {})
+                    await webhook.start()
+                hb = Heartbeat(self.collect, interval_s=cfg["heartbeat_s"], printer=self.printer)
+                tasks += [asyncio.create_task(p.run(self.stop_event), name=f"fuente-{p.spec.id}") for p in self.pollers]
+                tasks += [asyncio.create_task(self.execution.run(self.stop_event), name="ejecucion"),
+                          asyncio.create_task(self.venue.run_monitor(self.stop_event), name="monitor-ordenes"),
+                          asyncio.create_task(self.lag.run(), name="lag"),
+                          asyncio.create_task(hb.run(self.stop_event), name="latido"),
+                          asyncio.create_task(self._print_accepted(), name="consola")]
+                log.info("agente %s en modo %s: %d fuentes activas, %d apagadas", __version__, cfg["mode"], len(enabled),
+                         len(self.sources_off))
+                for sid, why in self.sources_off.items():
+                    log.info("fuente %s apagada: %s", sid, why)
+                try:
+                    await self.stop_event.wait()
+                finally:
+                    self.stop_event.set()                 # si fue una cancelación, avisa a todas las tareas
+                    for t in tasks:
+                        if t.get_name() in ("lag", "consola") or t.get_name().startswith("fuente-"):
+                            t.cancel()
+                    await asyncio.wait(tasks, timeout=15)
+                    if webhook:
+                        await webhook.stop()
+        finally:                                      # también con Ctrl+C en Windows (cancelación)
+            self.journal.record("stop", uptime_s=round(time.time() - self.started, 1))
+            await asyncio.to_thread(self.alerts.stop, 5)
+            self.journal.stop()
 
 
 def install_signal_handlers(agent: Agent) -> None:

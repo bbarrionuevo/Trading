@@ -161,3 +161,22 @@ def test_harness_de_escenario_ejemplo():
     assert by_id["n1-entrada"]["status"] == "filled" and float(by_id["n1-entrada"]["slippage_bps"]) > 0
     assert by_id["n1-tp"]["status"] == "filled" and by_id["n1-tp"]["avg_price"] == "66330"
     assert by_id["n1-stop"]["status"] == "canceled" and "oco" in by_id["n1-stop"]["reason"]
+
+
+async def test_cancelar_al_agente_como_ctrl_c_en_windows_cierra_en_orden():
+    cfg = config.load(None)
+    agent = Agent(cfg, {}, sources=[], book_provider=FreshBooks(), printer=lambda *_: None)
+    run = asyncio.create_task(agent.run())
+    for _ in range(200):
+        if getattr(agent, "execution", None):
+            break
+        await asyncio.sleep(0.01)
+    t0 = time.monotonic()
+    run.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await run
+    assert time.monotonic() - t0 < 8
+    agent.journal.flush()
+    kinds = [json.loads(x)["kind"] for f in sorted((paths.home() / "journal").glob("*.jsonl"))
+             for x in f.read_text().splitlines()]
+    assert kinds[0] == "start" and kinds[-1] == "stop" and verify(paths.home() / "journal")[0]

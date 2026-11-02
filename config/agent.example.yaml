@@ -1,0 +1,20 @@
+# Ejemplo de TRADING_HOME/config.yaml (%LOCALAPPDATA%\TRADING\config.yaml). Solo hace falta escribir lo que
+# se quiere cambiar: el resto toma los valores por defecto de src/tradingagent/config.py.
+# Los límites duros (stop, pérdida diaria, exposición...) NO van acá: están en config/limits.yaml.
+heartbeat_s: 15
+ingestion:
+  default_max_age_s: 300          # noticia más vieja que esto al llegar: no se opera (tope: 600 en el sobre)
+  sources:
+    theblock: {enabled: false}    # apagar una fuente
+    coindesk: {interval_s: 30}    # sondear más seguido
+  extra_sources:                  # agregar un RSS/Atom propio
+    - {id: mi.fuente, url: "https://ejemplo.org/feed.xml", tier: 2, interval_s: 60, max_age_s: 300, category: cripto}
+  webhook: {enabled: false, host: 127.0.0.1, port: 8787, senders: {mi_feed_rapido: 2}}
+paper:
+  cash_usdt: 1000
+  venue: binance                  # libros públicos de Binance (o mexc) para simular los llenados
+  symbols: [BTCUSDT, ETHUSDT, SOLUSDT]
+  latency_ms: 80
+  participation: 0.8
+alerts:
+  telegram: true                  # requiere TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID en el .env

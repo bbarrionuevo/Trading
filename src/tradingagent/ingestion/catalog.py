@@ -19,12 +19,12 @@ EDGAR_8K = ("https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K
 
 DEFAULT_SOURCES = (
     SourceSpec("fed.press", "https://www.federalreserve.gov/feeds/press_all.xml", tier=TIER_OFFICIAL,
-               interval_s=60, max_age_s=900, category="macro", assets=("BTC", "ETH")),
+               interval_s=60, max_age_s=600, category="macro", assets=("BTC", "ETH")),
     SourceSpec("fed.monetary", "https://www.federalreserve.gov/feeds/press_monetary.xml", tier=TIER_OFFICIAL,
-               interval_s=30, max_age_s=900, category="macro", assets=("BTC", "ETH")),
+               interval_s=30, max_age_s=600, category="macro", assets=("BTC", "ETH")),
     SourceSpec("sec.press", "https://www.sec.gov/news/pressreleases.rss", tier=TIER_OFFICIAL,
-               interval_s=60, max_age_s=900, category="regulatorio", requires_env=("SEC_USER_AGENT",)),
-    SourceSpec("sec.edgar.8k", EDGAR_8K, tier=TIER_OFFICIAL, interval_s=60, max_age_s=900, category="filings",
+               interval_s=60, max_age_s=600, category="regulatorio", requires_env=("SEC_USER_AGENT",)),
+    SourceSpec("sec.edgar.8k", EDGAR_8K, tier=TIER_OFFICIAL, interval_s=60, max_age_s=600, category="filings",
                requires_env=("SEC_USER_AGENT",)),
     SourceSpec("coindesk", "https://www.coindesk.com/arc/outboundfeeds/rss/", tier=TIER_MEDIA,
                interval_s=45, max_age_s=300, category="cripto"),
