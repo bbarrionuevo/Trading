@@ -321,7 +321,8 @@ async def run_paper(data_dir, items: list[tuple[dict, object]], *, clock, sessio
                     capital: float = 120.0, urls: dict | None = None, candle_urls: dict | None = None,
                     cfg: PolicyConfig | None = None, rearm: bool = False, disabled: tuple = (),
                     paper_config: PaperConfig | None = None) -> dict:
-    """Una corrida del operador paper. `items` = [(evento del recolector, señal)] de las noticias nuevas."""
+    """Una corrida del operador paper. `items` = [(evento del recolector, señal)] de las noticias nuevas.
+    `disabled` = {"categoría:lado"} que el aprendizaje apagó por evidencia negativa (research/learn.py)."""
     cfg = cfg or PolicyConfig()
     urls = {"depth": DEPTH_URL, "info": INFO_URL, **(urls or {})}
     data = Path(data_dir)
@@ -336,14 +337,13 @@ async def run_paper(data_dir, items: list[tuple[dict, object]], *, clock, sessio
     clusters = set(st["clusters"])
     for ev, sig in items:
         blocks = news_blocks(ev, sig, now, limits, cfg, clusters)
-        if sig.category in disabled:
-            blocks.append("categoria_apagada_por_evidencia")
         for asset in sig.assets:
             sym = f"{asset}USDT"
             if sig.polarity < 0 and sym in st["positions"] and not blocks:
-                negatives[sym] = (ev, sig)
+                negatives[sym] = (ev, sig)                             # salir siempre se puede
             elif sig.polarity > 0:
-                positives.append((ev, sig, sym, blocks))
+                off = [f"categoria_apagada_por_evidencia:{sig.category}"] if f"{sig.category}:largo" in disabled else []
+                positives.append((ev, sig, sym, blocks + off))
     symbols = sorted(set(held) | {p[2] for p in positives if not p[3]})
     registry = await load_instruments(session, symbols, st["instruments"], now, urls["info"])
     store = CandleStore(session, urls=candle_urls)

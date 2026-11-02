@@ -280,3 +280,18 @@ async def test_si_el_paper_falla_los_datos_del_recolector_quedan(tmp_path, monke
         s = await collect(tmp_path / "d", copy.deepcopy(config.load(None)), {}, clock=clock, sources=specs(furl),
                           candle_urls=FakeBinance.candle_urls(murl), paper={"capital": 120.0}, send_gap_s=0)
     assert s["paper"] == {"error": "RuntimeError: falla de prueba"} and (tmp_path / "d" / "estado.json").exists()
+
+
+async def test_categoria_apagada_por_el_aprendizaje_no_entra_pero_salir_siempre_se_puede(tmp_path):
+    t1 = T0 + 10 * 60 + 30
+    async with Paper(tmp_path) as p:
+        p.clock.set(t1)
+        s = await p.run([ev("e1", LISTING, t1)], disabled=("listado:largo",))
+        assert s.get("entradas", 0) == 0
+        assert p.rows("decisiones")[-1]["motivos"] == ["categoria_apagada_por_evidencia:listado"]
+        s = await p.run([ev("e2", "Coinbase will list Ethereum (ETH) futures", t1)], disabled=("listado:corto",))
+        assert s["entradas"] == 1                                             # el otro lado no cuenta
+        p.clock.set(t1 + 300)
+        s = await p.run([ev("n1", "Ethereum foundation wallet hacked, ETH drained", t1 + 300)],
+                        disabled=("hack:corto", "hack:largo"))
+        assert s["noticia_negativa"] == 1 and s["abiertas"] == []

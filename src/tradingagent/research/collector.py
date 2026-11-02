@@ -45,7 +45,7 @@ from ..ingestion.engine import IngestionEngine
 from ..ingestion.noise import NoiseConfig, NoiseFilter
 from ..ingestion.sources import PollingSource
 from ..intelligence.classifier import classify
-from . import assets, shadow
+from . import assets, learn, shadow
 from .labeler import READY_AFTER_S, CandleStore, window
 
 log = logging.getLogger("tradingagent.collector")
@@ -366,10 +366,15 @@ async def collect(data_dir, cfg: dict, env, *, clock=None, sources=None, telegra
         if paper is not None:
             items = [(e, signals[e["id"]]) for e in new_events if e["dedup"] == "new" and not e["is_noise"]]
             try:
+                learned, newly = await asyncio.to_thread(learn.update, data, now)
+                for key in newly:
+                    await tg.send(f"🧠 <b>Aprendizaje</b>: apago {esc(learn.describe(learned, key))}. Evidencia "
+                                  "negativa neta de comisiones: el paper deja de operar esa categoría de ese lado.")
                 paper_out = await shadow.run_paper(data, items, clock=clock, session=session, limits=limits,
                                                    telegram=tg if telegram is not None else None,
                                                    capital=float(paper.get("capital", 120.0)), urls=paper_urls,
-                                                   candle_urls=candle_urls, rearm=bool(paper.get("rearm")))
+                                                   candle_urls=candle_urls, rearm=bool(paper.get("rearm")),
+                                                   disabled=tuple(learned["apagadas"]))
             except Exception as e:                                     # el paper nunca rompe la corrida
                 log.exception("el operador paper falló")
                 paper_out = {"error": f"{type(e).__name__}: {redact(e)[:160]}"}
