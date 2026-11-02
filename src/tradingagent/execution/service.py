@@ -43,34 +43,53 @@ class ExecutionService:
     def killed(self) -> bool:
         return bool(self.kill_file and self.kill_file.exists())
 
-    def submit(self, intent: OrderIntent) -> tuple[bool, str]:
-        """Encola sin esperar. (aceptada, motivo)."""
-        reason = ""
+    def _check(self, intent: OrderIntent) -> tuple[OrderIntent, str]:
+        """Núcleo de seguridad (KILL, órdenes por minuto, tope de precio): (intención con el tope, motivo)."""
         now = self.clock.time()
         while self._sent and now - self._sent[0] >= 60:
             self._sent.popleft()
         blocks = safety.intent_block_reasons(intent, killed=self.killed(), orders_last_min=len(self._sent),
                                              limits=self.limits)
         if blocks:
-            reason = blocks[0]
-        else:
-            if intent.type in (OrderType.MARKET, OrderType.STOP_MARKET):
-                intent = dataclasses.replace(intent, max_slippage_bps=safety.slippage_cap(intent.max_slippage_bps,
-                                                                                           self.limits))
+            return intent, blocks[0]
+        if intent.type in (OrderType.MARKET, OrderType.STOP_MARKET):
+            intent = dataclasses.replace(intent, max_slippage_bps=safety.slippage_cap(intent.max_slippage_bps,
+                                                                                       self.limits))
+        return intent, ""
+
+    def _rejected(self, intent: OrderIntent, reason: str) -> tuple[bool, str]:
+        self.counts["rechazadas"] += 1
+        log.warning("intención %s rechazada: %s", intent.client_id, reason)
+        if self.journal:
+            self.journal.record("intent_rejected", {"client_id": intent.client_id, "symbol": intent.symbol,
+                                                    "reason": reason, "tags": intent.tags})
+        return False, reason
+
+    def submit(self, intent: OrderIntent) -> tuple[bool, str]:
+        """Encola sin esperar. (aceptada, motivo)."""
+        intent, reason = self._check(intent)
+        if not reason:
             try:
                 self.queue.put_nowait(intent)
             except asyncio.QueueFull:
                 reason = "cola_de_ejecucion_llena"
         if reason:
-            self.counts["rechazadas"] += 1
-            log.warning("intención %s rechazada: %s", intent.client_id, reason)
-            if self.journal:
-                self.journal.record("intent_rejected", {"client_id": intent.client_id, "symbol": intent.symbol,
-                                                        "reason": reason, "tags": intent.tags})
-            return False, reason
-        self._sent.append(now)
+            return self._rejected(intent, reason)
+        self._sent.append(self.clock.time())
         self.counts["encoladas"] += 1
         return True, ""
+
+    async def execute(self, intent: OrderIntent):
+        """Camino directo para corridas cortas (el operador paper del recolector): los mismos controles que
+        `submit`, sin cola. Devuelve (orden o None, motivo del rechazo)."""
+        intent, reason = self._check(intent)
+        if reason:
+            self._rejected(intent, reason)
+            return None, reason
+        self._sent.append(self.clock.time())
+        order = await self.venue.submit(intent)
+        self.counts["ejecutadas"] += 1
+        return order, ""
 
     async def _execute(self, intent: OrderIntent) -> None:
         async with self._sem:
