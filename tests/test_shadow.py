@@ -212,3 +212,71 @@ async def test_noticias_que_no_se_operan_quedan_registradas_con_su_motivo(tmp_pa
         p.clock.set(t1 + 300)
         s = await p.run([ev("w3", LISTING, t1 + 300, cluster="w")])
         assert s.get("entradas", 0) == 0 and p.rows("decisiones")[-1]["motivos"] == ["historia_ya_operada"]
+
+
+# -- conectado al recolector (collect --paper) --------------------------------------------------------
+async def test_recolector_clasifica_y_opera_en_paper_con_resumen_diario(tmp_path):
+    from fake_feeds import Feeds, specs
+    from tradingagent import config
+    from tradingagent.research.collector import collect, read_shards
+
+    cfg = copy.deepcopy(config.load(None))
+    clock = ManualClock(T0)
+    feeds, tg = Feeds(), FakeTelegram()
+    mk = FakeBinance(step_price({}), clock)
+    data = tmp_path / "datos"
+    feeds.add("media", "old", "Older market story about crypto", T0 - 3600)
+    async with contextlib.AsyncExitStack() as stack:
+        furl = await stack.enter_async_context(serve(feeds.app()))
+        murl = await stack.enter_async_context(serve(mk.app()))
+        turl = await stack.enter_async_context(serve(tg.app()))
+        t = TelegramTransport(TOKEN, "4242", base_url=turl)
+        stack.push_async_callback(t.close)
+
+        async def run(**paper):
+            return await collect(data, cfg, {}, clock=clock, sources=specs(furl), telegram=t, send_gap_s=0,
+                                 candle_urls=FakeBinance.candle_urls(murl), paper={"capital": 120.0, **paper},
+                                 paper_urls=FakeBinance.urls(murl))
+
+        s1 = await run()                                                       # historia: no se opera
+        assert s1["paper"]["equity"] == 120.0 and s1["paper"]["operaciones"] == 0
+        assert any("Operador paper activo" in m["text"] for m in tg.messages)
+
+        t2 = T0 + 10 * 60
+        feeds.add("media", "sol", LISTING, t2 - 90, body="Trading opens today.")
+        feeds.add("copia", "sol2", LISTING, t2 - 30)                             # copia: corrobora, no se opera
+        feeds.add("media", "pod", "Weekly crypto podcast: what to watch", t2 - 60)
+        clock.set(t2)
+        s2 = await run()
+        assert s2["nuevas"] == 2 and s2["copias"] == 1 and s2["categorias"] == {"listado": 1, "otro": 1}
+        evs = {e["url"].rsplit("/", 1)[1]: e for e in read_shards(data, "eventos", T0, clock.time())}
+        assert evs["sol"]["nlp"]["category"] == "listado" and evs["sol"]["nlp"]["assets"] == ["SOL"]
+        assert evs["sol"]["nlp"]["confidence"] > classify(LISTING).confidence    # corroborada en la misma corrida
+        assert evs["sol2"]["nlp"]["category"] == "listado"                        # las copias también se clasifican
+        assert s2["paper"]["entradas"] == 1 and s2["paper"]["abiertas"] == ["SOLUSDT"]
+        assert "LONG" in tg.messages[-1]["text"]
+
+        clock.set(T0 + 13 * 3600)                                               # 3-nov 01:00: resumen de ayer
+        s3 = await run()
+        assert s3["paper"]["horizonte"] == 1                                    # vencieron los 60 min
+        digest = next(m["text"] for m in tg.messages if "Recolector · 2026-11-02" in m["text"])
+        assert "🧪 Paper:" in digest and "abiertas: SOLUSDT" in digest           # la cuenta al cierre de ayer
+        assert "equity" in digest and "de 120 USDT" in digest
+
+
+async def test_si_el_paper_falla_los_datos_del_recolector_quedan(tmp_path, monkeypatch):
+    from fake_feeds import Feeds, specs
+    from tradingagent import config
+    from tradingagent.research import shadow
+    from tradingagent.research.collector import collect
+
+    async def broken(*a, **kw):
+        raise RuntimeError("falla de prueba")
+
+    monkeypatch.setattr(shadow, "run_paper", broken)
+    clock = ManualClock(T0)
+    feeds = Feeds()
+    async with serve(feeds.app()) as furl, serve(FakeBinance(step_price({}), clock).app()) as murl:
+        s = await collect(tmp_path / "d", copy.deepcopy(config.load(None)), {}, clock=clock, sources=specs(furl),
+                          candle_urls=FakeBinance.candle_urls(murl), paper={"capital": 120.0}, send_gap_s=0)
+    assert s["paper"] == {"error": "RuntimeError: falla de prueba"} and (tmp_path / "d" / "estado.json").exists()

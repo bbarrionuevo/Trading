@@ -5,6 +5,7 @@
   python -m tradingagent telegram-chats      lista los chats que le escribieron al bot (para el CHAT_ID)
   python -m tradingagent telegram-chats --avisar   el bot le manda a cada chat que le escribió /id su número
   python -m tradingagent collect [--data DIR]       una pasada del recolector de datos de entrenamiento
+  python -m tradingagent collect --paper [--capital 120] [--rearm]   ...y del operador paper (rearme tras un halt)
   python -m tradingagent sources [--check]   fuentes y su estado; --check lee cada una una vez
   python -m tradingagent journal-verify      verifica la cadena de hashes del diario
   python -m tradingagent paper-sim ESCENARIO reproduce libros + órdenes de un escenario JSONL
@@ -146,10 +147,12 @@ def cmd_collect(args) -> int:
         print("Telegram apagado: falta TELEGRAM_BOT_TOKEN y/o TELEGRAM_CHAT_ID (los datos se juntan igual).",
               file=sys.stderr)
 
+    paper = {"capital": args.capital, "rearm": args.rearm} if args.paper else None
+
     async def main():
         t = TelegramTransport(token, chat, base_url=api_base(os.environ)) if use_tg else None
         try:
-            return await collect(args.data or paths.home() / "datos", cfg, os.environ, telegram=t)
+            return await collect(args.data or paths.home() / "datos", cfg, os.environ, telegram=t, paper=paper)
         finally:
             if t is not None:
                 await t.close()
@@ -226,6 +229,9 @@ def main(argv=None) -> int:
     c.add_argument("--data", help="carpeta de datos (por defecto TRADING_HOME/datos)")
     c.add_argument("--config")
     c.add_argument("--no-telegram", action="store_true")
+    c.add_argument("--paper", action="store_true", help="operar en paper las noticias de la corrida")
+    c.add_argument("--capital", type=float, default=120.0, help="USDT simulados al crear la cuenta paper")
+    c.add_argument("--rearm", action="store_true", help="rearme humano tras un halt por drawdown (REGLAS A-4)")
     s = sub.add_parser("sources")
     s.add_argument("--check", action="store_true")
     s.add_argument("--config")

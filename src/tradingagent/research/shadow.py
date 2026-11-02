@@ -33,7 +33,7 @@ from pathlib import Path
 import aiohttp
 
 from .. import paths
-from ..alerts.model import circuit_breaker_alert, risk_alert, trade_alert
+from ..alerts.model import circuit_breaker_alert, esc, risk_alert, system_alert, trade_alert
 from ..core.bus import EventBus
 from ..decision.policy import PolicyConfig, atr_5m, market_blocks, news_blocks, plan_entry
 from ..decision.risk import RiskState
@@ -113,6 +113,34 @@ def _portfolio(st: dict) -> Portfolio:
     for sym, p in st["positions"].items():
         pf.positions[sym] = Position(sym, "spot", qty=D(p["qty"]), avg_price=D(p["avg_price"]))
     return pf
+
+
+def _read_rows(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    out = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            out.append(json.loads(line))
+        except ValueError:
+            continue
+    return out
+
+
+def paper_line(data_dir, day: str) -> str:
+    """Línea del resumen diario: operaciones cerradas ese día (UTC), su PnL neto y cómo quedó la cuenta."""
+    data = Path(data_dir)
+    st = paths.read_json(data / DIR / STATE, None)
+    if not st:
+        return ""
+    closed = [r for r in _read_rows(data / DIR / TRADES / f"{day[:7]}.jsonl")
+              if r.get("tipo") == "salida" and time.strftime("%Y-%m-%d", time.gmtime(r["ts"])) == day]
+    won = sum(D(r["pnl_neto"]) > 0 for r in closed)
+    pnl = sum((D(r["pnl_neto"]) for r in closed), D(0))
+    open_ = ", ".join(esc(s) for s in sorted(st["positions"])) or "ninguna"
+    halted = " · ⛔ HALT (rearme con --rearm)" if (st.get("risk") or {}).get("halted") else ""
+    return (f"🧪 Paper: {len(closed)} operaciones cerradas ({won} ganadas) · PnL del día {pnl:+.2f} USDT · "
+            f"equity {D(st.get('equity', st['cash'])):.2f} de {D(st['initial']):.0f} USDT · abiertas: {open_}{halted}")
 
 
 def new_state(capital: float, now: float) -> dict:
@@ -298,7 +326,9 @@ async def run_paper(data_dir, items: list[tuple[dict, object]], *, clock, sessio
     urls = {"depth": DEPTH_URL, "info": INFO_URL, **(urls or {})}
     data = Path(data_dir)
     now = clock.time()
-    st = await asyncio.to_thread(paths.read_json, data / DIR / STATE, None) or new_state(capital, now)
+    st = await asyncio.to_thread(paths.read_json, data / DIR / STATE, None)
+    first = st is None
+    st = st or new_state(capital, now)
     killed = await asyncio.to_thread((data / "KILL").exists)
     pf = _portfolio(st)
     held = list(st["positions"])
@@ -324,6 +354,11 @@ async def run_paper(data_dir, items: list[tuple[dict, object]], *, clock, sessio
         max_book_age_s=float(limits["market"]["max_book_age_s"]), stop_slippage_bps=D(STOP_SLIPPAGE_BPS)))
     service = ExecutionService(venue, EventBus(), clock, kill_file=data / "KILL", mode="PAPER", limits=limits)
     run = _Run(st, pf, registry, service, books, store, clock, limits, telegram, now, cfg)
+    if first:
+        await run._alert(system_alert(
+            f"🧪 Operador paper activo · {capital:.0f} USDT simulados · libros reales de Binance spot · "
+            f"comisiones {FEE_BPS / 100}% · entra con noticias frescas y sale por stop, take-profit, horizonte o "
+            "noticia negativa. Avisa cada operación y cada freno.", silent=False))
     if rearm:
         run.risk.rearm()
     await run.oco()
