@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tradingagent"
+version = "0.1.0"
+description = "Agente de trading autónomo guiado por eventos y noticias (paper por defecto)"
+requires-python = ">=3.11"
+dependencies = [
+    "aiohttp==3.14.5",
+    "defusedxml==0.7.1",
+    "PyYAML==6.0.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.2.0",
+    "pytest-asyncio==1.4.1.post1",
+    "hypothesis==6.170.14",
+    "ruff==0.17.3",
+]
+
+[project.scripts]
+tradingagent = "tradingagent.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+tradingagent = ["*.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "BLE", "UP", "ASYNC", "RUF100"]
+ignore = ["E501"]

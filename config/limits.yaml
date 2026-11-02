@@ -1,0 +1,32 @@
+# SOBRE DE RIESGO (REGLAS A-1) · ruta protegida: solo el dueño aprueba y fusiona cambios a este archivo.
+# Dentro de estos límites el agente decide solo. Bajarlos (más estricto) siempre está permitido; subirlos
+# por encima de la línea base de src/tradingagent/limits.py lo rechazan el CI y el propio agente al arrancar.
+# Derivados de los límites que el dueño aprobó para 100 € el 24-oct-2026, expresados en % del equity.
+capital:
+  max_live_usdt: 120            # tope de dinero real que puede armar el dueño sin nueva evidencia (≈100 €)
+per_trade:
+  max_risk_pct: 1.0             # pérdida al stop ≤ 1% del equity
+  max_position_pct: 40          # nocional por activo ≤ 40% del equity
+  max_leverage: 1               # sin apalancamiento (los perpetuos 1x permiten corto)
+  max_slippage_bps: 50          # tope de precio de toda orden: nunca a mercado sin tope
+  require_stop: true            # ninguna posición sin stop-loss
+portfolio:
+  max_gross_exposure_pct: 80    # suma de nocionales ≤ 80% del equity
+  max_positions: 3
+loss:
+  daily_pct: 2.0                # circuit breaker: no abre más hasta 00:00 UTC
+  weekly_pct: 4.0
+  max_drawdown_pct: 8.0         # halt: solo vuelve con rearme humano
+  max_consecutive_losses: 3
+  cooldown_min: 60              # pausa después de las pérdidas seguidas
+market:
+  max_spread_bps: 30            # no entrar con spread mayor
+  min_depth_multiple: 5         # profundidad dentro de 50 bps ≥ 5 × la orden
+  max_book_age_s: 5
+news:
+  max_age_s: 600                # ninguna fuente opera noticias más viejas que esto
+  min_sources_unverified: 2     # una fuente de nivel 3 necesita corroboración de otra fuente distinta
+execution:
+  max_orders_per_min: 30
+ai:
+  max_llm_usd_per_day: 5        # gasto diario máximo en modelos de lenguaje

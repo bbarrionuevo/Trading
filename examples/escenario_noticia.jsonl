@@ -1,0 +1,13 @@
+# Una noticia positiva sobre BTC: el agente compra 2.000 USDT a mercado con tope de 30 bps, pone un stop
+# 1,5% abajo y un take-profit 2% arriba (OCO). El precio sube mientras la orden viaja (latencia 120 ms):
+# el llenado sale peor que lo que se vio al decidir. Después el precio sigue subiendo y el take-profit
+# se llena solo cuando el mercado lo atraviesa.
+{"config": {"latency_ms": 120, "latency_sigma": 0, "participation": 0.8, "max_book_age_s": 5, "cash": "10000"}}
+{"t": 0.0, "book": {"symbol": "BTCUSDT", "bids": [["65000.00", "0.40"], ["64990.00", "1.2"]], "asks": [["65010.00", "0.020"], ["65020.00", "0.010"], ["65040.00", "0.5"]]}}
+{"t": 0.1, "book": {"symbol": "BTCUSDT", "bids": [["65030.00", "0.40"], ["65020.00", "1.2"]], "asks": [["65040.00", "0.015"], ["65060.00", "0.020"], ["65100.00", "0.5"]]}}
+{"t": 0.05, "intent": {"client_id": "n1-entrada", "symbol": "BTCUSDT", "side": "buy", "type": "market", "notional": "2000", "max_slippage_bps": "30", "ref_price": "65010.00", "tags": {"role": "entry", "why": "ETF spot aprobado (SEC)", "impact": 0.8}}}
+{"t": 0.3, "intent": {"client_id": "n1-stop", "symbol": "BTCUSDT", "side": "sell", "type": "stop_market", "qty": "0.030", "stop_price": "64075.00", "tif": "gtc", "reduce_only": true, "oco_group": "n1", "tags": {"role": "stop_loss"}}}
+{"t": 0.3, "intent": {"client_id": "n1-tp", "symbol": "BTCUSDT", "side": "sell", "type": "limit", "qty": "0.030", "limit_price": "66330.00", "tif": "gtc", "reduce_only": true, "oco_group": "n1", "tags": {"role": "take_profit"}}}
+{"t": 30.0, "book": {"symbol": "BTCUSDT", "bids": [["65800.00", "0.5"]], "asks": [["65810.00", "0.5"]]}}
+{"t": 60.0, "book": {"symbol": "BTCUSDT", "bids": [["66330.00", "0.5"]], "asks": [["66340.00", "0.5"]]}}
+{"t": 90.0, "book": {"symbol": "BTCUSDT", "bids": [["66400.00", "0.5"], ["66350.00", "1"]], "asks": [["66410.00", "0.5"]]}}

@@ -2,8 +2,9 @@
 *.pyc
 __pycache__/
 .venv/
-logs/*
-!logs/.gitkeep
-state/
 .pytest_cache/
-node_modules/
+.ruff_cache/
+.hypothesis/
+*.egg-info/
+build/
+dist/
