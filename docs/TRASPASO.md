@@ -82,3 +82,17 @@ Pendientes conocidos en `shadow.py`:
 - No imprimir secretos (el repo y los logs son públicos).
 - Acciones fijadas por SHA.
 - Rutas protegidas: solo con aprobación del dueño.
+
+## Notas del dueño sobre futuros (texto que mandó, 2-nov)
+- La vida media del alfa en futuros es de **30 a 300 s**. Con el cron de Actions (5 a 15 min) no se captura: sirve para aprender y medir. Operar en tiempo real requiere un proceso continuo (la PC del dueño o un VPS). Proponerlo y que decida el dueño: es un despliegue y tiene costo.
+- **Antes de cada entrada, revisar la liquidez del libro:** spread por z-score, L3 y divergencia contra el mid. Cuando sale una noticia, los creadores de mercado retiran órdenes: no mandar órdenes a mercado sin tope en ese instante.
+- **Triple barrera obligatoria** en futuros: TP, SL y expiración, adaptados a la volatilidad.
+- **¼-Kelly** para el tamaño y el apalancamiento, siempre dentro de `per_trade.max_leverage` (hoy 1x; subirlo solo con aprobación explícita del dueño en un PR de `limits.yaml`).
+- **El PaperTradingEngine simula futuros:**
+  - comisiones de Binance Futures (0,02 % maker y 0,05 % taker) y de MEXC (verificar con su API);
+  - funding cada 8 h;
+  - precio de liquidación;
+  - cortos.
+
+  Ya existe la base: `Instrument(kind="perp")` y margen 1x en `execution/paper.py`.
+- **Meta de promoción:** DSR ≥ 0,95 en paper (agregar a F-3).
