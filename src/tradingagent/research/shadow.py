@@ -351,9 +351,9 @@ class _Run:
                 await self.close(sym, "noticia_en_contra",
                                  why=f"{sig.category} {sig.polarity:+.2f}: {ev['title'][:140]}")
 
-    async def flatten(self, why: str) -> None:
+    async def flatten(self, why: str, reason: str = "freno") -> None:
         for sym in list(self.st["positions"]):
-            await self.close(sym, "freno", why=why)
+            await self.close(sym, reason, why=why)
 
     # -- entradas -----------------------------------------------------------------------------------
     def record(self, ev, sig, sym, decision: str, reasons=(), **extra) -> None:

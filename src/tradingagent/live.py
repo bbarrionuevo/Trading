@@ -413,6 +413,28 @@ class LiveTrader:
             except TimeoutError:
                 pass
 
+    async def close_all(self, why: str) -> tuple[int, int]:
+        """Cierra todo ya (orden del dueño): (posiciones que había, las que quedaron abiertas)."""
+        async with self.lock:
+            run = self.run()
+            before = len(self.st["positions"])
+            await run.flatten(why, reason="pedido_del_dueno")
+            await self.save(run)
+            return before, len(self.st["positions"])
+
+    def status_lines(self, title: str) -> list[str]:
+        """Resumen en castellano para /estado (Telegram es privado: va con montos)."""
+        st = self.st
+        eq, ini = shadow.D(st.get("equity") or st["cash"]), shadow.D(st["initial"])
+        out = [f"{title}: {usdt_es(eq, signed=False)} ({usdt_es(eq - ini)} desde el inicio), "
+               f"{st['stats']['operaciones']} operaciones cerradas"]
+        for sym, p in st["positions"].items():
+            out.append(f"  · {p['side']} {sym.replace('_USDT', '')} desde {p['avg_price']}, límite {p['stop']}"
+                       + (" (sigue al precio)" if p.get("trail") else ""))
+        if (st.get("risk") or {}).get("halted"):
+            out.append("  ⛔ frenado por caída: no abre nada hasta revisarlo")
+        return out
+
     def snapshot(self) -> dict:
         return {"mercado": self.market.name, "cash": self.st.get("cash"), "equity": self.st.get("equity"),
                 "abiertas": sorted(self.st.get("positions", {})), "operaciones": self.st["stats"]["operaciones"],

@@ -241,6 +241,22 @@ niveles:
    puede ver los registros y la cuenta real ahí mismo y correr `armar-real --desarmar` o `cerrar-todo` si hace
    falta.
 
+## Órdenes por Telegram (desde el celular)
+
+Mandale al bot (solo obedece a tu chat):
+
+| Orden | Qué hace |
+|---|---|
+| `/estado` | Cómo va: práctica, simulacro o dinero real (con montos: Telegram es privado), posiciones y frenos |
+| `/pausa` | No abre nada nuevo. Lo abierto sigue con sus límites |
+| `/seguir` | Vuelve a operar |
+| `/desarmar` | Apaga el dinero real: no abre nada nuevo, lo abierto sale normal |
+| `/cerrar SI` | Emergencia: cierra ya todo lo real y lo apaga |
+| `/ayuda` | La lista de órdenes |
+
+Armar dinero real **no** se puede por Telegram: solo en la PC, con la frase exacta. Una orden que llegó
+mientras el programa estaba apagado no se ejecuta después.
+
 ## Parada de emergencia y verificación
 
 - **Pausa (KILL):** creá un archivo vacío `%LOCALAPPDATA%\TRADING\KILL`. Con ese archivo no se abren

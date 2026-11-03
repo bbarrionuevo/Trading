@@ -32,8 +32,10 @@ class FakeTelegram:
         self.requests.append((method, payload))
         if method == "getMe":
             return web.json_response({"ok": True, "result": {"id": 1, "is_bot": True, "username": "test_bot"}})
-        if method == "getUpdates":
-            return web.json_response({"ok": True, "result": self.updates})
+        if method == "getUpdates":                    # con offset: solo lo nuevo (como la API real)
+            off = payload.get("offset")
+            got = [u for u in self.updates if off is None or int(u["update_id"]) >= int(off)]
+            return web.json_response({"ok": True, "result": got})
         mode = self.script.pop(0) if self.script else "ok"
         if mode == "hang":
             await self.release.wait()

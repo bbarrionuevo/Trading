@@ -123,6 +123,11 @@ Binance) y la PC del dueño (instalador completo, Telegram, tarea `trading-agent
   el supervisor publica `red.json` en la rama `pc`. Desde la nube Upbit/Bybit/Binance bloquean por país: con ese
   archivo se ve qué sirve desde Argentina antes de sumar una fuente.
 
+- **Órdenes por Telegram** (`alerts/commands.py`, `app.OwnerActions`): /estado, /pausa, /seguir, /desarmar y
+  /cerrar SI, solo del chat del dueño; nada que agregue riesgo (armar, solo en la PC, A-2); lo pendiente al
+  arrancar se descarta (`state/telegram-offset.json`). `/cerrar SI` usa `LiveTrader.close_all` (salida
+  `pedido_del_dueno`, órdenes con tope de precio por el venue real) y desarma.
+
 ## Próximo: aprender de la historia y reaccionar más rápido (pedido del dueño, 3-nov)
 
 > "Quizás sea bueno también buscar en historial para que pueda entender más rápido cómo repercute las noticias
