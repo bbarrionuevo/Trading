@@ -510,3 +510,16 @@ def test_el_latido_publicado_nunca_lleva_la_cuenta_de_dinero_real():
     assert json.loads(without_real(json.dumps(sim)))["real"]["cash"] == "99"
     assert json.loads(without_real(json.dumps({**hb, "real": None})))["real"] is None
     assert without_real("{roto") == "{}"
+
+
+def test_con_algo_armado_o_posiciones_abiertas_se_vigila_casi_en_vivo(tmp_path, gh):
+    from tradingagent import supervisor as sup_mod
+
+    origin = Origin(tmp_path)
+    sup = make(tmp_path, gh, origin)
+    assert not sup.busy()
+    paths.write_json_atomic(sup.home / "ARMADO.json", {"simulacro": True})
+    assert sup.busy() and sup_mod.PUBLISH_FAST_S <= 120 and sup_mod.CHECK_FAST_S <= 300
+    (sup.home / "ARMADO.json").unlink()
+    paths.write_json_atomic(sup.home / "paper-vivo" / "mexc-futuros" / "estado.json", {"positions": {"BTC_USDT": {}}})
+    assert sup.busy()

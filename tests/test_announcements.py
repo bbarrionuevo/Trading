@@ -81,3 +81,23 @@ def test_universo_con_monedas_chicas_solo_por_su_ticker_escrito():
     assert assets.liquid_keys().count("MARS") == 0 and "BIG" in assets.liquid_keys()
     assert classify("Binance Will List Mars Token (MARS)").assets == ("MARS",)
     assert assets.detect("Mars mission launches") == []
+
+
+async def test_prueba_de_red_informa_que_fuentes_se_leen_desde_la_pc():
+    from tradingagent.research.probe import probe
+
+    async def ok(request):
+        return web.Response(text='{"data": [{"title": "Upbit lists FOO"}]}', content_type="application/json")
+
+    async def blocked(request):
+        return web.Response(status=403, text="<html>blocked</html>")
+
+    app = web.Application()
+    app.router.add_get("/ok", ok)
+    app.router.add_get("/no", blocked)
+    async with serve(app) as url, aiohttp.ClientSession() as s:
+        rep = await probe(s, {"bien": f"{url}/ok", "bloqueada": f"{url}/no", "caida": "http://127.0.0.1:9/x"},
+                          timeout_s=3)
+    f = rep["fuentes"]
+    assert f["bien"]["codigo"] == 200 and "Upbit lists FOO" in f["bien"]["muestra"]
+    assert f["bloqueada"]["codigo"] == 403 and f["caida"]["codigo"] is None and f["caida"]["error"]

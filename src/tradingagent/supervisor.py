@@ -47,6 +47,10 @@ API = f"https://api.github.com/repos/{SLUG}"
 REMOTE = f"https://github.com/{SLUG}.git"
 CI_WORKFLOW = ".github/workflows/ci.yml"
 CHECK_EVERY_S, PUBLISH_EVERY_S, FIRST_CHECK_S, FIRST_PUBLISH_S = 900.0, 900.0, 60.0, 120.0
+# Con algo armado (dinero real o simulacro) o con posiciones abiertas, Claude vigila casi en vivo (pedido del dueño,
+# 3-nov: "voy a necesitar que estés conectado prácticamente de forma sincrónica con mi PC"): la práctica y la salud
+# se publican cada 2 min y las correcciones se buscan cada 5. Lo publicado sigue sin la cuenta real (G-8).
+PUBLISH_FAST_S, CHECK_FAST_S = 120.0, 300.0
 MAX_DEFER_S = 6 * 3600             # con posiciones abiertas la actualización espera, como mucho 6 h
 EXIT_RELOAD, EXIT_LOCKED = 75, 3
 BACKOFF = (2, 5, 15, 30, 60)
@@ -233,6 +237,10 @@ class Supervisor:
             k32, job = self.job
             if not k32.AssignProcessToJobObject(job, int(proc._handle)):
                 log.warning("no pude poner el proceso %s en el job", proc.pid)
+
+    def busy(self) -> bool:
+        """¿Hay algo armado o alguna posición abierta? Entonces se publica y se buscan correcciones más seguido."""
+        return (self.home / "ARMADO.json").exists() or self.open_positions() > 0
 
     def open_positions(self) -> int:
         """Posiciones abiertas de todas las cuentas (práctica, simulacro y dinero real): con alguna abierta no se
@@ -496,6 +504,9 @@ class Supervisor:
         tests = read(self.home / "logs" / "tests.txt")
         if tests is not None:
             self._put(dest / "tests.txt", tests[-20000:])
+        net = read(self.home / "logs" / "red.json")                  # qué fuentes se leen desde la PC
+        if net is not None:
+            self._put(dest / "red.json", net)
         lines = dashboard._tail(self.home / "logs" / "agent.log", 3_000_000)
         warn = [x for x in lines if '"WARNING"' in x or '"ERROR"' in x]
         self._put(dest / "errores.jsonl", "\n".join(warn[-200:]) + "\n")
@@ -570,7 +581,7 @@ class Supervisor:
                     self.run_tests()
                 now = time.monotonic()
                 if now >= next_update:
-                    next_update = now + CHECK_EVERY_S
+                    next_update = now + (CHECK_FAST_S if self.busy() else CHECK_EVERY_S)
                     result = self.check_update()
                     self.state["ultima_revision"] = {"ts": round(time.time()), "resultado": result}
                     self.save()
@@ -584,7 +595,7 @@ class Supervisor:
                     if self.child is None:
                         self.start_child()
                 if now >= next_publish:
-                    next_publish = now + PUBLISH_EVERY_S
+                    next_publish = now + (PUBLISH_FAST_S if self.busy() else PUBLISH_EVERY_S)
                     self.state["publicacion"] = {"ts": round(time.time()), "resultado": self.publish()}
                     self.save()
                 time.sleep(tick_s)
