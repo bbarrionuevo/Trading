@@ -57,7 +57,7 @@ src/tradingagent/
 config/limits.yaml   el sobre (protegido)        config/agent.example.yaml   ejemplo de configuración
 tools/               chequeos del CI (protegidos)
 deploy/windows/      instalador de un comando y tarea programada trading-agente (supervisor 24/7)
-tests/               184 tests, entre ellos los de las reglas (test_rules.py, protegido)
+tests/               187 tests, entre ellos los de las reglas (test_rules.py, protegido)
 ```
 
 ## Desarrollo

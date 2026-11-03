@@ -208,3 +208,44 @@ def test_g6_en_actions_solo_paper():
     wf = (ROOT / ".github" / "workflows" / "recoleccion.yml").read_text(encoding="utf-8")
     assert "--paper" in wf and not re.search(r"(?i)--(live|real)\b|mode:\s*live", wf)
     assert config.DEFAULTS["mode"] == "paper"
+
+
+# -- G-7 / G-8. La PC: actualización automática, lo que se publica y el tablero -------------------------
+def test_g7_la_pc_solo_toma_versiones_con_ci_verde_y_sin_posiciones():
+    src = (SRC / "supervisor.py").read_text(encoding="utf-8")
+    body = src[src.index("    def check_update"):src.index("    def run_tests")]
+    assert body.index("ci_green(") < body.index("esperando_cierre") < body.index("self.move_to(remote)")
+    assert "self.move_to(head)" in body                                     # y vuelve atrás si no arranca
+    task = (ROOT / "deploy" / "windows" / "instalar-agente.ps1").read_text(encoding="utf-8")
+    assert '"-m tradingagent supervisar"' in task and "-MultipleInstances IgnoreNew" in task
+
+
+def test_g8_lo_publicado_va_solo_a_la_rama_pc_y_el_ci_la_ignora():
+    src = (SRC / "supervisor.py").read_text(encoding="utf-8")
+    pushes = re.findall(r'git\("push".*', src)
+    assert pushes and all('"HEAD:refs/heads/pc"' in p for p in pushes)
+    assert re.findall(r"refs/heads/(\w+)", src) == ["main", "pc"]           # lee main, escribe solo pc
+    ci = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"))
+    assert {"data", "pc"} <= set(ci.get("on", ci.get(True))["push"]["branches-ignore"])
+
+
+def test_g8_el_tablero_es_local_y_de_solo_lectura(tmp_path):
+    import urllib.error
+    import urllib.request
+
+    from tradingagent import dashboard
+    srv = dashboard.start(tmp_path, 0)
+    try:
+        assert srv.server_address[0] == "127.0.0.1"
+        base = dashboard.url(srv)
+        for method in ("POST", "PUT", "DELETE", "PATCH"):
+            with pytest.raises(urllib.error.HTTPError) as e:
+                urllib.request.urlopen(urllib.request.Request(base + "/", method=method), timeout=5)
+            assert e.value.code == 405
+        with pytest.raises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(urllib.request.Request(base + "/api/estado", headers={"Host": "evil.example"}),
+                                   timeout=5)
+        assert e.value.code == 403
+    finally:
+        srv.shutdown()
+        srv.server_close()

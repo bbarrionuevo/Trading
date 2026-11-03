@@ -1,7 +1,8 @@
-# Reglas del agente TRADING (v3)
+# Reglas del agente TRADING (v3.1)
 
-**Estado:** propuesta del 3-nov-2026. Reemplaza a la v2 (2-nov-2026), que reemplazó a la v1 (R-01 a
-R-22, 24 a 26-oct-2026, bot de market making de nexus).
+**Estado:** v3 del 3-nov-2026, con G-7 enmendada y G-8 nueva el mismo día (la PC se actualiza sola y
+Claude ve su estado). Reemplaza a la v2 (2-nov-2026), que reemplazó a la v1 (R-01 a R-22, 24 a
+26-oct-2026, bot de market making de nexus).
 
 La hizo Claude a pedido del dueño:
 
@@ -29,9 +30,9 @@ Cuanto más evidencia junta, más sube de nivel. Cuando algo sale mal, baja de n
 
 | | PC del dueño (motor principal) | GitHub Actions (respaldo) |
 |---|---|---|
-| Qué | `tradingagent run` 24/7: ingesta continua y operador en vivo | `collect --paper` cada 5 min: datos, etiquetas, aprendizaje y paper por corridas |
+| Qué | `tradingagent supervisar` 24/7: el supervisor mantiene vivo y actualizado al agente (`run`: ingesta continua y operador en vivo) y sirve el tablero local | `collect --paper` cada 5 min: datos, etiquetas, aprendizaje y paper por corridas |
 | Por qué | El alfa de una noticia dura minutos (vida media de 120 s): hace falta un proceso continuo | Medir y aprender aunque la PC esté apagada |
-| Reglas | G-5 y G-7 | G-1 y G-6 |
+| Reglas | G-5, G-7 y G-8 | G-1 y G-6 |
 
 ## Niveles de autonomía
 
@@ -116,7 +117,8 @@ Cuanto más evidencia junta, más sube de nivel. Cuando algo sale mal, baja de n
 | G-4 | Dependencias con versión fija; acciones de GitHub fijadas por SHA; permisos mínimos en cada workflow |
 | G-5 | **Separación de proyectos:** TRADING usa su propia carpeta (`%USERPROFILE%\TRADING`), sus datos (`%LOCALAPPDATA%\TRADING`), sus claves y su tarea programada (`trading-agente`). **Nunca usa ni toca nada de nexus**, que es otro proyecto del dueño en la misma PC. Si `TRADING_HOME` apunta a una carpeta de nexus, el agente no arranca (test `test_g5_*`, que también revisa los scripts de `deploy/`) |
 | G-6 | **GitHub Actions** solo para trabajos **cortos y periódicos**: el recolector de datos y el **operador paper por corridas** (dinero simulado, libros reales), cada 5 minutos, con tope de 10 minutos por corrida, una corrida a la vez y solo en este repo. Nunca órdenes reales ni servicios 24/7 (para eso está la PC, G-7). Los datos van a la rama `data`, que es **pública**: solo datos públicos (titulares, enlaces, fragmentos cortos, precios, operaciones simuladas) y nada personal (ni saldos de la cuenta). El único permiso de escritura de un workflow es guardar en esa rama (tests `test_g6_*` y `test_g4_*`) |
-| G-7 | **La PC del dueño 24/7** es el motor principal: la tarea programada `trading-agente` (`deploy/windows/instalar-agente.ps1`) corre `tradingagent run` al arrancar Windows y lo reinicia si se cae. El estado vive en `%LOCALAPPDATA%\TRADING` (persistente entre reinicios). Cambios en la tarea o en el `.env` los hace el dueño |
+| G-7 | **La PC del dueño 24/7** es el motor principal: la tarea programada `trading-agente` (`deploy/windows/instalar-agente.ps1`) corre el **supervisor** (`tradingagent supervisar`) al arrancar Windows, al iniciar sesión y cada minuto si no está corriendo. El supervisor relanza al agente si se cae (un solo agente por carpeta) y **lo actualiza solo** desde `main`, únicamente con versiones cuyo CI (tests en Linux y en Windows, y reglas) terminó en verde y sin posiciones abiertas (espera como mucho 6 h). Para al agente con calma, prueba que la versión nueva arranque y, si no, vuelve a la anterior y avisa. Así lo que se fusiona en `main` llega a la PC sin intervención: G-2 y G-3 son el control de lo que entra. El estado vive en `%LOCALAPPDATA%\TRADING` (persistente entre reinicios). Cambios en la tarea o en el `.env` los hace el dueño (el instalador los pide) |
+| G-8 | **Lo que Claude ve de la PC:** el supervisor publica cada 15 minutos en la rama `pc` del repo, que es **pública**, un único commit (la rama no crece) con el tablero en JSON, el latido, la cuenta paper (estado, operaciones y decisiones recientes), el supervisor, el resultado de los tests en la PC y los últimos avisos del log. Solo paper y salud: **nunca** el `.env`, secretos, el diario completo ni saldos reales; todo pasa por la redacción de secretos y sin rutas personales. Usa `GITHUB_TOKEN_PC` (el token de `gh` del dueño, solo en su `.env`) y solo empuja a `refs/heads/pc`; el CI ignora esa rama. El **tablero** (http://127.0.0.1:8765) es local y de solo lectura: escucha solo en 127.0.0.1, rechaza otro Host y no tiene ninguna acción (tests `test_g8_*`) |
 
 ## Categorías de cambios
 
@@ -132,4 +134,5 @@ Cuanto más evidencia junta, más sube de nivel. Cuando algo sale mal, baja de n
 | 2-nov-2026 | Pedido: rehacer las reglas para la máxima autonomía e inteligencia | Mensaje del dueño; la v2 quedó aprobada al fusionar su PR |
 | 2-nov-2026 | Recolector de entrenamiento en GitHub Actions con el bot `CHARBIS_BOT_TOKEN` (G-1 enmendada, G-6 nueva) | Pedido del dueño ("quiero que se vaya entrenando", con los secretos ya cargados); aprobado al fusionar su PR |
 | 2-nov-2026 | Pasos 1 a 7 del traspaso: paper en Actions cada 5 min (G-6 enmendada), Claude Haiku con `CLAUDE_API_KEY`, futuros de MEXC en paper con claves de solo lectura (G-1 y A-3), mejoras del informe | Mensaje del dueño: "estás aprobado para hacer todos los cambios necesarios" |
+| 3-nov-2026 | La PC se actualiza sola con CI verde (G-7 enmendada), Claude ve su estado en la rama pública `pc` y hay un tablero local (G-8 nueva); el CI prueba también en Windows | Mensajes del dueño: "recorda que se debe mantener actualizado solo el programa en mi pc"; "debe ser 100 % autonomo"; "vos tenes q ser capas de ver el estado del programa en mi pc para la mejora continua y evaluar como van las inversiones"; "que me muestre toda la informacion importante en la pc". Queda aprobado al fusionar su PR |
 | 2 y 3-nov-2026 | Reglas v3 y límites definidos para el objetivo: la PC 24/7 como motor (G-7), futuros solo en MEXC (Binance limita a Argentina), exposición neta ≤ 30 % (A-1), cierre total en el freno diario y el halt (A-4), DSR en F-3 | Mensajes del dueño: "Podés modificar las reglas y todo lo que nos sirva para que esto funcione y sea lo más autónomo posible"; "este es un proyecto nuevo y tanto las reglas como los límites intocables los tenemos que definir en esta sesión"; "la idea es que este programa esté instalado en mi PC que va a estar 24/7 prendida"; "future solo lo podré hacer con MEXC". Queda aprobado al fusionar su PR |
