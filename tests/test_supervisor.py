@@ -433,3 +433,40 @@ async def test_la_consola_de_windows_nunca_frena_las_noticias_ni_el_latido(tmp_p
     print("📰 ♥ ñ")
     sys.stdout.flush()
     assert raw.getvalue().decode("utf-8").strip() == "📰 ♥ ñ"
+
+
+async def test_al_parar_con_calma_la_noticia_en_curso_se_termina_de_operar():
+    from test_journal_app import FreshBooks
+    from test_live import news
+    from tradingagent.ingestion.engine import TOPIC_ACCEPTED
+
+    done = []
+
+    class SlowTrader:
+        llm = None
+
+        async def on_news(self, ev):
+            await asyncio.sleep(0.5)                                            # p. ej., esperando a Claude
+            done.append(ev.item.id)
+
+        async def watch(self, stop):
+            await stop.wait()
+
+        def snapshot(self):
+            return {}
+
+    cfg = config.load(None)
+    cfg["trader"]["enabled"] = False
+    agent = Agent(cfg, {}, sources=[], book_provider=FreshBooks(), printer=lambda *_: None)
+    agent.trader = SlowTrader()
+    run = asyncio.create_task(agent.run())
+    for _ in range(300):
+        if getattr(agent, "execution", None):
+            break
+        await asyncio.sleep(0.01)
+    await asyncio.sleep(0.1)
+    agent.bus.publish(TOPIC_ACCEPTED, news("n1", "Bitcoin ETF approved", time.time()))
+    await asyncio.sleep(0.05)
+    (paths.home() / "state" / "parar").write_text("actualizacion")              # el supervisor pide parar
+    await asyncio.wait_for(run, timeout=15)
+    assert done == ["n1"]

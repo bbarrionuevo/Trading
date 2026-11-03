@@ -83,6 +83,7 @@ class Agent:
         self.telegram_base_url, self.printer = telegram_base_url, printer
         self.stop_event = asyncio.Event()
         self.started = time.time()
+        self.news_tasks: set[asyncio.Task] = set()     # noticias que el operador está evaluando ahora
 
     def stop(self) -> None:
         self.stop_event.set()
@@ -119,13 +120,12 @@ class Agent:
     async def _print_accepted(self) -> None:
         """Cada noticia aceptada se muestra en consola y, si el operador en vivo está prendido, se evalúa ya."""
         sub = self.bus.subscribe(TOPIC_ACCEPTED, "consola", maxsize=200)
-        pending: set[asyncio.Task] = set()
         async for ev in sub:
             it = ev.item
             if self.trader is not None:                          # no frena la lectura: cada noticia en su tarea
                 t = asyncio.create_task(self._trade(ev), name=f"noticia-{it.id[:8]}")
-                pending.add(t)
-                t.add_done_callback(pending.discard)
+                self.news_tasks.add(t)
+                t.add_done_callback(self.news_tasks.discard)
             age = f"{ev.age_s:.0f}s" if ev.age_s is not None else "s/h"
             try:
                 self.printer(f"📰 [{it.source} n{it.tier} {age}] {it.title[:140]}")
@@ -240,6 +240,8 @@ class Agent:
                     await self.stop_event.wait()
                 finally:
                     self.stop_event.set()                 # si fue una cancelación, avisa a todas las tareas
+                    if self.news_tasks:                   # una noticia a medio operar se termina y se guarda
+                        await asyncio.wait(set(self.news_tasks), timeout=10)
                     for t in tasks:
                         if t.get_name() in ("lag", "consola", "aprendizaje") or t.get_name().startswith("fuente-"):
                             t.cancel()
