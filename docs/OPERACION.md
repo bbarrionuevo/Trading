@@ -11,7 +11,19 @@ Este proyecto se llama **TRADING** y vive separado de nexus:
 
 Si por error `TRADING_HOME` apunta a una carpeta de nexus, el agente se niega a arrancar.
 
-## Instalación (una vez, en PowerShell)
+## Instalación automática (recomendada)
+
+En PowerShell (no hace falta que sea como administrador; al final pide permiso una vez):
+
+```powershell
+gh api repos/bbarrionuevo/Trading/contents/deploy/windows/instalar.ps1 -H "Accept: application/vnd.github.raw" | Out-String | Invoke-Expression
+```
+
+Instala Python y Git si faltan, descarga el repo en `%USERPROFILE%\TRADING`, crea el entorno, te pide las
+claves (las guarda en `%LOCALAPPDATA%\TRADING\.env`), prueba Telegram, Claude y MEXC, y deja la tarea
+`trading-agente` corriendo 24/7. Para actualizar, se vuelve a correr el mismo comando.
+
+## Instalación a mano (una vez, en PowerShell)
 
 ```powershell
 git clone https://github.com/bbarrionuevo/Trading.git $env:USERPROFILE\TRADING
