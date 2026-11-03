@@ -35,9 +35,11 @@ DEFAULTS = {
     },
     "execution": {"max_orders_per_min": 30, "max_queue": 100},
     # operador paper en vivo (live.py): reacciona a cada noticia y vigila las barreras cada segundo
-    # llm_usd_dia: tope diario de gasto en Claude (lo que manda, si es menor, es el del sobre)
+    # llm_usd_dia: techo de seguridad del gasto en Claude (no es un límite de uso: la IA se consulta SIEMPRE
+    # que su respuesta pueda cambiar una decisión y NUNCA si no; el techo solo frena un error que se dispare).
+    # Por defecto, el del sobre (ai.max_llm_usd_per_day).
     "trader": {"enabled": True, "mercado": "mexc-futuros", "capital_usdt": 120, "llm": True, "aprender": True,
-               "llm_usd_dia": 0.30},
+               "llm_usd_dia": None},
     "alerts": {"telegram": True, "rate_per_s": 1.0, "burst": 3, "max_queue": 500},
 }
 
@@ -57,7 +59,6 @@ RANGES = {
     ("execution", "max_orders_per_min"): (1, 120),
     ("alerts", "rate_per_s"): (0.05, 30),
     ("trader", "capital_usdt"): (10, 10_000_000),
-    ("trader", "llm_usd_dia"): (0, 5),
 }
 
 
@@ -91,6 +92,9 @@ def validate(cfg: dict) -> list[str]:
             errs.append(f"ingestion.extra_sources[{i}]: necesita id y url http(s)")
     if not cfg["paper"].get("symbols"):
         errs.append("paper.symbols: vacío")
+    cap = cfg["trader"].get("llm_usd_dia")
+    if cap is not None and (isinstance(cap, bool) or not isinstance(cap, int | float) or not 0 <= cap <= 1000):
+        errs.append(f"trader.llm_usd_dia={cap!r} fuera de rango [0, 1000] (o null = el del sobre)")
     if cfg["trader"].get("mercado") not in ("mexc-futuros", "binance-spot"):
         errs.append("trader.mercado: tiene que ser mexc-futuros o binance-spot")
     return errs

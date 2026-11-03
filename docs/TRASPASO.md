@@ -26,7 +26,8 @@ Binance) y la PC del dueño (instalador completo, Telegram, tarea `trading-agent
   diario a las 21:00 (hora argentina).
 - Claude solo cuando cambia una decisión: hecho dudoso o concreto (no preguntas ni opiniones), noticia
   fresca, sin frenos, con lugar para operar o con posición abierta de ese activo; caché por titular; tope
-  `trader.llm_usd_dia` = 0,30 USD; en GitHub apagado salvo `collect --ia`. El tablero cuenta las evitadas.
+  sin tope de uso (el dueño lo aclaró: siempre que haga falta y solo entonces); queda el techo del sobre
+  (5 USD/día) contra errores; en GitHub apagado salvo `collect --ia`. El tablero cuenta las evitadas.
 
 ## Rutas protegidas
 
