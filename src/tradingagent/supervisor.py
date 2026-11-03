@@ -506,6 +506,11 @@ class Supervisor:
         return "ok"
 
     # -- bucle ------------------------------------------------------------------------------------------
+    def can_reload(self) -> bool:
+        """Salir para recargarse solo si la tarea lo vuelve a lanzar en un minuto (la marca la deja el
+        instalador de la tarea). Si no, el agente quedaría apagado hasta reiniciar la PC."""
+        return bool((dashboard.read_json(self.home / "state" / "tarea.json", None) or {}).get("cada_minuto"))
+
     def start_board(self) -> None:
         if self.port is None:                          # None = sin tablero; 0 = puerto libre (tests)
             return
@@ -541,8 +546,12 @@ class Supervisor:
                     self.state["ultima_revision"] = {"ts": round(time.time()), "resultado": result}
                     self.save()
                     if result == "recargar_supervisor":
-                        log.info("cambió el supervisor: salgo para que la tarea me relance con el código nuevo")
-                        return EXIT_RELOAD
+                        if self.can_reload():
+                            log.info("cambió el supervisor: salgo para que la tarea me relance con el código nuevo")
+                            return EXIT_RELOAD
+                        log.warning("cambió el supervisor, pero sin la tarea de cada minuto no salgo: el agente ya "
+                                    "corre la versión nueva y el supervisor se renueva al reiniciar la PC")
+                        self.state["supervisor_pendiente"] = self.version[:7]
                     if self.child is None:
                         self.start_child()
                 if now >= next_publish:

@@ -470,3 +470,21 @@ async def test_al_parar_con_calma_la_noticia_en_curso_se_termina_de_operar():
     (paths.home() / "state" / "parar").write_text("actualizacion")              # el supervisor pide parar
     await asyncio.wait_for(run, timeout=15)
     assert done == ["n1"]
+
+
+def test_solo_se_recarga_si_la_tarea_lo_vuelve_a_lanzar(tmp_path, gh, monkeypatch):
+    monkeypatch.setattr(supervisor, "FIRST_CHECK_S", 0.0)
+    origin = Origin(tmp_path)
+    sup = make(tmp_path, gh, origin)
+
+    def check():
+        sup.stop_child()                                                       # como en una actualización real
+        return "recargar_supervisor"
+
+    sup.check_update = check
+    assert sup.run(max_loops=2, tick_s=0.01) == 0                              # sin marca: no sale
+    assert sup.state["supervisor_pendiente"] and sup.state["arranques"] == 2   # y el agente volvió a arrancar
+    paths.write_json_atomic(sup.home / "state" / "tarea.json", {"cada_minuto": True})
+    assert sup.run(max_loops=2, tick_s=0.01) == supervisor.EXIT_RELOAD        # con la tarea de cada minuto, sí
+    paths.write_json_atomic(sup.home / "state" / "tarea.json", {"cada_minuto": False})
+    assert not sup.can_reload()

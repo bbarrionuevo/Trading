@@ -47,14 +47,21 @@ $Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoi
   -MultipleInstances IgnoreNew
 $Principal = New-ScheduledTaskPrincipal -UserId $Usuario -LogonType S4U -RunLevel Limited
 $Descripcion = "TRADING: supervisor del agente de noticias en paper, 24/7, se actualiza solo (no es nexus)"
+$CadaMinuto = $true
 try {
   Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger (Disparadores $true) -Settings $Settings `
     -Principal $Principal -Description $Descripcion -Force | Out-Null
 } catch {
   Write-Host "Aviso: sin el disparador de cada minuto ($($_.Exception.Message))." -ForegroundColor Yellow
+  $CadaMinuto = $false
   Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger (Disparadores $false) -Settings $Settings `
     -Principal $Principal -Description $Descripcion -Force | Out-Null
 }
+# Marca para el supervisor: solo se recarga a si mismo si la tarea lo vuelve a lanzar en un minuto.
+$Estado = Join-Path $env:LOCALAPPDATA "TRADING\state"
+New-Item -ItemType Directory -Force -Path $Estado | Out-Null
+$Marca = @{ cada_minuto = $CadaMinuto; instalada = (Get-Date).ToUniversalTime().ToString("o") } | ConvertTo-Json
+[IO.File]::WriteAllText((Join-Path $Estado "tarea.json"), $Marca, (New-Object Text.UTF8Encoding($false)))
 if ($SinIniciar) { Write-Host "Tarea '$TaskName' registrada (sin iniciar)."; exit 0 }
 Start-ScheduledTask -TaskName $TaskName
 Write-Host "Listo: la tarea '$TaskName' quedo instalada y arrancando. Te llega por Telegram 'Agente iniciado'."
