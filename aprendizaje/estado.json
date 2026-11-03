@@ -1,5 +1,19 @@
 {
  "categorias": {
+  "etf:corto": {
+   "r_recv_15m": {
+    "n": 1,
+    "media": -0.002769,
+    "desvio": null,
+    "ic95": null
+   },
+   "r_recv_60m": {
+    "n": 1,
+    "media": -0.008478,
+    "desvio": null,
+    "ic95": null
+   }
+  },
   "hack:corto": {
    "r_recv_15m": {
     "n": 11,
@@ -68,5 +82,5 @@
  "min_n": 30,
  "nlp": "reglas-2",
  "meta": {},
- "calculado": 1793695211
+ "calculado": 1793723791
 }
