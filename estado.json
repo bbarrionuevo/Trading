@@ -190,7 +190,7 @@
   },
   "decrypt": {
    "etag": null,
-   "last_modified": "Tue, 03 Nov 2026 01:41:17 GMT",
+   "last_modified": "Tue, 03 Nov 2026 01:43:39 GMT",
    "seen": [
     "42336da52963f891",
     "9a334bafcb613a57",
@@ -277,38 +277,38 @@
   "fed.press": {
    "ok": true,
    "items": 0,
-   "ts": 1793670082,
-   "latency_ms": 51.7
+   "ts": 1793670221,
+   "latency_ms": 53.2
   },
   "fed.monetary": {
    "ok": true,
    "items": 0,
-   "ts": 1793670082,
-   "latency_ms": 63.7
+   "ts": 1793670221,
+   "latency_ms": 47.1
   },
   "coindesk": {
    "ok": true,
    "items": 0,
-   "ts": 1793670082,
-   "latency_ms": 234.9
+   "ts": 1793670221,
+   "latency_ms": 82.9
   },
   "cointelegraph": {
    "ok": true,
-   "items": 1,
-   "ts": 1793670082,
-   "latency_ms": 47.8
+   "items": 0,
+   "ts": 1793670221,
+   "latency_ms": 76.9
   },
   "decrypt": {
    "ok": true,
    "items": 0,
-   "ts": 1793670082,
-   "latency_ms": 55.5
+   "ts": 1793670221,
+   "latency_ms": 47.9
   },
   "theblock": {
    "ok": true,
    "items": 0,
-   "ts": 1793670082,
-   "latency_ms": 1224.1
+   "ts": 1793670221,
+   "latency_ms": 41.3
   }
  },
  "counts": {
@@ -323,14 +323,15 @@
    "nlp_hack": 1
   }
  },
- "updated_at": 1793670082,
+ "updated_at": 1793670221,
  "version": "0.1.0",
  "schema": 1,
  "aviso_inicio": 1793642808,
  "llm": {
-  "day": "",
-  "usd": 0.0,
-  "calls": 0,
+  "day": "2026-11-03",
+  "usd": 0.0001901,
+  "calls": 1,
   "failures": 0
- }
+ },
+ "llm_verificado": "2026-11-03"
 }
