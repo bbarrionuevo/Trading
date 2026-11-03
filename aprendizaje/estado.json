@@ -2,22 +2,64 @@
  "categorias": {
   "hack:corto": {
    "r_recv_15m": {
-    "n": 8,
-    "media": -0.000316,
-    "desvio": 0.001207,
+    "n": 11,
+    "media": -0.001056,
+    "desvio": 0.001647,
     "ic95": [
-     -0.001325,
-     0.000693
+     -0.002162,
+     5.1e-05
     ]
    },
    "r_recv_60m": {
-    "n": 8,
-    "media": 1.5e-05,
-    "desvio": 0.0002,
+    "n": 11,
+    "media": -0.000569,
+    "desvio": 0.001514,
     "ic95": [
-     -0.000152,
-     0.000182
+     -0.001587,
+     0.000448
     ]
+   }
+  },
+  "hack:largo": {
+   "r_recv_15m": {
+    "n": 1,
+    "media": -0.000593,
+    "desvio": null,
+    "ic95": null
+   },
+   "r_recv_60m": {
+    "n": 1,
+    "media": -0.000421,
+    "desvio": null,
+    "ic95": null
+   }
+  },
+  "regulatorio:corto": {
+   "r_recv_15m": {
+    "n": 1,
+    "media": -0.003407,
+    "desvio": null,
+    "ic95": null
+   },
+   "r_recv_60m": {
+    "n": 1,
+    "media": -0.003579,
+    "desvio": null,
+    "ic95": null
+   }
+  },
+  "tesoreria:largo": {
+   "r_recv_15m": {
+    "n": 1,
+    "media": -0.000593,
+    "desvio": null,
+    "ic95": null
+   },
+   "r_recv_60m": {
+    "n": 1,
+    "media": -0.000421,
+    "desvio": null,
+    "ic95": null
    }
   }
  },
@@ -26,5 +68,5 @@
  "min_n": 30,
  "nlp": "reglas-2",
  "meta": {},
- "calculado": 1793670082
+ "calculado": 1793695211
 }
