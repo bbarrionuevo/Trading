@@ -111,7 +111,6 @@ class BinanceSpot:
     """Binance spot con datos públicos (sin claves): solo largos, comisión estándar de 0,10 %."""
     name, kind, allows_short, label = "binance-spot", "spot", False, "PAPER spot Binance"
     fee_bps = D("10")
-    mmr = 0.0
 
     def __init__(self, urls: dict | None = None, candle_urls: dict | None = None):
         self.urls = {"depth": f"{BINANCE}/depth", "info": f"{BINANCE}/exchangeInfo",
@@ -150,8 +149,14 @@ class BinanceSpot:
         d = await get_json(session, self.urls["ticker"], {"symbol": sym}, f"ticker {sym}")
         return {"last": float(d["lastPrice"]), "adv": float(d["quoteVolume"])}
 
-    async def between_runs(self, run, sym: str, meta: dict) -> None:
-        """Spot: nada que cobrar entre corridas (sin funding ni liquidación)."""
+    def mmr_for(self, sym: str) -> float:
+        return 0.0
+
+    async def on_entry(self, run, sym: str, meta: dict) -> None:
+        """Spot: sin funding ni liquidación."""
+
+    async def settle(self, run, sym: str, meta: dict, until_ms: int) -> None:
+        """Spot: nada que cobrar entre corridas."""
 
 
 # -- una corrida -------------------------------------------------------------------------------------
@@ -243,8 +248,10 @@ class _Run:
             done, avg, fees = order.filled_qty, order.avg_price, order.fees
             realized = sum((f.realized_pnl for f in order.fills), D(0))
             theoretical = theoretical or ref
-        entry_fee = D(meta["entry_fee"]) * done / abs(D(meta["qty"]))
-        net = round(realized - fees - entry_fee, 8)                    # lo mismo en el registro y en el total
+        share = done / abs(D(meta["qty"]))
+        entry_fee = D(meta["entry_fee"]) * share
+        funding_paid = D(meta.get("funding_paid", "0")) * share        # futuros: lo cobrado o pagado en el camino
+        net = round(realized - fees - entry_fee - funding_paid, 8)     # lo mismo en el registro y en el total
         entry_notional = done * D(meta["avg_price"])
         ret = net / entry_notional if entry_notional else D(0)
         slip = None
@@ -262,6 +269,7 @@ class _Run:
         if left > 0:                                                   # cierre parcial (tope de precio): sigue abierta
             meta["qty"] = str(left * side)
             meta["entry_fee"] = str(D(meta["entry_fee"]) - entry_fee)
+            meta["funding_paid"] = str(D(meta.get("funding_paid", "0")) - funding_paid)
         else:
             self.st["positions"].pop(sym)
             stats = self.st["stats"]
@@ -279,22 +287,23 @@ class _Run:
         end = minute(self.now)
         slip = STOP_SLIPPAGE_BPS / 10_000
         for sym, meta in list(self.st["positions"].items()):
-            await self.market.between_runs(self, sym, meta)
-            if sym not in self.st["positions"]:
-                continue                                               # la liquidó el mercado (futuros)
             c = self.store.candles.get(sym) or {}
             side = 1 if meta["side"] == "largo" else -1
             start = max(minute(meta["entry_ts"]), minute(self.st["last_check"]))
             hit = bar.walk(c, side=side, stop=float(meta["stop"]), tp=float(meta["tp"]), start_ms=start, end_ms=end,
                            entry_ms=minute(meta["entry_ts"]), until_ms=minute(meta["until"]) + MIN, slip=slip)
+            await self.market.settle(self, sym, meta, hit[2] if hit else int(self.now * 1000))   # funding hasta salir
             if hit is None:
                 continue
             kind, px, m = hit
             inst = self.reg.get(sym)
             price = D(str(px))
+            reason = {"sl": "stop_loss", "tp": "take_profit", "exp": "expiracion"}[kind]
+            liq = float(meta["liq"]) if meta.get("liq") else None
+            if liq is not None and kind != "tp" and (px <= liq if side > 0 else px >= liq):
+                price, reason = D(meta["liq"]), "liquidacion"           # un salto pasó la liquidación: se pierde el margen
             if inst is not None and kind != "tp":                      # stop y expiración: al tick, del lado malo
                 price = inst.round_price(price, up=side < 0)
-            reason = {"sl": "stop_loss", "tp": "take_profit", "exp": "expiracion"}[kind]
             theoretical = D(meta["stop"]) if kind == "sl" else D(str(c[m][0])) if kind == "exp" else D(meta["tp"])
             await self.close(sym, reason, price=price, liquidity="maker" if kind == "tp" else "taker",
                              ts=m / 1000 + (0 if kind == "exp" else 60), theoretical=theoretical)
@@ -362,11 +371,13 @@ class _Run:
         z = self.sample_spread(sym, book)
         gross, net = self.exposure()
         spread = float(book.spread_bps or 0) / 10_000
+        price = float(self.mark(sym)) or tick["last"]
         p, why = plan(a, sig, sym, equity=float(self.equity()), cash=float(self.pf.cash), gross=gross, net=net,
-                      n_positions=len(self.st["positions"]), price=float(self.mark(sym)) or tick["last"],
-                      sigma_1m=sigma, adv=tick["adv"], fee_taker=float(inst.taker_fee_bps) / 10_000, spread=spread,
-                      kind=self.market.kind, max_leverage=float(inst.max_leverage),
-                      min_notional=float(inst.min_notional), limits=self.limits, cfg=self.cfg)
+                      n_positions=len(self.st["positions"]), price=price, sigma_1m=sigma, adv=tick["adv"],
+                      fee_taker=float(inst.taker_fee_bps) / 10_000, spread=spread, kind=self.market.kind,
+                      max_leverage=float(inst.max_leverage),
+                      min_notional=max(float(inst.min_notional), float(inst.min_qty) * price * 1.01),   # un lote entero
+                      limits=self.limits, cfg=self.cfg)
         analysis = {**a.as_dict(), "spread_z": None if z is None else round(z, 2), "ultimo": tick["last"],
                     "adv_usdt": round(tick["adv"])}
         if p is not None:
@@ -374,7 +385,7 @@ class _Run:
             why = market_blocks(book, p.notional, self.limits, self.cfg, p.side, spread_z=z, last=tick["last"],
                                 kyle_ratio=kyle_ratio(candles, minute(self.now)))
             if self.market.kind != "spot" and not liquidation_ok(1.0, p.side, p.sl_frac, float(inst.max_leverage),
-                                                                 self.market.mmr, self.cfg):
+                                                                 self.market.mmr_for(sym), self.cfg):
                 why.append("liquidacion_cerca_del_stop")
         if why:
             self.record(ev, sig, sym, "no_entrar", why, analisis=analysis)
@@ -399,6 +410,7 @@ class _Run:
             "event_id": ev["id"], "cluster": ev.get("cluster"), "category": sig.category, "p": round(p.p, 4),
             "alpha": round(p.alpha, 4), "entry_fee": str(order.fees), "notional": str(round(notional, 8)),
             "risk_usd": p.risk_usd, "strategy_tag": STRATEGY_TAG}
+        await self.market.on_entry(self, sym, self.st["positions"][sym])
         self.st["clusters"] = (self.st["clusters"] + [ev.get("cluster")])[-500:]
         self.counts["entradas"] += 1
         self.trades.append({"tipo": "entrada", "symbol": sym, "lado": SIDE_NAME[p.side], "qty": str(order.filled_qty),

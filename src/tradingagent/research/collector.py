@@ -185,6 +185,27 @@ def digest(day: str, events: list[dict], reactions: list[dict], health: dict, pa
     return "\n".join(lines)
 
 
+MARKETS = ("binance-spot", "mexc-futuros")
+
+
+def markets(paper: dict, session, paper_urls: dict | None, candle_urls: dict | None) -> list:
+    """Los mercados paper pedidos: Binance spot (datos públicos) y MEXC futuros (públicos + lectura de la cuenta
+    si hay claves de solo lectura)."""
+    from ..marketdata import mexc
+    from .futures import MexcFutures
+    out = []
+    for name in paper.get("mercados", MARKETS):
+        if name == "binance-spot":
+            out.append(shadow.BinanceSpot(paper_urls, candle_urls))
+        elif name == "mexc-futuros":
+            keys = paper.get("mexc_keys") or (None, None)
+            ro = mexc.ReadOnlyClient(session, *keys, base=paper.get("mexc_base", mexc.BASE)) if all(keys) else None
+            out.append(MexcFutures(base=paper.get("mexc_base", mexc.BASE), readonly=ro))
+        else:
+            log.warning("mercado paper desconocido: %s", name)
+    return out
+
+
 def _load(data: Path, now: float, ttl_s: float) -> tuple[dict, list[dict]]:
     """(estado de la corrida anterior, eventos dentro de la ventana de deduplicación)."""
     data.mkdir(parents=True, exist_ok=True)
@@ -371,8 +392,9 @@ async def collect(data_dir, cfg: dict, env, *, clock=None, sources=None, telegra
         if last is not None and last != day and telegram is not None:   # primera corrida de un día nuevo
             try:
                 evs, reac = await asyncio.to_thread(_digest_inputs, data, last, now)
-                line = await asyncio.to_thread(shadow.paper_line, data, last) if paper is not None else ""
-                text = digest(last, evs, reac + reactions, health, line)
+                lines = [await asyncio.to_thread(shadow.paper_line, data, last, m)
+                         for m in (paper or {}).get("mercados", MARKETS)] if paper is not None else []
+                text = digest(last, evs, reac + reactions, health, "\n".join(x for x in lines if x))
             except Exception:                                      # el resumen nunca frena la recolección
                 log.exception("no se pudo armar el resumen de %s", last)
             else:
@@ -390,19 +412,25 @@ async def collect(data_dir, cfg: dict, env, *, clock=None, sources=None, telegra
         paper_out = None
         if paper is not None:
             items = [(e, signals[e["id"]]) for e in new_events if e["dedup"] == "new" and not e["is_noise"]]
+            paper_out = {}
             try:
                 learned, newly = await asyncio.to_thread(learn.update, data, now)
                 for key in newly:
                     await tg.send(f"🧠 <b>Aprendizaje</b>: apago {esc(learn.describe(learned, key))}. Evidencia "
                                   "negativa neta de comisiones: el paper deja de operar esa categoría de ese lado.")
-                paper_out = await shadow.run_paper(data, items, clock=clock, session=session, limits=limits,
-                                                   telegram=tg if telegram is not None else None,
-                                                   capital=float(paper.get("capital", 120.0)), urls=paper_urls,
-                                                   candle_urls=candle_urls, rearm=bool(paper.get("rearm")),
-                                                   disabled=tuple(learned["apagadas"]), learned=learned)
-            except Exception as e:                                     # el paper nunca rompe la corrida
-                log.exception("el operador paper falló")
-                paper_out = {"error": f"{type(e).__name__}: {redact(e)[:160]}"}
+            except Exception as e:                                     # sin aprendizaje se opera con los valores por
+                log.exception("el aprendizaje falló")                  # defecto (que el dueño ya aprobó)
+                learned = {"apagadas": [], "error": f"{type(e).__name__}"}
+            for market in markets(paper, session, paper_urls, candle_urls):
+                try:                                                   # un mercado que falla no frena a los otros
+                    paper_out[market.name] = await shadow.run_paper(
+                        data, items, clock=clock, session=session, limits=limits,
+                        telegram=tg if telegram is not None else None, capital=float(paper.get("capital", 120.0)),
+                        market=market, rearm=bool(paper.get("rearm")), disabled=tuple(learned["apagadas"]),
+                        learned=learned)
+                except Exception as e:                                 # el paper nunca rompe la corrida
+                    log.exception("el operador paper de %s falló", market.name)
+                    paper_out[market.name] = {"error": f"{type(e).__name__}: {redact(e)[:160]}"}
     finally:
         if own_session:
             await session.close()

@@ -278,11 +278,12 @@ async def test_recolector_clasifica_y_opera_en_paper_con_resumen_diario(tmp_path
 
         async def run(**paper):
             return await collect(data, cfg, {}, clock=clock, sources=specs(furl), telegram=t, send_gap_s=0,
-                                 candle_urls=FakeBinance.candle_urls(murl), paper={"capital": 120.0, **paper},
+                                 candle_urls=FakeBinance.candle_urls(murl),
+                                 paper={"capital": 120.0, "mercados": ["binance-spot"], **paper},
                                  paper_urls=FakeBinance.urls(murl))
 
         s1 = await run()                                                       # historia: no se opera
-        assert s1["paper"]["equity"] == 120.0 and s1["paper"]["operaciones"] == 0
+        assert s1["paper"]["binance-spot"]["equity"] == 120.0 and s1["paper"]["binance-spot"]["operaciones"] == 0
         assert any("Operador paper activo" in m["text"] for m in tg.messages)
 
         t2 = T0 + 10 * 60
@@ -296,12 +297,12 @@ async def test_recolector_clasifica_y_opera_en_paper_con_resumen_diario(tmp_path
         assert evs["sol"]["nlp"]["category"] == "listado" and evs["sol"]["nlp"]["assets"] == ["SOL"]
         assert evs["sol"]["nlp"]["confidence"] > classify(LISTING).confidence    # corroborada en la misma corrida
         assert evs["sol2"]["nlp"]["category"] == "listado"                        # las copias también se clasifican
-        assert s2["paper"]["entradas"] == 1 and s2["paper"]["abiertas"] == ["SOLUSDT"]
+        assert s2["paper"]["binance-spot"]["entradas"] == 1 and s2["paper"]["binance-spot"]["abiertas"] == ["SOLUSDT"]
         assert "LARGO" in tg.messages[-1]["text"]
 
         clock.set(T0 + 13 * 3600)                                               # 3-nov 01:00: resumen de ayer
         s3 = await run()
-        assert s3["paper"]["expiracion"] == 1                                   # vencieron los 60 min
+        assert s3["paper"]["binance-spot"]["expiracion"] == 1                   # vencieron los 60 min
         digest = next(m["text"] for m in tg.messages if "Recolector · 2026-11-02" in m["text"])
         assert "🧪 Paper binance-spot:" in digest and "abiertas: SOLUSDT" in digest   # la cuenta al cierre de ayer
         assert "equity" in digest and "de 120 USDT" in digest
@@ -321,8 +322,38 @@ async def test_si_el_paper_falla_los_datos_del_recolector_quedan(tmp_path, monke
     feeds = Feeds()
     async with serve(feeds.app()) as furl, serve(FakeBinance(step_price({}), clock).app()) as murl:
         s = await collect(tmp_path / "d", copy.deepcopy(config.load(None)), {}, clock=clock, sources=specs(furl),
-                          candle_urls=FakeBinance.candle_urls(murl), paper={"capital": 120.0}, send_gap_s=0)
-    assert s["paper"] == {"error": "RuntimeError: falla de prueba"} and (tmp_path / "d" / "estado.json").exists()
+                          candle_urls=FakeBinance.candle_urls(murl), send_gap_s=0,
+                          paper={"capital": 120.0, "mercados": ["binance-spot"]})
+    assert s["paper"] == {"binance-spot": {"error": "RuntimeError: falla de prueba"}}
+    assert (tmp_path / "d" / "estado.json").exists()
+
+
+async def test_dos_cuentas_paper_spot_y_futuros_en_la_misma_corrida(tmp_path):
+    from fake_feeds import Feeds, specs
+    from fake_mexc import FakeMexc
+    from tradingagent import config
+    from tradingagent.research.collector import collect
+
+    clock = ManualClock(T0)
+    feeds = Feeds()
+    mx_prices = {"BTC_USDT": 100_000.0, "ETH_USDT": 4_000.0, "SOL_USDT": 150.0}
+    feeds.add("media", "old", "Older story", T0 - 3600)
+    async with serve(feeds.app()) as furl, serve(FakeBinance(step_price({}), clock).app()) as burl, \
+            serve(FakeMexc(lambda sym, m: mx_prices[sym], clock).app()) as xurl:
+        async def run():
+            return await collect(tmp_path / "d", copy.deepcopy(config.load(None)), {}, clock=clock,
+                                 sources=specs(furl), candle_urls=FakeBinance.candle_urls(burl), send_gap_s=0,
+                                 paper_urls=FakeBinance.urls(burl),
+                                 paper={"capital": 120.0, "mexc_base": xurl,
+                                        "mercados": ["binance-spot", "mexc-futuros", "otro"]})
+        await run()
+        feeds.add("media", "h", "Binance hacked: $40M in BTC stolen", T0 + 590)
+        clock.set(T0 + 600)
+        s = await run()
+    spot, fut = s["paper"]["binance-spot"], s["paper"]["mexc-futuros"]
+    assert spot.get("entradas", 0) == 0 and spot["descartada"] == 1               # spot no puede ponerse corto
+    assert fut["entradas"] == 1 and fut["abiertas"] == ["BTC_USDT"]                 # futuros sí
+    assert (tmp_path / "d" / "paper" / "mexc-futuros" / "estado.json").exists()
 
 
 async def test_categoria_apagada_por_el_aprendizaje_no_entra_pero_salir_siempre_se_puede(tmp_path):
