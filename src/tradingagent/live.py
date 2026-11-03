@@ -20,9 +20,9 @@ import time
 from pathlib import Path
 
 from . import paths
-from .alerts.model import circuit_breaker_alert, daily_alert, system_alert
+from .alerts.model import circuit_breaker_alert, daily_alert, system_alert, usdt_es
 from .core.bus import EventBus
-from .decision.policy import PolicyConfig, news_blocks
+from .decision.policy import PolicyConfig, assess, news_blocks
 from .decision.risk import RiskState
 from .execution.paper import PaperConfig, PaperVenue
 from .execution.service import ExecutionService
@@ -51,13 +51,14 @@ class LiveTrader:
     def __init__(self, market, session, clock, limits: dict, *, alerts=None, journal=None, home: Path | None = None,
                  capital: float = 120.0, llm: "llm_mod.LlmClassifier | None" = None, cfg: PolicyConfig | None = None,
                  paper_config: PaperConfig | None = None, learned_path: Path | None = None, venue_factory=None,
-                 base_dir: Path | None = None, real: bool = False):
+                 base_dir: Path | None = None, real: bool = False, simulated: bool = False):
         self.market, self.session, self.clock, self.limits = market, session, clock, limits
         self.alerts, self.journal, self.llm, self.capital = alerts, journal, llm, capital
         self.cfg = cfg or PolicyConfig()
         home = home or paths.home()
         self.base = base_dir or home / "paper-vivo" / market.name
         self.venue_factory, self.real = venue_factory, real          # real: el venue de dinero real (A-2)
+        self.simulated = simulated                                   # simulacro del real: nunca manda órdenes
         self.kill_file = home / "KILL"
         self.learned_path = learned_path or home / "datos" / "aprendizaje" / "estado.json"
         self.paper_config = paper_config
@@ -70,8 +71,8 @@ class LiveTrader:
         st = await asyncio.to_thread(paths.read_json, self.base / shadow.STATE, None)
         self.first = st is None
         self.st = st or shadow.new_state(self.capital, now, self.market)
-        if self.llm is not None:                       # el tope diario de la IA sobrevive a reinicios (C-4)
-            self.llm.budget = llm_mod.Budget.from_dict(self.st.get("llm"))
+        if self.llm is not None and not self.real:     # el tope diario de la IA sobrevive a reinicios (C-4); lo
+            self.llm.budget = llm_mod.Budget.from_dict(self.st.get("llm"))   # lleva la cuenta de práctica
         self.pf = shadow._portfolio(self.st, self.market)
         symbols = sorted(set(self.st["positions"]) | {self.market.symbol(a) for a in shadow.CORE})
         self.registry = await self.market.instruments(self.session, symbols, self.st["instruments"], now)
@@ -84,10 +85,17 @@ class LiveTrader:
                 stop_slippage_bps=shadow.D(shadow.STOP_SLIPPAGE_BPS)))
         self.service = ExecutionService(self.venue, EventBus(), self.clock, kill_file=self.kill_file, mode="PAPER",
                                         journal=self.journal, limits=self.limits)
-        if self.first and self.real:
+        if self.real and (self.llm is None or not self.llm.enabled):
             await self.send_alert(system_alert(
-                f"💵 Empecé a operar con DINERO REAL en futuros MEXC, con hasta {self.capital:g} USDT. Cada operación "
-                "te llega marcada como DINERO REAL. Para frenar todo: python -m tradingagent cerrar-todo", silent=False))
+                "⚠️ Falta la clave de la IA (ANTHROPIC_API_KEY en el .env de la PC): sin la IA no abro operaciones "
+                f"con {'el simulacro' if self.simulated else 'dinero real'}. Lo abierto sale normal.", silent=False))
+        if self.first and self.real and self.simulated:
+            await self.send_alert(system_alert(
+                f"🧪 Empecé el SIMULACRO del dinero real en futuros MEXC con {self.capital:g} USDT de mentira: es el "
+                "mismo programa que va a operar con tu plata, con los precios reales de MEXC, pero no manda ninguna "
+                "orden. Cada operación te llega marcada como SIMULACRO.", silent=False))
+        elif self.real:
+            await self.sync_capital()                  # todo el saldo: la caja es lo que hay en la cuenta
         elif self.first:
             await self.send_alert(system_alert(
                 f"🧪 Empecé la cuenta de práctica en {shadow.MARKET_ES.get(self.market.name, self.market.name)} con "
@@ -160,11 +168,21 @@ class LiveTrader:
             return "cupo_lleno"
         return ""
 
+    def rules_would_enter(self, ev: dict, sig) -> bool:
+        """¿Las reglas solas abrirían algo con esta noticia? Entonces la IA la lee antes de poner plata. Si las
+        reglas ya la descartan (poca relevancia, alfa chica), no se paga: la lectura de la IA solo puede achicarla."""
+        if not llm_mod.wants_trade(sig):
+            return False
+        meta, now = MetaModel(self.learned().get("meta")), self.clock.time()
+        return any(not assess(ev, sig, a, now, self.cfg, meta, allows_short=self.market.allows_short).reasons
+                   for a in sig.assets)
+
     async def on_news(self, ing) -> None:
         ev = self._event(ing)
         sig = classify(ev["title"], ev["body"], tier=ev["tier"], cluster_sources=ev["cluster_sources"],
                        hint_assets=tuple(ev["assets_hint"]))
-        if self.llm is not None and self.llm.enabled and llm_mod.needs_llm(sig, ev["title"]):
+        ai_on = self.llm is not None and self.llm.enabled
+        if ai_on and (llm_mod.needs_llm(sig, ev["title"]) or self.rules_would_enter(ev, sig)):
             skip = self.worth_asking(ev, sig)
             if skip:                                                   # no cambiaría nada: no se paga
                 self.counts["ia_evitada"] = self.counts.get("ia_evitada", 0) + 1
@@ -172,6 +190,11 @@ class LiveTrader:
                 res = await self.llm.classify(ev["title"], ev["body"], sig)
                 if res.signal is not None:
                     sig = res.signal                                   # la IA propone; el núcleo decide (C-3)
+                else:
+                    self.counts["ia_sin_respuesta"] = self.counts.get("ia_sin_respuesta", 0) + 1
+        # Ninguna entrada sin que la IA haya leído la noticia: si hay IA, siempre; con dinero real, sin IA no se
+        # abre nada (las reglas solas leyeron mal 3 de 3 noticias el 3-nov). Salir siempre se puede.
+        confirm = ai_on or self.real
         async with self.lock:
             run = self.run()
             now = run.now
@@ -190,6 +213,8 @@ class LiveTrader:
                 side = "largo" if sig.polarity > 0 else "corto"
                 off = ([f"categoria_apagada_por_evidencia:{sig.category}"]
                        if f"{sig.category}:{side}" in learned.get("apagadas", []) else [])
+                if confirm and not llm_mod.by_ai(sig):
+                    off.append("sin_confirmacion_ia")
                 if why or off:
                     run.record(ev, sig, self.market.symbol(asset), "no_entrar", why + off)
                     continue
@@ -248,9 +273,52 @@ class LiveTrader:
         if any(k == "halt" or k.startswith("dia:") for k, w in blocks if w in fresh):
             await run.flatten("freno de riesgo: cierre total (informe)")
 
+    async def sync_capital(self) -> None:
+        """Dinero real SIN tope (el dueño, 3-nov): se opera con todo el saldo de la cuenta de futuros. Sin
+        posiciones abiertas, la caja del programa pasa a ser el saldo real. Lo que cambió sin operar (un depósito,
+        un retiro, o la diferencia exacta de comisiones y funding) es un movimiento de capital: se registra y los
+        frenos se corren igual, para que midan solo lo operado (un retiro no es una pérdida)."""
+        if not self.real or self.simulated or self.st["positions"] or getattr(self.venue, "blocked", ""):
+            return
+        try:
+            bal = await self.venue.account(fresh=True)
+            equity = shadow.D(str(bal["equity"]))
+        except Exception as e:                                         # noqa: BLE001 (sin saldo no se opera)
+            log.warning("no pude leer el saldo de la cuenta real: %s", str(e)[:120])
+            return
+        first = self.st.get("capital_leido") is None
+        delta = equity - self.pf.cash
+        self.st["capital_leido"] = round(self.clock.time())
+        if delta == 0 and not first:
+            return
+        self.pf.cash = equity
+        self.st["cash"] = str(equity)
+        # El capital inicial y las referencias de los frenos se corren igual que el saldo: así "ganado" y "perdido"
+        # miden solo lo operado (un depósito no es ganancia, un retiro no es pérdida). Sin referencia todavía (por
+        # ejemplo, si al arrancar no se pudo leer el saldo), la referencia es el saldo de ahora.
+        self.st["initial"] = str(equity if first else shadow.D(self.st["initial"]) + delta)
+        risk = self.st.get("risk") or {}
+        for k in ("peak", "day_start", "week_start"):
+            risk[k] = float(risk[k]) + float(delta) if risk.get(k) else float(equity)
+        self.st["risk"] = risk
+        self.st["movimientos_capital"] = (self.st.get("movimientos_capital", []) + [
+            {"ts": round(self.clock.time()), "usdt": str(round(delta, 8)), "saldo": str(equity)}])[-50:]
+        await asyncio.to_thread(paths.write_json_atomic, self.base / shadow.STATE, self.st)
+        if first:
+            await self.send_alert(system_alert(
+                f"💵 Empecé a operar con DINERO REAL en futuros MEXC, con todo el saldo de la cuenta: "
+                f"{usdt_es(equity, signed=False)}. Si ganamos, opero con lo que haya. Cada operación te llega marcada "
+                "como DINERO REAL. Para frenar todo: python -m tradingagent cerrar-todo", silent=False))
+        elif abs(delta) >= 1:
+            await self.send_alert(system_alert(
+                f"💵 Cambió el saldo de la cuenta de futuros sin operar ({usdt_es(delta)}): ahora opero con "
+                f"{usdt_es(equity, signed=False)}.", silent=True))
+
     async def housekeeping(self) -> None:
-        """Spreads (z-score), frenos con el equity marcado, funding y estado guardado."""
+        """Saldo real, spreads (z-score), frenos con el equity marcado, funding y estado guardado."""
         async with self.lock:
+            await self.reconcile()
+            await self.sync_capital()
             run = self.run()
             for asset in shadow.CORE:
                 sym = self.market.symbol(asset)
@@ -262,7 +330,6 @@ class LiveTrader:
             for sym, meta in list(self.st["positions"].items()):
                 await self.market.settle(run, sym, meta, int(run.now * 1000))
             await self.after_exits(run)
-            await self.reconcile()
             await self.daily_summary(run)
             await self.save(run)
 
@@ -273,9 +340,10 @@ class LiveTrader:
         before = self.venue.blocked
         now = await self.venue.reconcile()
         if now and now != before:
+            what = "del SIMULACRO" if self.simulated else "de DINERO REAL en MEXC"
             await self.send_alert(system_alert(
-                "⚠️ Las posiciones de DINERO REAL en MEXC no coinciden con las del programa: no abro nada nuevo hasta "
-                "que coincidan. ¿Abriste o cerraste algo a mano en MEXC?", silent=False))
+                f"⚠️ Las posiciones {what} no coinciden con las del programa: no abro nada nuevo hasta que "
+                "coincidan. ¿Abriste o cerraste algo a mano en MEXC?", silent=False))
         elif before and not now:
             await self.send_alert(system_alert("✅ Las posiciones de dinero real volvieron a coincidir."))
 
@@ -317,7 +385,7 @@ class LiveTrader:
                 "abiertas": sorted(self.st.get("positions", {})), "operaciones": self.st["stats"]["operaciones"],
                 "pnl_neto": self.st["stats"]["pnl_neto"], "halt": bool((self.st.get("risk") or {}).get("halted")),
                 "llm": ({**self.llm.budget.as_dict(), "tope_usd": self.llm.limit_usd} if self.llm is not None else None),
-                **self.counts}
+                **({"simulacro": self.simulated} if self.real else {}), **self.counts}
 
 
 async def learn_loop(stop: asyncio.Event, cfg: dict, env, limits: dict, data_dir: Path,

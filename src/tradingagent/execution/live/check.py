@@ -22,6 +22,7 @@ from .mexc_futures import (
     CANCELED,
     CLOSE_LONG,
     CLOSE_SHORT,
+    HEDGE,
     IOC,
     ISOLATED,
     OPEN,
@@ -53,14 +54,28 @@ async def real_check(client: TradingClient, session, symbol: str = "BTC_USDT", *
         steps.append({"paso": name, "ok": bool(ok), "detalle": detail})
         return ok
 
+    read_only = False
     try:
-        await client.usdt()
+        money = await client.usdt()
         step("leer la cuenta de futuros", True)
+        mode = await client.position_mode()
+        if not step("modo de posición: cobertura", mode == HEDGE,
+                    "" if mode == HEDGE else "la cuenta está en modo unidireccional: en MEXC futuros → "
+                    "Preferencias → Modo de posición → Cobertura (Hedge)"):
+            return {"ok": False, "simbolo": symbol, "pasos": steps}
         info = await mexc.detail(session, symbol, base=base)
         depth = await mexc._get(session, f"{base}/api/v1/contract/depth/{symbol}", {"limit": "5"}, f"depth {symbol}")
         book = mexc.parse_depth(symbol, depth, Decimal(str(info["contract_size"])), time.time())
         tick = Decimal(str(info["tick"]))
         before = _held(await client.positions(symbol))
+        await client.open_orders(symbol)
+        step("leer posiciones y órdenes abiertas", True)
+        need = Decimal(str(info["contract_size"])) * book.best_ask * (1 + DISTANCE) / TEST_LEVERAGE * Decimal("1.2")
+        if Decimal(str(money["available"])) < need:                 # sin saldo: lo que se puede probar ya está
+            read_only = True
+            step("prueba de órdenes", False, f"falta saldo en futuros (hace falta ≥ {need:.2f} USDT): se hace "
+                                             "cuando cargues la plata")
+            return {"ok": False, "solo_lectura": True, "simbolo": symbol, "pasos": steps}
         for long_ in (True, False):
             ref = book.best_bid if long_ else book.best_ask
             price = _round(ref * (1 - DISTANCE) if long_ else ref * (1 + DISTANCE), tick, up=not long_)
@@ -94,8 +109,8 @@ async def real_check(client: TradingClient, session, symbol: str = "BTC_USDT", *
              "" if _held(after) == before else "apareció una posición")
     except (TradingError, mexc.MarketDataError, PermissionError, ValueError, KeyError, TypeError) as e:
         step("error", False, redact(str(e))[:300])
-    ok = len(steps) >= 4 and all(s["ok"] for s in steps)
-    if not ok:
+    ok = len(steps) >= 6 and all(s["ok"] for s in steps)
+    if not ok and not read_only:
         await _clean_up(client, session, symbol, base)
     return {"ok": ok, "simbolo": symbol, "pasos": steps}
 
@@ -114,7 +129,7 @@ async def _clean_up(client: TradingClient, session, symbol: str, base: str) -> N
             long_ = int(p.get("positionType", 1)) == 1
             price = _round(last * (Decimal("0.99") if long_ else Decimal("1.01")), tick, up=not long_)
             await client.submit(symbol=symbol, side=CLOSE_LONG if long_ else CLOSE_SHORT, vol=vol, price=price,
-                                leverage=int(p.get("leverage", 1) or 1), order_type=IOC,
+                                leverage=int(p.get("leverage") or TEST_LEVERAGE), order_type=IOC,
                                 external_oid=f"chkcierre{int(time.time() * 1000)}", position_id=p.get("positionId"))
     except (TradingError, mexc.MarketDataError, PermissionError, ValueError, KeyError, TypeError):
         pass

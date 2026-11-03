@@ -31,7 +31,7 @@ from .research import evaluation
 PORT = 18765                        # lejos de los puertos comunes: el 8765 ya lo usa otro programa del dueño
 PORT_TRIES = 20
 HB_STALE_S = 60                     # el latido se escribe cada 15 s: un minuto sin latido es una caída
-F3_TRADES = 60                      # REGLAS F-3: operaciones cerradas para pasar a dinero real
+F3_TRADES = 60                      # REGLAS F-3: evidencia que se mide (no frena, decisión del dueño)
 REFRESH_MS = 5000
 REPO = Path(__file__).resolve().parents[2]
 
@@ -180,6 +180,10 @@ def gather(home: Path, now: float | None = None, repo: Path = REPO, include_real
     hb = read_json(home / "state" / "heartbeat.json", None)
     sup = read_json(home / "state" / "supervisor.json", None) or {}
     accounts = [a for a in (account(d, now) for d in sorted((home / "paper-vivo").glob("*")) if d.is_dir()) if a]
+    for d in sorted((home / "simulacro").glob("*")):                # plata de mentira: se muestra y se publica
+        a = account(d, now) if d.is_dir() else None
+        if a:
+            accounts.insert(0, {**a, "simulacro": True})
     if include_real:
         for d in sorted((home / "real").glob("*")):
             a = account(d, now) if d.is_dir() else None
@@ -312,15 +316,16 @@ def fragment(s: dict) -> str:
             tile("Operaciones cerradas", str(a["operaciones"]), f"{_n(a['ganadas'], 'ganada')} · "
                  f"{_n(a['perdidas'], 'perdida')}"
                  + (f" · acierto {a['acierto_pct']} %" if a["acierto_pct"] is not None else "")),
-            tile("Evidencia para dinero real", f"{min(a['operaciones'], F3_TRADES)}/{F3_TRADES}",
-                 "DSR " + (fmt_num(a["dsr"], 2) if a["dsr"] is not None else "—") + " (F-3 pide ≥ 0,95)"),
+            tile("Evidencia (operaciones cerradas)", f"{min(a['operaciones'], F3_TRADES)}/{F3_TRADES}",
+                 "DSR " + (fmt_num(a["dsr"], 2) if a["dsr"] is not None else "—") + " (bueno ≥ 0,95)"),
             tile("Posiciones abiertas", str(len(a["posiciones"])),
                  "HALT: " + e(a["halt"]) if a["halt"] else f"racha perdedora {a['racha_perdedora']}"),
             tile("IA hoy (Claude)", f"{fmt_num(llm.get('usd', 0), 4)} USD", f"{_n(llm.get('calls', 0), 'consulta')} · "
                  f"{_n(llm.get('evitadas', 0), 'evitada')} (no cambiaban nada) · {_n(llm.get('failures', 0), 'falla')}"
                  + (f" · tope {fmt_num(llm['tope_usd'], 2)} USD por día" if llm.get("tope_usd") else "")),
         ]
-        title = "💵 Cuenta de DINERO REAL" if a.get("real") else "Cuenta de práctica"
+        title = ("💵 Cuenta de DINERO REAL" if a.get("real") else
+                 "🧪 Simulacro del dinero real (sin plata: ninguna orden)" if a.get("simulacro") else "Cuenta de práctica")
         parts.append(f'<h2>{title} · {e(a["mercado"])}</h2><div class="tiles">{"".join(tiles)}</div>')
         parts.append(f'<figure class="card"><figcaption>Equity de la cuenta (USDT): cierres y marca actual'
                      f'</figcaption>{chart(a["curva"], a["inicial"])}</figure>')

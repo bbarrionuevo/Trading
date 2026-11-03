@@ -30,6 +30,11 @@ class TimeInForce(StrEnum):
     GTC = "gtc"                  # queda en el libro hasta llenarse, cancelarse o vencer
 
 
+# Motivo de rechazo de un cierre real cuando MEXC ya no tiene la posición (stop de emergencia del exchange o
+# cierre a mano): el motor la saca de su cartera con precio estimado (research/shadow.py `close`).
+EXCHANGE_FLAT = "exchange_sin_posicion"
+
+
 class OrderStatus(StrEnum):
     NEW = "new"
     PARTIALLY_FILLED = "partially_filled"

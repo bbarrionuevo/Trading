@@ -39,8 +39,16 @@ _TICKER_RE = {a: re.compile(r"(?<![A-Za-z0-9])\$?(" + "|".join(tickers) + r")(?!
               for a, (_, tickers) in ASSETS.items()}
 
 
+# Nombres de empresas, productos u otras monedas que contienen el nombre de un activo y NO son ese activo
+# (en la PC, el 3-nov, "Mercado Bitcoin", un exchange de Brasil, abrió un corto en BTC).
+_NOT_ASSET = re.compile(
+    r"(?i)\b(mercado bitcoin|bitcoin (cash|sv|gold|depot|suisse|magazine|well|group)|bitcoin\.com|"
+    r"ethereum (classic|name service|pow))\b")
+
+
 def detect(text: str, limit: int = 3) -> list[str]:
     """Activos mencionados, en orden de primera aparición (máximo `limit`)."""
+    text = _NOT_ASSET.sub(lambda m: " " * len(m.group(0)), text)
     found = []
     for a in ASSETS:
         pos = []

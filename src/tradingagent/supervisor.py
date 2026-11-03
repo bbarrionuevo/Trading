@@ -178,6 +178,19 @@ def _kill_on_close_job():
         return None
 
 
+def without_real(heartbeat_text: str) -> str:
+    """G-8: el latido se publica sin la cuenta de DINERO REAL (saldo, posiciones, resultado). El simulacro sí
+    se publica: es plata de mentira."""
+    try:
+        hb = json.loads(heartbeat_text)
+    except ValueError:
+        return "{}"
+    real = hb.get("real") if isinstance(hb, dict) else None
+    if isinstance(real, dict) and not real.get("simulacro"):
+        hb["real"] = {"oculto": "cuenta de dinero real: no se publica (REGLAS G-8)"}
+    return json.dumps(hb, ensure_ascii=False, indent=1, default=str)
+
+
 class Supervisor:
     def __init__(self, *, repo: Path = REPO, home: Path | None = None, python: str = sys.executable, api: str = API,
                  remote: str = REMOTE, child_cmd: list | None = None, env=None, port: int | None = dashboard.PORT):
@@ -222,8 +235,10 @@ class Supervisor:
                 log.warning("no pude poner el proceso %s en el job", proc.pid)
 
     def open_positions(self) -> int:
+        """Posiciones abiertas de todas las cuentas (práctica, simulacro y dinero real): con alguna abierta no se
+        actualiza (salvo el máximo de espera), así un reinicio nunca cae en el medio de una operación."""
         return sum(len((dashboard.read_json(f, None) or {}).get("positions") or {})
-                   for f in (self.home / "paper-vivo").glob("*/estado.json"))
+                   for d in ("paper-vivo", "simulacro", "real") for f in (self.home / d).glob("*/estado.json"))
 
     # -- el agente --------------------------------------------------------------------------------------
     def adopt_orphan(self, timeout_s: float = 40) -> str:
@@ -456,16 +471,18 @@ class Supervisor:
         dest.write_text(self.clean(text), encoding="utf-8")
 
     def snapshot_files(self, dest: Path) -> None:
-        """Lo que se publica: solo paper y salud. Nada del .env, del diario completo ni saldos reales."""
+        """Lo que se publica: práctica, simulacro (plata de mentira) y salud. Nada del .env, del diario completo
+        ni saldos reales."""
         board = dashboard.gather(self.home, repo=self.repo, include_real=False)   # G-8: nunca saldos reales
         self._put(dest / "tablero.json", json.dumps(board, ensure_ascii=False, indent=1, default=str))
         read = dashboard.read_text                                 # sin trabar al agente (Windows)
         for name in ("heartbeat.json", "supervisor.json"):
             text = read(self.home / "state" / name)
             if text is not None:
-                self._put(dest / name, text)
-        for st in sorted((self.home / "paper-vivo").glob("*/estado.json")):
-            base, out = st.parent, dest / "paper-vivo" / st.parent.name
+                self._put(dest / name, without_real(text) if name == "heartbeat.json" else text)
+        for st in sorted([*(self.home / "paper-vivo").glob("*/estado.json"),
+                          *(self.home / "simulacro").glob("*/estado.json")]):
+            base, out = st.parent, dest / st.parent.parent.name / st.parent.name
             self._put(out / "estado.json", read(st) or "{}")
             for f in sorted((base / "operaciones").glob("*.jsonl")):
                 self._put(out / "operaciones" / f.name, read(f) or "")

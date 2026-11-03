@@ -102,30 +102,45 @@ async def test_kill_y_noticias_viejas_no_entran(tmp_path):
     assert rows[0]["motivos"] == ["interruptor_KILL"] and rows[1]["motivos"][0] == "alfa_obsoleta:400s"
 
 
-async def test_consulta_a_claude_solo_lo_dudoso_y_usa_su_opinion(tmp_path):
+async def test_la_ia_lee_cada_noticia_antes_de_entrar_y_puede_achicarla(tmp_path):
+    """Lo que pasó en la PC el 3-nov: las reglas solas abrieron cortos con titulares mal leídos. Ahora la IA lee
+    toda noticia que las reglas quieren operar; sin su lectura no se entra; su lectura solo achica el vector."""
     clock = ManualClock(T0 + 600)
     mk = FakeMexc(lambda sym, m: {"BTC_USDT": 100_000.0, "ETH_USDT": 4_000.0, "SOL_USDT": 150.0}[sym], clock)
     fake = FakeClaude()
     fake.reply = {**fake.reply, "assets": ["BTC"], "polarity": -0.9, "certainty": 0.95}
     home = tmp_path / "home"
+    liquid = "Liquid’s bitcoin IOUs are fully backed again after a $320 million exploit"
     async with serve(mk.app()) as url, serve(fake.app()) as aurl, aiohttp.ClientSession() as session:
         llm = LlmClassifier(KEY, base_url=aurl, clock=clock)
         try:
             t = await make(session, url, clock, home, Alerts(), llm=llm)
-            await t.on_news(news("c1", HACK, clock.time()))                     # clara: no se consulta
-            assert fake.requests == []
-            await t.on_news(news("r1", "Bitcoin custodian reportedly hacked, users may lose funds", clock.time()))
-            assert len(fake.requests) == 1
-            assert state(home)["llm"]["calls"] == 1 and t.snapshot()["llm"]["calls"] == 1
+            await t.on_news(news("m1", "Mercado Bitcoin pledges to cover all user losses after near $40 million "
+                                       "hack", clock.time()))
+            assert fake.requests == [] and t.st["positions"] == {}      # un exchange de Brasil no es BTC: ni consulta
+            fake.reply = {**fake.reply, "polarity": 0.3, "relevance": 2, "importance": 3, "impact": 1}
+            await t.on_news(news("l1", liquid, clock.time()))           # las reglas querían un corto: la IA lo lee
+            assert len(fake.requests) == 1 and t.st["positions"] == {}
+            fake.script = ["500"]
+            await t.on_news(news("c0", "Bybit hacked: $90M in BTC stolen", clock.time()))   # la IA no responde:
+            assert len(fake.requests) == 2 and t.st["positions"] == {}                      # no se entra
+            fake.reply = {**fake.reply, "polarity": -0.9, "relevance": 10, "importance": 8, "impact": 8}
+            await t.on_news(news("c1", HACK, clock.time()))             # clara y confirmada: entra con la IA
+            assert len(fake.requests) == 3 and t.st["positions"]["BTC_USDT"]["side"] == "corto"
+            assert state(home)["llm"]["calls"] == 2 and t.snapshot()["llm"]["calls"] == 2
             again = LlmClassifier(KEY, base_url=aurl, clock=clock)                # reinicio: el gasto del día sigue
             t2 = await make(session, url, clock, home, Alerts(), llm=again)
-            assert t2.llm.budget.calls == 1 and t2.llm.budget.usd == llm.budget.usd > 0
+            assert t2.llm.budget.calls == 2 and t2.llm.budget.usd == llm.budget.usd > 0
             await again.close()
         finally:
             await llm.close()
     rows = [json.loads(x) for x in (home / "paper-vivo" / "mexc-futuros" / "decisiones" / "2026-11.jsonl")
             .read_text(encoding="utf-8").splitlines()]
-    assert rows[-1]["signal"]["version"] == "llm-claude-haiku-5-5" and rows[-1]["signal"]["rules"] == ["llm"]
+    by = {r["event_id"]: r for r in rows}
+    assert by["l1"]["signal"]["rules"] == ["llm"] and by["l1"]["signal"]["relevance"] == 2
+    assert "relevancia_baja:C=2" in by["l1"]["motivos"]                 # la IA achicó la relevancia: no entra
+    assert by["c0"]["motivos"] == ["sin_confirmacion_ia"]
+    assert by["c1"]["signal"]["version"] == "llm-claude-haiku-5-5" and by["c1"]["decision"] == "entrar"
 
 
 async def test_no_paga_a_claude_si_la_respuesta_no_cambiaria_nada(tmp_path):

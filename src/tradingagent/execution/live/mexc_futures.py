@@ -26,14 +26,15 @@ from ...core.redact import redact
 from ...marketdata.mexc import BASE
 
 GET_PATHS = ("/api/v1/private/account/assets", "/api/v1/private/position/open_positions",
-             "/api/v1/private/order/get/{}", "/api/v1/private/order/deal_details/{}",
-             "/api/v1/private/order/list/open_orders/{}")
+             "/api/v1/private/position/position_mode", "/api/v1/private/order/get/{}",
+             "/api/v1/private/order/deal_details/{}", "/api/v1/private/order/list/open_orders/{}")
 POST_PATHS = ("/api/v1/private/order/submit", "/api/v1/private/order/cancel", "/api/v1/private/order/cancel_all",
               "/api/v1/private/position/change_leverage")
 OPEN_LONG, CLOSE_SHORT, OPEN_SHORT, CLOSE_LONG = 1, 2, 3, 4
 LIMIT, POST_ONLY, IOC, FOK, MARKET = 1, 2, 3, 4, 5
 ISOLATED = 1
 PENDING, OPEN, FILLED, CANCELED, INVALID = 1, 2, 3, 4, 5
+HEDGE, ONE_WAY = 1, 2                              # modo de posición de la cuenta (el conector usa cobertura)
 DONE_STATES = (FILLED, CANCELED, INVALID)
 
 
@@ -124,6 +125,10 @@ class TradingClient:
         return await self.request("GET", "/api/v1/private/position/open_positions",
                                   params={"symbol": symbol} if symbol else None) or []
 
+    async def position_mode(self) -> int:
+        """1 = cobertura (largo y corto por separado: lo que usa este conector), 2 = unidireccional."""
+        return int(await self.request("GET", "/api/v1/private/position/position_mode") or 0)
+
     async def order(self, order_id: str) -> dict:
         return await self.request("GET", f"/api/v1/private/order/get/{order_id}") or {}
 
@@ -155,7 +160,8 @@ class TradingClient:
         return str(oid)
 
     async def cancel(self, order_ids: list[str]) -> list:
-        return await self.request("POST", "/api/v1/private/order/cancel", body=[str(x) for x in order_ids]) or []
+        ids = [int(x) if str(x).isdigit() else str(x) for x in order_ids]       # la API espera números (long)
+        return await self.request("POST", "/api/v1/private/order/cancel", body=ids) or []
 
     async def cancel_all(self, symbol: str) -> None:
         await self.request("POST", "/api/v1/private/order/cancel_all", body={"symbol": symbol})

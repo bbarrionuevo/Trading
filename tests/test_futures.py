@@ -188,3 +188,37 @@ async def test_sin_claves_usa_lo_publico_y_las_comisiones_configuradas(tmp_path)
         entry = f.rows("operaciones")[0]
         assert D(entry["fee"]) == D(entry["notional"]) * D("0.0005")                 # 0,05 % configurado > 0,02 %
         assert f.mk.signed == []
+
+
+async def test_el_funding_se_vuelve_a_leer_y_nunca_cobra_antes_de_la_entrada():
+    """El agente de la PC corre días con el mismo mercado: una entrada de hoy no puede heredar el "próximo
+    cobro" de ayer (antes quedaba en memoria para siempre y se cobraba funding de horas sin posición)."""
+    import types
+
+    clock = ManualClock(T0)                                        # 12:00 UTC: el próximo cobro es a las 16:00
+    mk = FakeMexc(step_price({}), clock)
+    async with serve(mk.app()) as url, aiohttp.ClientSession() as s:
+        fut = MexcFutures(base=url)
+        run = types.SimpleNamespace(session=s, now=T0, reg={"BTC_USDT": types.SimpleNamespace(max_leverage=1)})
+        first = {"side": "largo", "avg_price": "100000"}
+        await fut.on_entry(run, "BTC_USDT", first)
+        assert first["funding_next"] == (T0 + 4 * 3600) * 1000
+        reads = sum(1 for r in mk.requests if r[0] == "funding")
+        await fut.on_entry(run, "BTC_USDT", dict(first))           # enseguida: se usa lo leído
+        assert sum(1 for r in mk.requests if r[0] == "funding") == reads
+        clock.set(T0 + 86_400)                                     # al otro día, mismo proceso
+        run.now = T0 + 86_400
+        mk.funding["rate"] = 0.0003
+        later = {"side": "largo", "avg_price": "100000"}
+        await fut.on_entry(run, "BTC_USDT", later)
+        assert later["funding_next"] == (T0 + 86_400 + 4 * 3600) * 1000 and later["funding_rate"] == 0.0003
+
+
+def test_el_funding_en_contra_es_un_costo_si_la_posicion_cruza_un_cobro():
+    fut = MexcFutures()
+    now = T0                                                        # 12:00 UTC: próximo cobro 16:00
+    assert fut.funding_cost("BTC_USDT", 0.001, 1, now, 2 * 3600) == 0.0            # expira antes del cobro
+    assert fut.funding_cost("BTC_USDT", 0.001, 1, now, 5 * 3600) == 0.001          # el largo paga una vez
+    assert fut.funding_cost("BTC_USDT", 0.001, -1, now, 5 * 3600) == 0.0           # el corto cobra: no se cuenta
+    assert fut.funding_cost("BTC_USDT", -0.002, -1, now, 13 * 3600) == pytest.approx(0.004)   # dos cobros en contra
+    assert fut.funding_cost("BTC_USDT", None, 1, now, 5 * 3600) == 0.0

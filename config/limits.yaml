@@ -3,7 +3,9 @@
 # por encima de la línea base de src/tradingagent/limits.py lo rechazan el CI y el propio agente al arrancar.
 # Derivados de los límites que el dueño aprobó para 100 € el 24-oct-2026, expresados en % del equity.
 capital:
-  max_live_usdt: 120            # tope de dinero real que puede armar el dueño sin nueva evidencia (≈100 €)
+  todo_el_saldo: true           # SIN tope de capital (el dueño, 3-nov-2026: "elimina los topes, siempre se va a
+                                # trabajar e invertir con todo el dinero disponible"): el real opera con todo el
+                                # saldo de la cuenta de futuros y crece con él. Todo lo de abajo es % de ese saldo.
 per_trade:
   max_risk_pct: 1.0             # pérdida al stop ≤ 1% del equity
   max_position_pct: 40          # nocional por activo ≤ 40% del equity

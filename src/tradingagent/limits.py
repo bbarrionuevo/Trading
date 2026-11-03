@@ -14,7 +14,9 @@ REPO_FILE = Path(__file__).resolve().parents[2] / "config" / "limits.yaml"
 # (sección, clave): ("max", tope) = el valor no puede superarlo · ("min", piso) = no puede quedar debajo ·
 # ("eq", valor) = tiene que ser exactamente ése.
 BASELINE = {
-    ("capital", "max_live_usdt"): ("max", 120),
+    # Sin tope de capital en USDT (el dueño, 3-nov-2026): el real opera con todo el saldo de la cuenta de futuros.
+    # Lo que acota el riesgo son los porcentajes de abajo, que crecen o se achican con ese saldo.
+    ("capital", "todo_el_saldo"): ("eq", True),
     ("per_trade", "max_risk_pct"): ("max", 1.0),
     ("per_trade", "max_position_pct"): ("max", 40),
     ("per_trade", "max_leverage"): ("max", 1),

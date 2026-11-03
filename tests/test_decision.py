@@ -172,5 +172,7 @@ def test_validacion_de_mercado_b4_y_microestructura(lim):
     assert market_blocks(book(), D("48"), lim, cfg, spread_z=2.6) == ["spread_z:2.6"]
     assert market_blocks(book(), D("48"), lim, cfg, last=101.5) == ["divergencia:1.50%"]
     assert market_blocks(book(), D("48"), lim, cfg, kyle_ratio=5.0) == ["kyle:5.0x"]
+    assert market_blocks(book(), D("48"), lim, cfg, fair=100.5) == []          # 0,5 % de la marca: normal
+    assert market_blocks(book(), D("48"), lim, cfg, fair=98.5) == ["base_vs_marca:1.50%"]   # despegado: espera
     empty = OrderBook.from_levels("t", "SOLUSDT", [], [("100", "1")], T0)
     assert market_blocks(empty, D("48"), lim, cfg) == ["libro_vacio"]

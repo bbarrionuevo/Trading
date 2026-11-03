@@ -30,6 +30,11 @@ class Signal:
     rules: tuple[str, ...] = ()
     version: str = VERSION
     certainty: float = 1.0       # 0..1: firmeza del hecho (rumores, desmentidos, señales encontradas...)
+    # Lo que lee la IA en el texto (0-10; None = sin IA): cuánto es ESE activo el protagonista, la gravedad del
+    # hecho y el tamaño esperado del movimiento. El vector toma el menor entre esto y el a priori (vector.py).
+    relevance: float | None = None
+    importance: float | None = None
+    impact: float | None = None
 
     @property
     def conviction(self) -> float:

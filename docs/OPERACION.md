@@ -188,7 +188,19 @@ comisiones públicas y funding, y si las claves leen la cuenta. Nunca muestra sa
 
 ## Dinero real (futuros de MEXC)
 
-El plan completo y lo que tiene que hacer el dueño está en `docs/DINERO-REAL.md`. En resumen, en la PC:
+El plan completo y lo que tiene que hacer el dueño está en `docs/DINERO-REAL.md`. En resumen, en la PC.
+
+**Primero, sin plata (simulacro):** el mismo operador real, con los precios reales de MEXC, pero sin mandar
+ninguna orden. No pide frase ni claves:
+
+```powershell
+cd $env:USERPROFILE\TRADING; .\.venv\Scripts\python -m tradingagent armar-real --simulacro --capital 100 --dias 2
+```
+
+Cada aviso de Telegram dice "SIMULACRO de dinero real (sin plata)". En el tablero aparece como
+"🧪 Simulacro del dinero real".
+
+**Después, con plata:**
 
 ```powershell
 cd $env:USERPROFILE\TRADING; .\.venv\Scripts\python -m tradingagent mexc-real-check
@@ -198,10 +210,11 @@ Es una prueba sin riesgo: pone órdenes que no se pueden ejecutar, verifica cóm
 cancela. Si da todo OK:
 
 ```powershell
-cd $env:USERPROFILE\TRADING; .\.venv\Scripts\python -m tradingagent armar-real --capital 20 --dias 7
+cd $env:USERPROFILE\TRADING; .\.venv\Scripts\python -m tradingagent armar-real
 ```
 
-Pide escribir una frase exacta. Para frenar: `armar-real --desarmar` (no abre nada nuevo) o
+Opera con **todo el saldo** de la cuenta de futuros (sin tope) y pide escribir una frase exacta
+(`ARMO DINERO REAL CON TODO EL SALDO POR 30 DIAS`). Para frenar: `armar-real --desarmar` (no abre nada nuevo) o
 `python -m tradingagent cerrar-todo` (cancela, cierra todo lo real y desarma).
 
 ## Parada de emergencia y verificación

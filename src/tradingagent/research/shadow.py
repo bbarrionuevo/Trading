@@ -37,7 +37,7 @@ from ..decision import barriers as bar
 from ..decision.policy import SIDE_NAME, PolicyConfig, assess, liquidation_ok, market_blocks, news_blocks, plan
 from ..decision.risk import RiskState
 from ..execution.instruments import Instrument, InstrumentRegistry
-from ..execution.orders import OrderIntent, OrderType, Side
+from ..execution.orders import EXCHANGE_FLAT, OrderIntent, OrderType, Side
 from ..execution.paper import PaperConfig, PaperVenue
 from ..execution.portfolio import Portfolio, Position
 from ..execution.service import ExecutionService
@@ -242,6 +242,14 @@ class _Run:
                 client_id=f"pp-x-{sym}-{round(self.now)}", symbol=sym, side=exit_side, type=OrderType.MARKET,
                 qty=qty, max_slippage_bps=D(EXIT_SLIPPAGE_BPS), reduce_only=True, ref_price=ref,
                 tags={"role": "exit", "motivo": reason, "strategy_tag": STRATEGY_TAG}))
+            if order is not None and order.reason == EXCHANGE_FLAT:      # dinero real: MEXC ya no la tiene
+                stop = meta.get("emergency_stop")
+                est = ref or self.mark(sym) or D(meta["avg_price"])
+                if stop and ((est <= D(stop)) if side > 0 else (est >= D(stop))):
+                    est = D(stop)                                      # la cerró el stop de emergencia
+                log.warning("%s ya estaba cerrada en el exchange: se sincroniza a %s (estimado)", sym, est)
+                await self.close(sym, "cerrada_en_el_exchange", price=est, why=why, theoretical=est)
+                return
             if order is None or not order.filled_qty:
                 self.counts["salida_fallida"] += 1
                 log.warning("no se pudo cerrar %s: %s", sym, block or (order.reason if order else ""))
@@ -374,18 +382,22 @@ class _Run:
         gross, net = self.exposure()
         spread = float(book.spread_bps or 0) / 10_000
         price = float(self.mark(sym)) or tick["last"]
+        cost_fn = getattr(self.market, "funding_cost", None)          # futuros: el funding en contra es un costo
+        funding = cost_fn(sym, tick.get("funding_rate"), a.side, self.now, sig.horizon_min * 60) if cost_fn else 0.0
         p, why = plan(a, sig, sym, equity=float(self.equity()), cash=float(self.pf.cash), gross=gross, net=net,
                       n_positions=len(self.st["positions"]), price=price, sigma_1m=sigma, adv=tick["adv"],
                       fee_taker=float(inst.taker_fee_bps) / 10_000, spread=spread, kind=self.market.kind,
                       max_leverage=float(inst.max_leverage),
                       min_notional=max(float(inst.min_notional), float(inst.min_qty) * price * 1.01),   # un lote entero
-                      limits=self.limits, cfg=self.cfg)
+                      limits=self.limits, cfg=self.cfg, funding=funding)
         analysis = {**a.as_dict(), "spread_z": None if z is None else round(z, 2), "ultimo": tick["last"],
-                    "adv_usdt": round(tick["adv"])}
+                    "adv_usdt": round(tick["adv"]), "funding_en_contra": round(funding, 6)}
+        if tick.get("fair"):
+            analysis["marca"] = tick["fair"]
         if p is not None:
             analysis["plan"] = p.as_dict()
             why = market_blocks(book, p.notional, self.limits, self.cfg, p.side, spread_z=z, last=tick["last"],
-                                kyle_ratio=kyle_ratio(candles, minute(self.now)))
+                                kyle_ratio=kyle_ratio(candles, minute(self.now)), fair=tick.get("fair") or None)
             if self.market.kind != "spot" and not liquidation_ok(1.0, p.side, p.sl_frac, float(inst.max_leverage),
                                                                  self.market.mmr_for(sym), self.cfg):
                 why.append("liquidacion_cerca_del_stop")
@@ -414,7 +426,7 @@ class _Run:
             "entry_ts": round(self.now, 3), "stop": str(stop), "tp": str(tp), "until": round(self.now + p.horizon_s),
             "event_id": ev["id"], "cluster": ev.get("cluster"), "category": sig.category, "p": round(p.p, 4),
             "alpha": round(p.alpha, 4), "entry_fee": str(order.fees), "notional": str(round(notional, 8)),
-            "risk_usd": p.risk_usd, "strategy_tag": STRATEGY_TAG}
+            "risk_usd": p.risk_usd, "strategy_tag": STRATEGY_TAG, "emergency_stop": str(emergency)}
         await self.market.on_entry(self, sym, self.st["positions"][sym])
         self.st["clusters"] = (self.st["clusters"] + [ev.get("cluster")])[-500:]
         self.counts["entradas"] += 1
