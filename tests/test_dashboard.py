@@ -150,15 +150,33 @@ def test_formatos():
     assert dashboard.tests_summary(paths.home() / "nada.txt") is None
 
 
-def test_leer_no_traba_al_agente_que_guarda(tmp_path):
+def test_leer_no_traba_al_agente_que_guarda(tmp_path, monkeypatch):
+    import os
+    import threading
+
     f = tmp_path / "estado.json"
     paths.write_json_atomic(f, {"v": 1})
-    with dashboard._open_shared(f) as r:
-        paths.write_json_atomic(f, {"v": 2})            # en Windows, sin FILE_SHARE_DELETE esto fallaría
-        assert json.loads(r.read()) == {"v": 1}
+    reader = dashboard._open_shared(f)                  # el tablero lee justo cuando el agente guarda
+    assert json.loads(reader.read()) == {"v": 1}
+    threading.Timer(0.08, reader.close).start()         # y suelta enseguida
+    paths.write_json_atomic(f, {"v": 2})                # en Windows reintenta hasta que suelta
+    assert dashboard.read_json(f, None) == {"v": 2}
+
+    real, denied = os.replace, []
+
+    def busy(src, dst):                                 # Windows: "acceso denegado" mientras alguien lee
+        if len(denied) < 3:
+            denied.append(dst)
+            raise PermissionError(5, "Access is denied")
+        real(src, dst)
+
+    monkeypatch.setattr(paths.os, "replace", busy)
+    paths.write_json_atomic(f, {"v": 3})
+    assert len(denied) == 3 and dashboard.read_json(f, None) == {"v": 3}
+    monkeypatch.setattr(paths.os, "replace", real)
     log = tmp_path / "agent.log"
     log.write_text("uno\n")
     with dashboard._open_shared(log):
         log.rename(tmp_path / "agent.log.1")             # la rotación del log tampoco se traba
-    assert dashboard.read_json(f, None) == {"v": 2} and dashboard.read_json(tmp_path / "no.json", "x") == "x"
+    assert dashboard.read_json(f, None) == {"v": 3} and dashboard.read_json(tmp_path / "no.json", "x") == "x"
     assert dashboard.read_text(tmp_path / "no.txt") is None

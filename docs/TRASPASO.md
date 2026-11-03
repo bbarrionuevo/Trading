@@ -19,10 +19,13 @@
 **Verificado:** logs reales de GitHub Actions (MEXC público y claves de solo lectura, Claude Haiku, velas de
 Binance) y la PC del dueño (instalador completo, Telegram, tarea `trading-agente` corriendo).
 
-## Pendiente de la aprobación del dueño (rutas protegidas)
+## Pendiente de la aprobación del dueño (rutas protegidas, bbarrionuevo/Trading#10)
 
-- `ci.yml`: ignorar la rama `pc` (si no, cada publicación dispararía el CI) y probar en Windows (tests,
-  sintaxis de los scripts y registro de la tarea). Hasta que se fusione, el supervisor no publica.
+- `ci.yml`: ignorar la rama `pc` (si no, cada publicación dispararía el CI) y el job `windows` (tests,
+  sintaxis de los scripts en PowerShell 5.1 y registro real de la tarea). Hasta que se fusione, el
+  supervisor no publica.
+- `paths.py`: `write_json_atomic` reintenta en Windows si otro proceso tiene abierto el archivo (lo
+  encontró el primer CI en Windows real: 186 de 187; con el arreglo, todo verde).
 - REGLAS: G-7 (el supervisor y la actualización automática) y G-8 nueva (la rama `pc`: qué se publica).
 
 ## Cómo ver la PC (para Claude)
