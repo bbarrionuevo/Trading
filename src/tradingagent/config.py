@@ -35,7 +35,9 @@ DEFAULTS = {
     },
     "execution": {"max_orders_per_min": 30, "max_queue": 100},
     # operador paper en vivo (live.py): reacciona a cada noticia y vigila las barreras cada segundo
-    "trader": {"enabled": True, "mercado": "mexc-futuros", "capital_usdt": 120, "llm": True, "aprender": True},
+    # llm_usd_dia: tope diario de gasto en Claude (lo que manda, si es menor, es el del sobre)
+    "trader": {"enabled": True, "mercado": "mexc-futuros", "capital_usdt": 120, "llm": True, "aprender": True,
+               "llm_usd_dia": 0.30},
     "alerts": {"telegram": True, "rate_per_s": 1.0, "burst": 3, "max_queue": 500},
 }
 
@@ -55,6 +57,7 @@ RANGES = {
     ("execution", "max_orders_per_min"): (1, 120),
     ("alerts", "rate_per_s"): (0.05, 30),
     ("trader", "capital_usdt"): (10, 10_000_000),
+    ("trader", "llm_usd_dia"): (0, 5),
 }
 
 

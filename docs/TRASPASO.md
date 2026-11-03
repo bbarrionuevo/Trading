@@ -19,6 +19,15 @@
 **Verificado:** logs reales de GitHub Actions (MEXC público y claves de solo lectura, Claude Haiku, velas de
 Binance) y la PC del dueño (instalador completo, Telegram, tarea `trading-agente` corriendo).
 
+## Mensajes y uso de la IA (pedido del dueño, 3-nov)
+
+- Telegram en castellano simple: sin siglas, montos a la argentina, qué hizo, cuánto puede perder o ganar
+  y por qué (`alerts/model.py`). La práctica de GitHub no avisa operaciones sueltas; la PC manda un resumen
+  diario a las 21:00 (hora argentina).
+- Claude solo cuando cambia una decisión: hecho dudoso o concreto (no preguntas ni opiniones), noticia
+  fresca, sin frenos, con lugar para operar o con posición abierta de ese activo; caché por titular; tope
+  `trader.llm_usd_dia` = 0,30 USD; en GitHub apagado salvo `collect --ia`. El tablero cuenta las evitadas.
+
 ## Rutas protegidas
 
 - Fusionado por el dueño (bbarrionuevo/Trading#10): el CI ignora la rama `pc` y prueba en Windows real

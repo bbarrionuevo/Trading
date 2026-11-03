@@ -100,7 +100,7 @@ async def test_corto_con_noticia_negativa_comisiones_d5_y_take_profit(tmp_path):
         assert float(pos["liq"]) == pytest.approx(99990 * 1.996)                     # a 1x, lejísimos
         entry = f.rows("operaciones")[0]
         assert D(entry["fee"]) == D("0.0002") * D("99990.0") * D("0.0006")          # D-5: la comisión mayor (cuenta)
-        assert "CORTO" in f.tg.messages[-1]["text"] and "futuros MEXC" in f.tg.messages[-1]["text"]
+        assert "Vendí en corto" in f.tg.messages[-1]["text"] and "futuros MEXC" in f.tg.messages[-1]["text"]
 
         f.clock.set(t1 + 5 * 60)
         s2 = await f.run()
@@ -152,7 +152,7 @@ async def test_un_salto_que_pasa_la_liquidacion_se_registra_como_tal(tmp_path):
         s2 = await f.run()
         out = f.rows("operaciones")[-1]
         assert s2["liquidacion"] == 1 and D(out["price"]) == D("93000.0")
-        assert any("LIQUIDACIÓN" in m["text"] for m in f.tg.messages)
+        assert any("se liquidó" in m["text"] for m in f.tg.messages)
 
 
 async def test_cliente_de_solo_lectura_firma_y_no_sale_de_su_lista(tmp_path):

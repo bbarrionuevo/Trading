@@ -199,8 +199,9 @@ def gather(home: Path, now: float | None = None, repo: Path = REPO) -> dict:
             "tests": tests_summary(home / "logs" / "tests.txt"), "errores": log_errors(home),
             "aprendizaje": {"apagadas": learned.get("apagadas", []), "meta": learned.get("meta") or {},
                             "calculado": learned.get("calculado")},
-            "llm": {**(trader.get("llm") or next((a["llm"] for a in accounts if a.get("llm")), None) or {}),
-                    "tope_usd": llm_limit(repo)}}
+            "llm": {"tope_usd": llm_limit(repo),
+                    **(trader.get("llm") or next((a["llm"] for a in accounts if a.get("llm")), None) or {}),
+                    "evitadas": trader.get("ia_evitada", 0)}}
 
 
 # -- formato ----------------------------------------------------------------------------------------------
@@ -310,8 +311,8 @@ def fragment(s: dict) -> str:
             tile("Posiciones abiertas", str(len(a["posiciones"])),
                  "HALT: " + e(a["halt"]) if a["halt"] else f"racha perdedora {a['racha_perdedora']}"),
             tile("IA hoy (Claude)", f"{fmt_num(llm.get('usd', 0), 4)} USD", f"{_n(llm.get('calls', 0), 'consulta')} · "
-                 f"{_n(llm.get('failures', 0), 'falla')}" + (f" · tope {fmt_num(llm['tope_usd'], 0)} USD"
-                                                     if llm.get("tope_usd") else "")),
+                 f"{_n(llm.get('evitadas', 0), 'evitada')} (no cambiaban nada) · {_n(llm.get('failures', 0), 'falla')}"
+                 + (f" · tope {fmt_num(llm['tope_usd'], 2)} USD por día" if llm.get("tope_usd") else "")),
         ]
         parts.append(f'<h2>Cuenta paper · {e(a["mercado"])}</h2><div class="tiles">{"".join(tiles)}</div>')
         parts.append(f'<figure class="card"><figcaption>Equity de la cuenta (USDT): cierres y marca actual'

@@ -197,7 +197,7 @@ async def test_se_actualiza_solo_con_ci_verde_espera_posiciones_y_vuelve_atras(t
         assert sup.head() == d and sup.installs == 1                           # cambió pyproject: reinstala
         await run(sup.stop_child)
     texts = [m["text"] for m in tg.messages]
-    assert any(t.startswith("✅ TRADING actualizado a " + b[:7]) for t in texts)
+    assert any(t.startswith("🔄 Actualicé TRADING (versión " + b[:7] + "): mejora del clasificador") for t in texts)
     assert any("no arrancó en tu PC" in t and c[:7] in t for t in texts)
     rows = paths.read_json(sup.state_file, {})["actualizaciones"]
     assert [r["resultado"] for r in rows] == ["ok", "rechazada", "ok"] and "falta un módulo" in rows[1]["error"]
@@ -490,3 +490,10 @@ def test_solo_se_recarga_si_la_tarea_lo_vuelve_a_lanzar(tmp_path, gh, monkeypatc
     assert sup.run(max_loops=2, tick_s=0.01) == supervisor.EXIT_RELOAD        # con la tarea de cada minuto, sí
     paths.write_json_atomic(sup.home / "state" / "tarea.json", {"cada_minuto": False})
     assert not sup.can_reload()
+
+
+def test_el_aviso_de_actualizacion_dice_que_cambio_en_una_linea():
+    assert supervisor.change_title("Merge pull request #11: tablero en un puerto libre") == "tablero en un puerto libre"
+    assert supervisor.change_title("Merge pull request #10 from bbarrionuevo/claude/x",
+                                   "\nReglas v3.1: la PC se actualiza sola\n\nmás") == "Reglas v3.1: la PC se actualiza sola"
+    assert supervisor.change_title("Arreglo chico") == "Arreglo chico"

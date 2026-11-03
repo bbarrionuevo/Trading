@@ -49,7 +49,7 @@ async def test_al_iniciar_valida_el_bot_y_manda_el_mensaje_de_prueba():
     assert d.startup["ok"] and d.startup["bot"] == "@test_bot" and d.health == "ok"
     assert [m for m, _ in fake.requests][:2] == ["getMe", "sendMessage"]
     msg = fake.messages[0]
-    assert "Agente iniciado" in msg["text"] and "6/8 fuentes" in msg["text"] and msg["parse_mode"] == "HTML"
+    assert "TRADING está funcionando" in msg["text"] and "6 de 8 fuentes" in msg["text"] and msg["parse_mode"] == "HTML"
     assert msg["chat_id"] == "777"
 
 
@@ -196,14 +196,17 @@ def test_un_hilo_de_alertas_roto_nunca_rompe_a_quien_envia():
 def test_formato_de_alertas_escapado_y_acotado():
     t = trade_alert("BTCUSDT", "buy", "0.0123", "66050.1", why="Impacto por <reestructuración> & deuda",
                     impact=0.8, confidence=0.72, source="CoinDesk")
-    assert t.priority is Priority.TRADE and "🟢 <b>LONG</b>" in t.text and "+0.80" in t.text
-    assert "&lt;reestructuración&gt; &amp; deuda" in t.text and "66,050.1" in t.text and "(CoinDesk)" in t.text
+    assert t.priority is Priority.TRADE and "🟢 <b>Compré BTC</b>" in t.text and "sin plata real" in t.text
+    assert "&lt;reestructuración&gt; &amp; deuda" in t.text and "66.050,1" in t.text and "(CoinDesk)" in t.text
     s = trade_alert("ETHUSDT", "sell", "1", "3000", why="hack")
-    assert "🔴 <b>SHORT</b>" in s.text
+    assert "🔴 <b>Vendí en corto ETH</b>" in s.text
     r = risk_alert("stop_loss", "BTCUSDT", "sell", "0.0123", "65390", pnl="-8.12")
-    assert r.priority is Priority.RISK and "STOP-LOSS" in r.text and "-8.12" in r.text
-    c = circuit_breaker_alert("pérdida diaria −2,1% ≥ 2%", until="00:00 UTC")
-    assert c.priority is Priority.RISK and "CIRCUIT BREAKER" in c.text and c.key == "circuit_breaker"
+    assert r.priority is Priority.RISK and "Corté la pérdida en BTC" in r.text and "-8,12 USDT" in r.text
+    c = circuit_breaker_alert("pérdida del día 2.1% ≥ 2.0%: sin entradas hasta las 00:00 UTC")
+    assert c.priority is Priority.RISK and "Freno del día" in c.text and "2,1 %" in c.text and "21:00" in c.text
+    assert c.key == "circuit_breaker"
+    for text in (t.text, s.text, r.text, c.text):                                 # nada de siglas ni jerga
+        assert not any(w in text for w in ("LONG", "SHORT", "PnL", "STOP-LOSS", "CIRCUIT", "bps", "SL ", "TP "))
     long = trade_alert("X", "buy", "1", "1", why="x" * 10_000)
     assert len(long.text) <= MAX_TELEGRAM_CHARS
 
@@ -219,3 +222,26 @@ def test_redaccion_de_tokens(caplog, monkeypatch):
     rec = caplog.records[-1]
     RedactFilter().filter(rec)
     assert TOKEN not in rec.getMessage()
+
+
+def test_los_avisos_se_entienden_sin_saber_de_trading():
+    from tradingagent.alerts.model import daily_alert, entry_alert, exit_alert
+    e = entry_alert("BTC_USDT", 1, "0.0002", "100000", "20", stop="98500", tp="103000", p=0.63, category="hack",
+                    title="Binance hacked: $40M in BTC stolen", source="coindesk", mode="PAPER futuros MEXC",
+                    expiry_min=120)
+    assert "🟢 <b>Compré BTC</b> · práctica en futuros MEXC (sin plata real)" in e.text
+    assert "Puse 20,00 USDT con BTC a 100.000 USDT. Gano si sube." in e.text
+    assert "Si baja a 98.500 vendo y pierdo ≈ 0,30 USDT; si sube a 103.000 vendo y gano ≈ 0,60 USDT." in e.text
+    assert "Como mucho lo tengo 2 h." in e.text and "Chance estimada de ganar: 63 %." in e.text
+    assert "un hackeo o robo — «Binance hacked: $40M in BTC stolen» (coindesk)" in e.text
+    x = exit_alert("BTC_USDT", 1, "stop_loss", "0.0002", "98500", pnl="-0.31", ret="-0.0155", level="98500",
+                   mode="PAPER futuros MEXC")
+    assert "🔻 <b>Perdí -0,31 USDT con BTC</b> (-1,6 %)" in x.text and "límite de pérdida (98.500)" in x.text
+    w = exit_alert("ETH_USDT", -1, "take_profit", "0.01", "3880", pnl="0.9", ret="0.03", level="3880")
+    assert "✅ <b>Gané +0,90 USDT con ETH</b> (+3,0 %)" in w.text and "precio objetivo (3.880)" in w.text
+    d = daily_alert("2026-11-02", mode="PAPER futuros MEXC", closed=0, won=0, pnl=0, equity="120", initial="120",
+                    total_closed=3, llm={"calls": 0, "usd": 0.0, "failures": 2})
+    assert "Resumen del 02/11" in d.text and "No hubo operaciones" in d.text and "van 3" in d.text
+    assert "revisá la clave de Claude" in d.text and d.silent
+    for a in (e, x, w, d):
+        assert not any(j in a.text for j in ("LONG", "SHORT", "PnL", "SL ", "TP ", "p=", "α", "bps", "DSR", "HALT"))

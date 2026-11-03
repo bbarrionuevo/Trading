@@ -153,8 +153,8 @@ class Agent:
                 keys = (self.env.get("MEXC_ACCESS_KEY"), self.env.get("MEXC_SECRET_KEY"))
                 market = MexcFutures(readonly=mexc.ReadOnlyClient(session, *keys) if all(keys) else None)
         key = api_key(self.env) if t.get("llm", True) else None
-        llm = LlmClassifier(key, limit_usd=float(lim["ai"]["max_llm_usd_per_day"]),
-                            base_url=self._llm_base_url) if key else None
+        cap = min(float(lim["ai"]["max_llm_usd_per_day"]), float(t.get("llm_usd_dia", 0.30)))   # el menor manda
+        llm = LlmClassifier(key, limit_usd=cap, base_url=self._llm_base_url) if key else None
         return LiveTrader(market, session, self.clock, lim, alerts=self.alerts, journal=self.journal,
                           capital=float(t["capital_usdt"]), llm=llm)
 
@@ -169,8 +169,7 @@ class Agent:
         enabled, self.sources_off = build_sources(cfg, env, lim)
         if self._sources_override is not None:
             enabled = self._sources_override
-        boot = startup_alert(cfg["mode"].upper(), len(enabled), len(enabled) + len(self.sources_off), __version__,
-                             extra=f"Símbolos paper: {', '.join(cfg['paper']['symbols'])}")
+        boot = startup_alert(cfg["mode"].upper(), len(enabled), len(enabled) + len(self.sources_off), __version__)
         a = cfg["alerts"]
         self.alerts = AlertDispatcher(alert_transport_factory(cfg, env, self.telegram_base_url),
                                       max_queue=a["max_queue"], rate_per_s=a["rate_per_s"], burst=a["burst"],

@@ -265,7 +265,7 @@ class AlertDispatcher:
                 self.bucket.take()
                 alert = item.alert
                 if age > 60:                                       # avisa la demora (p. ej. tras un corte)
-                    alert = Alert(alert.priority, alert.kind, alert.text + f"\n⏱ con {age / 60:.0f} min de demora",
+                    alert = Alert(alert.priority, alert.kind, alert.text + f"\n⏱ Este aviso salió con {age / 60:.0f} min de demora (Telegram no respondía)",
                                   alert.key, alert.silent, alert.meta)
                 r = await transport.send(alert)
                 if r.ok:

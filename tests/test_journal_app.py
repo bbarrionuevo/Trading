@@ -118,8 +118,8 @@ async def test_agente_completo_arranca_avisa_lee_opera_late_y_cierra(tmp_path, c
         agent.stop()
         await asyncio.wait_for(run, 20)
     texts = [m["text"] for m in fake.messages]
-    assert "Agente iniciado" in texts[0]                                   # mensaje de prueba al inicializar
-    assert any("LONG" in t and "BTCUSDT" in t and "ETF de SOL aprobado" in t for t in texts)
+    assert "TRADING está funcionando" in texts[0]                          # mensaje de prueba al inicializar
+    assert any("Compré BTC" in t and "ETF de SOL aprobado" in t for t in texts)
     assert any("SEC approves spot Solana ETF" in x for x in lines)         # noticia nueva: aceptada
     assert not any("Old archive story" in x for x in lines)               # la historia no se opera
     hb = json.loads(paths.state("heartbeat.json").read_text())
@@ -141,7 +141,7 @@ async def test_cli_telegram_test_y_chats_contra_el_servidor_de_prueba(monkeypatc
         assert await asyncio.to_thread(cli, ["telegram-chats"]) == 0
     out = capsys.readouterr().out
     assert "@test_bot OK" in out and "Mensaje de prueba enviado." in out and "TELEGRAM_CHAT_ID=4242" in out
-    assert "Prueba de tradingagent" in fake.messages[0]["text"] and TOKEN not in out
+    assert "Prueba de TRADING" in fake.messages[0]["text"] and TOKEN not in out
 
 
 def test_cli_sin_credenciales_y_diario_vacio(monkeypatch, capsys):

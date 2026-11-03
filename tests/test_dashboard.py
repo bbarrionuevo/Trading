@@ -20,7 +20,8 @@ def fixture_home(home, *, beat_age=5, kill=False, halted=""):
         "sources": {"total": 6, "ok": 5, "failing": ["sec"], "off": {}},
         "news": {"aceptadas": 40, "stale": 3, "duplicadas": 7, "ruido": 2}, "loop_lag": {"p99_ms": 4},
         "alerts": {"health": "ok", "queued": 0}, "journal": {"written": 321, "dropped": 0},
-        "trader": {"llm": {"day": "2026-11-03", "usd": 0.0123, "calls": 9, "failures": 1}}})
+        "trader": {"llm": {"day": "2026-11-03", "usd": 0.0123, "calls": 9, "failures": 1, "tope_usd": 0.3},
+                   "ia_evitada": 14}})
     paths.write_json_atomic(st / "supervisor.json", {
         "version": "abcdef1234", "arranques": 2, "tests_version": "abcdef1",
         "ultima_revision": {"ts": NOW - 60, "resultado": "al_dia"},
@@ -77,7 +78,7 @@ def test_junta_todo_lo_importante(tmp_path):
     assert dict(a["motivos_frecuentes"]) == {"alfa_obsoleta": 1, "p_baja": 1} and a["entradas_recientes"] == 1
     assert s["tests"]["failed"] == 1 and s["tests"]["passed"] == 164 and not s["tests"]["ok"]
     assert [x["nivel"] for x in s["errores"]] == ["WARNING"]
-    assert s["llm"]["calls"] == 9 and s["llm"]["tope_usd"] == 5.0
+    assert s["llm"]["calls"] == 9 and s["llm"]["tope_usd"] == 0.3 and s["llm"]["evitadas"] == 14   # el de la PC
     assert s["aprendizaje"]["apagadas"] == ["listado:largo"]
 
 

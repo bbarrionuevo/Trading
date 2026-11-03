@@ -176,7 +176,7 @@ async def test_corridas_sucesivas_historia_eventos_304_etiquetas_y_resumen(tmp_p
         s1 = await run()
         assert s1["nuevas"] == 0 and s1["descartes"]["backlog"] == 4 and s1["fuentes_ok"] == 3
         assert not (data / "eventos").exists() and (data / "LEEME.md").exists()
-        assert len(tg.messages) == 1 and "Recolector de TRADING activo" in tg.messages[0]["text"]
+        assert len(tg.messages) == 1 and "El recolector de noticias está andando" in tg.messages[0]["text"]
 
         # 2) noticias nuevas: original, copia de otra fuente, ruido, vieja y una oficial
         feeds.add("media", "sol", "Solana ETF approved by the SEC as SOL price jumps", t_sol,
@@ -198,7 +198,8 @@ async def test_corridas_sucesivas_historia_eventos_304_etiquetas_y_resumen(tmp_p
         assert by_guid["pred"]["is_noise"] and "prediccion_precio" in by_guid["pred"]["noise_reasons"]
         assert by_guid["fomc"]["symbols"] == ["BTCUSDT", "ETHUSDT"] and sol["age_s"] == 300.0
         alert = tg.messages[-1]
-        assert "fed.monetary" in alert["text"] and "FOMC" in alert["text"] and alert["disable_notification"] is False
+        assert "Reserva Federal (tasas de interés)" in alert["text"] and "FOMC" in alert["text"]
+        assert alert["disable_notification"] is False
         assert len(tg.messages) == 2                              # el ruido y la copia no se avisan
 
         # 3) nada cambió: cada fuente responde 304 gracias al ETag guardado
@@ -225,7 +226,7 @@ async def test_corridas_sucesivas_historia_eventos_304_etiquetas_y_resumen(tmp_p
         clock.set(T0 + 13 * 3600)                                 # 3-nov 01:00 UTC
         await run()
         dig = tg.messages[-1]["text"]
-        assert "Recolector · 2026-11-02" in dig and "SOLUSDT +5.00% en 15 min" in dig
+        assert "Resumen de noticias del 02/11" in dig and "SOL +5,0 % en 15 min" in dig
         assert "3 noticias" not in dig and "2 noticias" in dig    # el ruido no cuenta en el resumen
         state = json.loads((data / "estado.json").read_text(encoding="utf-8"))
         assert state["digest_day"] == "2026-11-03" and set(state["counts"]) == {"2026-11-02", "2026-11-03"}
@@ -248,7 +249,7 @@ async def test_sin_telegram_y_fuentes_caidas_avisa_una_sola_vez(tmp_path, cfg):
             await collect(data, cfg, {}, clock=clock, sources=specs(furl), telegram=t,
                           candle_urls=Market.urls(murl), send_gap_s=0)
         texts = [m["text"] for m in tg.messages]
-        assert sum("ninguna fuente respondió" in x for x in texts) == 1
+        assert sum("No pude leer ninguna fuente de noticias" in x for x in texts) == 1
         feeds.down = False
         clock.advance(900)
         await collect(data, cfg, {}, clock=clock, sources=specs(furl), telegram=t,
@@ -280,10 +281,10 @@ async def test_velas_caidas_quedan_pendientes_y_se_reintentan(tmp_path, cfg):
         clock.set(T0 + 80 * 60)
         s = await run()
         assert s["etiquetadas"] == 0 and s["pendientes"] == 1 and s["descartes"]["etiqueta_reintento"] == 1
-        assert sum("no pude bajar velas" in m["text"] for m in tg.messages) == 1
+        assert sum("No pude bajar los precios" in m["text"] for m in tg.messages) == 1
         clock.advance(900)
         await run()
-        assert sum("no pude bajar velas" in m["text"] for m in tg.messages) == 1   # una sola vez
+        assert sum("No pude bajar los precios" in m["text"] for m in tg.messages) == 1   # una sola vez
         mk.binance_down = set()                                   # vuelve Binance: se etiqueta
         clock.advance(900)
         s = await run()
@@ -331,7 +332,7 @@ async def test_cli_collect_imprime_solo_conteos_y_avisa_por_telegram(tmp_path, m
     first, second = (json.loads(x) for x in out.strip().splitlines())
     assert first["fuentes"] == 1 and first["descartes"] == {"backlog": 1} and first["telegram"] == 1
     assert second["telegram"] == 0 and "Telegram apagado" in err
-    assert "Recolector de TRADING activo" in tg.messages[0]["text"] and TOKEN not in out + err
+    assert "El recolector de noticias está andando" in tg.messages[0]["text"] and TOKEN not in out + err
 
 
 async def test_cli_avisar_manda_el_numero_por_telegram_y_no_lo_imprime(monkeypatch, capsys):

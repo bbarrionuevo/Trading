@@ -1,7 +1,13 @@
 """Capa lenta del NLP: Claude Haiku 5.5 para las noticias que la capa rápida no resuelve sola.
 
-Cuándo se consulta: solo si el clasificador determinista duda (rumor, desmentido, señales encontradas,
-solo en el cuerpo, "ya se movió") o si no reconoce el hecho pero el titular nombra un activo conocido.
+Cuándo se consulta (cada consulta cuesta plata: el dueño pidió usarla solo cuando haga falta):
+- solo si el clasificador determinista duda de un hecho que reconoce (rumor, desmentido, señales
+  encontradas, solo en el cuerpo, "ya se movió"), o si no lo reconoce pero el titular nombra un activo
+  conocido Y describe un hecho concreto (aprobó, hackearon, lista, compra...). Las preguntas, opiniones
+  y análisis no se consultan;
+- y el operador en vivo además exige que la respuesta pueda cambiar algo: noticia fresca, sin un freno
+  que impida entrar y con lugar para operar (o con una posición abierta de ese activo) — `live.py`;
+- el mismo titular no se consulta dos veces (caché), y hay un tope diario chico (`trader.llm_usd_dia`).
 Lo inequívoco lo resuelve la capa rápida en microsegundos (informe: los modelos generativos son lentos
 para el camino crítico; el alfa decae con vida media de 120 s).
 
@@ -19,7 +25,9 @@ La clave (`ANTHROPIC_API_KEY`, o `CLAUDE_API_KEY`) se lee del entorno y nunca se
 import asyncio
 import json
 import logging
+import re
 import time
+from collections import OrderedDict
 from dataclasses import asdict, dataclass
 
 from ..core.redact import redact
@@ -30,7 +38,17 @@ log = logging.getLogger("tradingagent.llm")
 MODEL = "claude-haiku-5-5"
 VERSION = f"llm-{MODEL}"
 USD_IN, USD_OUT = 0.10 / 1e6, 0.50 / 1e6         # Haiku 5.5, prompts de hasta 100K tokens
-MAX_TOKENS = 1024
+MAX_TOKENS = 300                                  # la respuesta es un JSON corto: tope bajo, sin sorpresas
+BODY_CHARS = 600                                  # el titular y el comienzo alcanzan; menos texto, menos costo
+CACHE_SIZE = 500
+# Un hecho concreto (no una opinión): sin esto, un titular que solo nombra un activo no vale una consulta.
+EVENT_CUES = re.compile(
+    r"(?i)\b(approv\w*|reject\w*|den(y|ies|ied)|ban(s|ned)?|sue[sd]?|lawsuits?|charge[sd]?|fine[sd]?|settle\w*|"
+    r"hack\w*|exploit\w*|stole\w*|stolen|breach\w*|drain\w*|list(s|ed|ing)?|delist\w*|halt\w*|suspend\w*|"
+    r"paus\w*|freez\w*|froze\w*|seiz\w*|arrest\w*|launch\w*|partner\w*|acquir\w*|merg\w*|invest\w*|"
+    r"buy(s|ing)?|bought|purchas\w*|sell(s|ing)?|sold|dump\w*|etfs?|sec|cftc|fed|fomc|rates?|cut(s)?|hike[sd]?|"
+    r"inflation|cpi|unlock\w*|burn\w*|buybacks?|upgrade\w*|fork\w*|outage\w*|bankrupt\w*|insolven\w*|"
+    r"withdraw\w*|treasury|reserves?|integrat\w*|adopt\w*)\b")
 TIMEOUT_S = 8.0
 MAX_CERTAINTY = 0.8                               # sin calibrar, la IA nunca está "segura" del todo
 CATEGORIES = sorted({r.category for r in RULES} | NOT_TRADABLE)
@@ -77,10 +95,17 @@ def api_key(env) -> str | None:
 
 
 def needs_llm(sig: Signal, title: str) -> bool:
-    """¿La capa rápida duda? Hecho dudoso, o un hecho que no reconoce sobre un activo conocido."""
+    """¿Vale la pena pagar una consulta? Un hecho dudoso que la capa rápida reconoce, o un hecho concreto que
+    no reconoce sobre un activo conocido. Preguntas, opiniones y titulares sin un hecho: no."""
+    if title.rstrip().endswith("?"):
+        return False
     if sig.category in NOT_TRADABLE:
-        return bool(asset_mod.detect(title))
+        return bool(asset_mod.detect(title)) and bool(EVENT_CUES.search(title))
     return sig.certainty < 0.999
+
+
+def _cache_key(title: str) -> str:
+    return " ".join(title.lower().split())
 
 
 @dataclass
@@ -157,6 +182,8 @@ class LlmClassifier:
         self._sem = asyncio.Semaphore(max_concurrent)
         self._client = None
         self._base_url = base_url
+        self._cache: OrderedDict[str, LlmResult] = OrderedDict()   # mismo titular: la misma respuesta, gratis
+        self.cache_hits = 0
 
     @property
     def enabled(self) -> bool:
@@ -183,7 +210,13 @@ class LlmClassifier:
 
         if not self.enabled:
             return LlmResult(None, "sin_clave")
-        text = f"{title}\n\n{(body or '')[:1500]}"
+        key = _cache_key(title)
+        if key in self._cache:
+            self._cache.move_to_end(key)
+            self.cache_hits += 1
+            hit = self._cache[key]
+            return LlmResult(hit.signal, hit.error, 0.0, 0.0, hit.raw)
+        text = f"{title}\n\n{(body or '')[:BODY_CHARS]}"
         estimate = (len(SYSTEM) + len(text)) / 3 * USD_IN + MAX_TOKENS * USD_OUT
         if not self.budget.allows(self._now(), self.limit_usd, estimate):
             return LlmResult(None, "presupuesto_agotado")
@@ -219,9 +252,12 @@ class LlmClassifier:
         except ValueError:
             return LlmResult(None, "json_invalido", usd, ms)
         sig, why = validate(data, title, body or "", fallback)
-        if sig is None:
-            return LlmResult(None, why, usd, ms, data if isinstance(data, dict) else None)
-        return LlmResult(sig, "", usd, ms, data)
+        result = (LlmResult(None, why, usd, ms, data if isinstance(data, dict) else None) if sig is None
+                  else LlmResult(sig, "", usd, ms, data))
+        self._cache[key] = result                     # solo respuestas del modelo (las fallas se pueden reintentar)
+        while len(self._cache) > CACHE_SIZE:
+            self._cache.popitem(last=False)
+        return result
 
     async def health_check(self) -> LlmResult:
         """Una consulta mínima con un titular fijo: ¿la clave y el modelo responden? (una vez por día)."""
