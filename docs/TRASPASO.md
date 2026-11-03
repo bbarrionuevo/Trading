@@ -35,6 +35,26 @@ Binance) y la PC del dueño (instalador completo, Telegram, tarea `trading-agent
     de BTC. Claude no lo puede aflojar solo.
 - Corregido: ¼-Kelly ahora dimensiona el riesgo (antes, el nominal: posiciones 50 a 100 veces más chicas).
 
+## Próximo: aprender de la historia y reaccionar más rápido (pedido del dueño, 3-nov)
+
+> "Quizás sea bueno también buscar en historial para que pueda entender más rápido cómo repercute las noticias
+> en el mercado. La idea es que pueda reaccionar lo más rápido posible a las noticias."
+
+1. **Estudio histórico (`research/history.py`).**
+   - Eventos con hora exacta:
+     - anuncios de listado y deslistado de Binance (API pública de anuncios) y de Upbit (API pública de
+       avisos), con años de historia;
+     - decisiones de la Fed (14:00 hora de Nueva York) y datos de inflación (CPI, 08:30), con calendario fijo;
+     - lo que ya junta la rama `data`.
+   - Precio: velas de 1 minuto de Binance (`data-api.binance.vision`) y de MEXC.
+   - Para cada categoría: reacción a 1, 5, 15 y 60 min, y resultado de la triple barrera con los costos
+     reales.
+   - Sirve para calibrar el meta-modelo y la tabla de magnitudes (solo reduce riesgo, C-5) y alimenta la
+     revisión diaria.
+   - Correrlo en la PC (internet completo); el resultado va a la rama `pc`.
+2. **Fuentes más rápidas.** Sondear cada pocos segundos los avisos de Binance y Upbit: un listado nuevo
+   mueve el precio en segundos y MEXC suele listar el futuro enseguida. Hoy el RSS se lee cada 30 a 60 s.
+
 ## Mensajes y uso de la IA (pedido del dueño, 3-nov)
 
 - Telegram en castellano simple: sin siglas, montos a la argentina, qué hizo, cuánto puede perder o ganar
