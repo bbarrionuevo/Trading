@@ -12,6 +12,7 @@ per_trade:
   require_stop: true            # ninguna posición sin stop-loss
 portfolio:
   max_gross_exposure_pct: 80    # suma de nocionales ≤ 80% del equity
+  max_net_exposure_pct: 30      # |largos − cortos| ≤ 30% del equity (informe: cartera casi neutral al mercado)
   max_positions: 3
 loss:
   daily_pct: 2.0                # circuit breaker: no abre más hasta 00:00 UTC

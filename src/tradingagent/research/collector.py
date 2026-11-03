@@ -318,6 +318,17 @@ async def collect(data_dir, cfg: dict, env, *, clock=None, sources=None, telegra
         llm_out = {"consultas": 0, "usadas": 0, "usd": 0.0, "errores": Counter()}
         if llm is not None and llm.enabled:
             llm.budget = llm_mod.Budget.from_dict(state.get("llm"))
+            if state.get("llm_verificado") != _day(now):              # una vez por día: ¿la clave anda?
+                check = await llm.health_check()
+                llm_out["verificacion"] = check.error or "ok"
+                llm_out["usd"] += check.usd
+                if not check.error:
+                    state["llm_verificado"] = _day(now)
+                    state.pop("alerta_llm", None)
+                elif check.error.startswith(("http_4", "sin_conexion")) and not state.get("alerta_llm"):
+                    if await tg.send(f"⚠️ <b>Claude</b> no responde ({esc(check.error)}): decide solo el "
+                                     "clasificador local. Revisá el secreto CLAUDE_API_KEY.", silent=False):
+                        state["alerta_llm"] = round(now)
             originals = [e for e in new_events if e["dedup"] == "new" and not e["is_noise"]]
             results = await llm_mod.refine(llm, [(e["title"], bodies[e["id"]][0], signals[e["id"]]) for e in originals])
             for e, res in zip(originals, results, strict=True):
@@ -442,7 +453,7 @@ async def collect(data_dir, cfg: dict, env, *, clock=None, sources=None, telegra
             "categorias": {k.removeprefix("nlp_"): v for k, v in sorted(counts.items()) if k.startswith("nlp_")},
             "velas": {"pedidos": store.requests, **Counter(store.source.values()), "error": len(store.errors)},
             "telegram": tg.sent}
-    if llm_out["consultas"]:
+    if llm_out["consultas"] or "verificacion" in llm_out:
         out["llm"] = {**llm_out, "usd": round(llm_out["usd"], 6), "errores": dict(llm_out["errores"])}
     if paper_out is not None:
         out["paper"] = paper_out

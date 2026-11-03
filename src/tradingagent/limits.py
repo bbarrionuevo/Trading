@@ -21,6 +21,7 @@ BASELINE = {
     ("per_trade", "max_slippage_bps"): ("max", 50),
     ("per_trade", "require_stop"): ("eq", True),
     ("portfolio", "max_gross_exposure_pct"): ("max", 80),
+    ("portfolio", "max_net_exposure_pct"): ("max", 30),
     ("portfolio", "max_positions"): ("max", 3),
     ("loss", "daily_pct"): ("max", 2.0),
     ("loss", "weekly_pct"): ("max", 4.0),
@@ -58,6 +59,8 @@ def problems(lim: dict) -> list[str]:
             errs.append(f"{name}={v} más laxo que la línea base aprobada (mínimo {base})")
     if not errs and lim["per_trade"]["max_position_pct"] > lim["portfolio"]["max_gross_exposure_pct"]:
         errs.append("per_trade.max_position_pct no puede superar portfolio.max_gross_exposure_pct")
+    if not errs and lim["portfolio"]["max_net_exposure_pct"] > lim["portfolio"]["max_gross_exposure_pct"]:
+        errs.append("portfolio.max_net_exposure_pct no puede superar portfolio.max_gross_exposure_pct")
     if not errs and lim["loss"]["daily_pct"] > lim["loss"]["weekly_pct"]:
         errs.append("loss.daily_pct no puede superar loss.weekly_pct")
     return errs
