@@ -93,6 +93,8 @@ def asset_es(symbol) -> str:
 def mode_es(mode: str) -> str:
     """Etiqueta del mercado: siempre deja claro si es práctica o plata de verdad."""
     m = str(mode or "PAPER")
+    if m.upper().startswith("SIMULACRO"):
+        return "SIMULACRO de dinero real (sin plata)"
     if m.upper().startswith("PAPER"):
         where = m[5:].strip()
         return f"práctica{' en ' + where if where else ''} (sin plata real)"
@@ -208,6 +210,8 @@ EXIT_REASON_ES = {
     "noticia_en_contra": "Salió una noticia en contra y preferí salir.",
     "freno": "Lo cerró el freno de seguridad (la cuenta perdió demasiado en el día).",
     "liquidacion": "El precio saltó de golpe más allá del límite y la posición se liquidó.",
+    "cerrada_en_el_exchange": "MEXC ya la había cerrado sola (el stop de emergencia) o la cerraste a mano. La saqué "
+                              "de la cuenta del programa con un precio estimado: el resultado exacto está en MEXC.",
 }
 
 
@@ -230,7 +234,8 @@ def exit_alert(symbol, side: int, reason: str, qty, price, *, pnl, ret, slippage
     lines = [f"{head} · {esc(mode_es(mode))}", explain]
     if why:
         lines.append(f"📰 {esc(why[:200])}")
-    prio = Priority.RISK if reason in ("stop_loss", "take_profit", "liquidacion", "freno") else Priority.TRADE
+    prio = (Priority.RISK if reason in ("stop_loss", "take_profit", "liquidacion", "freno", "cerrada_en_el_exchange")
+            else Priority.TRADE)
     return Alert(prio, reason, clip("\n".join(lines)), meta={"symbol": symbol})
 
 

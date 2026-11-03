@@ -165,6 +165,9 @@ def test_plan_triple_barrera_costos_kelly_y_topes(lim):
     p2, _ = plan(shorted, classify("Binance hacked: $40M in BTC stolen"), "BTCUSDT",
                  **{**kw, "net": 250.0, "kind": "perp"})                     # un corto achica la neta: entra entero
     assert p2.side == -1 and float(p2.notional) > 50
+    funded, _ = plan(a, s, "PEPEUSDT", **{**kw, "funding": 0.001})          # funding en contra: un costo más
+    assert funded.cost == pytest.approx(p.cost + 0.001, abs=1e-6) and funded.b_net < p.b_net
+    assert plan(a, s, "PEPEUSDT", **{**kw, "funding": -0.01})[0].cost == pytest.approx(p.cost)   # a favor: no suma
     no_edge, why = plan(a, s, "PEPEUSDT", **{**kw, "fee_taker": 0.02})       # b neto > 0 pero sin ventaja
     assert no_edge is None and why[0].startswith("sin_ventaja_neta")
     expensive, why = plan(a, s, "PEPEUSDT", **{**kw, "fee_taker": 0.03})     # el costo supera al take-profit

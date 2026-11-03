@@ -12,6 +12,8 @@ Cada noticia, para cada activo, se resume en cinco dimensiones:
 - M · impacto proyectado (0-10): magnitud esperada sobre el precio, a priori por categoría;
 - D · duración (0-10): persistencia del efecto, del horizonte de la categoría (30 min = 3 … 4 h = 9).
   La expiración de la triple barrera es ese horizonte.
+Si la IA leyó la noticia (llm.py), C, I y M son el menor entre su lectura y estos a priori: la IA corrige lo
+que las reglas sobreestiman (un hackeo chico en un exchange que se llama "Mercado Bitcoin" no mueve BTC).
 
 α_E = P·(C/10)·(I/10)·(M/10). La señal pasa solo con C ≥ C_min (7) y |α| ≥ α_min. El alfa decae con
 vida media t½ = 120 s desde la publicación: α(Δt) = α_E · 2^(−Δt/t½). Con Δt > 3·t½ = 360 s la
@@ -79,13 +81,20 @@ def duration(horizon_min: float) -> float:
     return 10.0
 
 
+def _read(prior: float, ai: float | None) -> float:
+    """Lo que leyó la IA solo puede achicar el a priori calibrado, nunca agrandarlo (C-3)."""
+    return prior if ai is None else min(prior, float(ai))
+
+
 def vector(sig: Signal, asset: str, event: dict, magnitude: dict | None = None) -> EventVector:
-    """Vector de la noticia `event` (dict del recolector o del agente) para `asset`."""
-    return EventVector(C=relevance(asset, sig, event.get("title", ""), event.get("body", event.get("snippet", "")),
-                                   tuple(event.get("assets_hint", ()))),
-                       P=round(sig.polarity * sig.certainty, 4),
-                       I=importance(sig.category, event.get("tier", 2), event.get("cluster_sources", 1)),
-                       M=float((magnitude or MAGNITUDE).get(sig.category, 0)), D=duration(sig.horizon_min))
+    """Vector de la noticia `event` (dict del recolector o del agente) para `asset`. Si la IA leyó la noticia,
+    C, I y M son el menor entre su lectura (relevancia, importancia, impacto) y el a priori de las reglas."""
+    c = relevance(asset, sig, event.get("title", ""), event.get("body", event.get("snippet", "")),
+                  tuple(event.get("assets_hint", ())))
+    i = importance(sig.category, event.get("tier", 2), event.get("cluster_sources", 1))
+    m = float((magnitude or MAGNITUDE).get(sig.category, 0))
+    return EventVector(C=_read(c, sig.relevance), P=round(sig.polarity * sig.certainty, 4),
+                       I=_read(i, sig.importance), M=_read(m, sig.impact), D=duration(sig.horizon_min))
 
 
 def age_s(event: dict, now: float) -> tuple[float, str]:

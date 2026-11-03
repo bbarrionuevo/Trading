@@ -73,6 +73,17 @@ def alert_transport_factory(cfg: dict, env, base_url: str | None = None):
     return LogTransport
 
 
+def quiet_connection_resets(loop, context) -> None:
+    """En Windows, cuando un servidor corta una conexión ya terminada, asyncio registra un ERROR inofensivo
+    (`_ProactorBasePipeTransport._call_connection_lost`: WinError 10054). En la PC llenaba errores.jsonl y tapaba
+    los errores de verdad: ese caso va a DEBUG; todo lo demás sigue igual."""
+    if isinstance(context.get("exception"), ConnectionResetError) and \
+            "_call_connection_lost" in str(context.get("message", "")):
+        log.debug("conexión cerrada por el otro lado: %s", context.get("exception"))
+        return
+    loop.default_exception_handler(context)
+
+
 class Agent:
     def __init__(self, cfg: dict, env, *, clock=None, sources: list[SourceSpec] | None = None, book_provider=None,
                  telegram_base_url: str | None = None, printer=print, trader_market=None, llm_base_url=None):
@@ -165,32 +176,44 @@ class Agent:
 
     def _build_real_trader(self, session, lim):
         """El operador de DINERO REAL, en paralelo al de práctica: misma noticia, misma decisión. Existe solo si el
-        dueño armó en esta PC (aunque esté vencido: así las posiciones abiertas salen normal)."""
+        dueño armó en esta PC (aunque esté vencido: así las posiciones abiertas salen normal).
+
+        Armado como SIMULACRO (`armar-real --simulacro`): el mismo operador real completo, pero las órdenes se
+        ejecutan contra el libro real de MEXC en un exchange simulado (dryrun.py): nunca sale una orden."""
         from .execution.live import arming
+        from .execution.live.dryrun import DryRunClient
         from .execution.live.mexc_futures import TradingClient
         from .execution.live.venue import RealVenue
         from .live import LiveTrader
         from .research.futures import MexcFutures
         home = paths.home()
         data = paths.read_json(home / arming.ARM_FILE, None)
+        if not isinstance(data, dict) or not self.cfg["trader"].get("real", True):
+            return None
+        sim = bool(data.get("simulacro"))
         keys = (self.env.get("MEXC_ACCESS_KEY"), self.env.get("MEXC_SECRET_KEY"))
-        if not isinstance(data, dict) or not all(keys) or not self.cfg["trader"].get("real", True):
+        if not sim and not all(keys):
             return None
         lev = int(lim["per_trade"]["max_leverage"])
         market = MexcFutures(max_leverage=lev)
-        market.label = "REAL futuros MEXC"
-        client = TradingClient(session, *keys)
+        market.label = "SIMULACRO futuros MEXC" if sim else "REAL futuros MEXC"
+        base_dir = home / ("simulacro" if sim else "real") / market.name
 
         def venue(registry, books, pf, clock):
+            client = (DryRunClient(books, session, capital=float(data["capital_usdt"]), clock=clock,
+                                   state_path=base_dir / "exchange-simulado.json") if sim
+                      else TradingClient(session, *keys))
             return RealVenue(client, session, registry, books, pf, clock, home=home, access_key=keys[0], limits=lim,
                              leverage=lev)
 
         return LiveTrader(market, session, self.clock, lim, alerts=self.alerts, journal=self.journal,
-                          capital=float(data["capital_usdt"]), llm=self.trader.llm if self.trader else None,
-                          venue_factory=venue, base_dir=home / "real" / market.name, real=True)
+                          capital=float(data["capital_usdt"]) if sim else 0.0,     # real: todo el saldo (lo lee)
+                          llm=self.trader.llm if self.trader else None,
+                          venue_factory=venue, base_dir=base_dir, real=True, simulated=sim)
 
     async def run(self) -> None:
         cfg, env = self.cfg, self.env
+        asyncio.get_running_loop().set_exception_handler(quiet_connection_resets)
         lim = limits_mod.load()                       # sobre inválido o más laxo que la línea base: no arranca
         home = paths.home()
         stop_file = home / "state" / STOP_FILE

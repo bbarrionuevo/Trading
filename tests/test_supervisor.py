@@ -497,3 +497,16 @@ def test_el_aviso_de_actualizacion_dice_que_cambio_en_una_linea():
     assert supervisor.change_title("Merge pull request #10 from bbarrionuevo/claude/x",
                                    "\nReglas v3.1: la PC se actualiza sola\n\nmás") == "Reglas v3.1: la PC se actualiza sola"
     assert supervisor.change_title("Arreglo chico") == "Arreglo chico"
+
+
+def test_el_latido_publicado_nunca_lleva_la_cuenta_de_dinero_real():
+    from tradingagent.supervisor import without_real
+
+    hb = {"mode": "PAPER", "trader": {"cash": "120"},
+          "real": {"mercado": "mexc-futuros", "cash": "100.5", "equity": "101.2", "pnl_neto": "1.2"}}
+    out = json.loads(without_real(json.dumps(hb)))
+    assert out["trader"] == {"cash": "120"} and "cash" not in out["real"] and "101.2" not in json.dumps(out)
+    sim = {**hb, "real": {"cash": "99", "simulacro": True}}                     # el simulacro sí: es de mentira
+    assert json.loads(without_real(json.dumps(sim)))["real"]["cash"] == "99"
+    assert json.loads(without_real(json.dumps({**hb, "real": None})))["real"] is None
+    assert without_real("{roto") == "{}"

@@ -24,16 +24,44 @@ Binance) y la PC del dueño (instalador completo, Telegram, tarea `trading-agent
 - R1 construido en `execution/live/` (ruta protegida):
   - cliente de trading con lista cerrada y sin retiros;
   - prueba sin riesgo `mexc-real-check`;
-  - armado `armar-real` (frase exacta, F-4: 20 USDT y 7 días);
+  - armado `armar-real` (frase exacta; sin tope de capital desde el 3-nov: todo el saldo, 30 días);
   - venue real (IOC con tope, margen aislado, stop de emergencia en el exchange, conciliación);
   - operador real en paralelo al de práctica (cuenta en `TRADING_HOME/real/`, nunca se publica).
-- Pendiente del dueño:
-  - fusionar el PR protegido;
-  - borrar los secretos de MEXC de GitHub (la clave puede operar);
-  - correr `mexc-real-check`;
-  - **decidir el sobre** para la cuenta chica: con el actual, 20 USDT no alcanzan para el contrato mínimo
-    de BTC. Claude no lo puede aflojar solo.
+- Hecho por el dueño: fusionó el PR, borró los secretos de MEXC de GitHub, actualizó la PC.
 - Corregido: ¼-Kelly ahora dimensiona el riesgo (antes, el nominal: posiciones 50 a 100 veces más chicas).
+
+## Simulacro, IA antes de entrar e investigación nueva (3-nov, tarde)
+
+- **La PC ya se actualiza sola** (rama `pc` viva desde el 3-nov 16:04 UTC; 199 tests OK en Windows).
+- **Lo que mostró la PC:** 3 cortos de práctica, los 3 por titulares de "hackeo" leídos solo por las reglas
+  (certeza 1,0, así que no se consultaba a la IA): "Mercado Bitcoin" (exchange de Brasil) se tomó como BTC, y
+  "los IOU de Liquid vuelven a estar respaldados" (buena noticia) como mala. Corregido:
+  - la IA lee **toda** noticia que las reglas abrirían (`LiveTrader.rules_would_enter`); sin su lectura no se
+    entra; con dinero real o simulacro, sin IA nunca (C-4 más estricta);
+  - la IA da relevancia, importancia e impacto (0-10) y el vector toma el menor con el a priori;
+  - nombres que no son el activo ("Mercado Bitcoin", "Bitcoin Cash", "Ethereum Classic"...) no cuentan;
+  - si las dos cuentas preguntan lo mismo a la vez, una sola consulta.
+- **Simulacro** (`armar-real --simulacro`, `execution/live/dryrun.py`): el operador real completo contra el
+  libro real de MEXC, sin mandar órdenes; estado en disco; se publica en `pc` (`simulacro/`).
+- **Real más robusto:** si MEXC ya cerró la posición (stop de emergencia o a mano), el programa se
+  sincroniza y avisa en vez de reintentar para siempre; nunca cierra más de lo que MEXC tiene; el supervisor
+  no actualiza con posiciones abiertas en ninguna cuenta.
+- **Investigación nueva** ("Arquitectura Bot Trading Cuantitativo"): casi todo ya estaba (triple barrera,
+  meta-labeling, ¼-Kelly, DSR, raíz cuadrada, Almgren-Chriss, Kyle, decaimiento del alfa, freno diario que
+  cierra todo). Agregado: guarda de libro despegado del precio de marca (> 1 %), funding en contra como costo
+  de la operación, y las 5 variables leídas por la IA. Corregido de paso: la caché de funding nunca se
+  renovaba (una entrada de hoy recibía el "próximo cobro" de ayer).
+- **No se tomó:** MinHash/LSH (nuestro volumen es chico y ya hay deduplicación), FinBERT/CausalStock/Janus-Q
+  (modelos pesados; la lectura la hace Claude), Hyperliquid/Binance (el dueño opera MEXC), arbitraje de
+  funding delta-neutral (rinde centavos con 100 USDT y tiene riesgo de cola), market making P2P en Argentina
+  (otra estrategia y otras cuentas) y "segmentar" movimientos contra los umbrales de ARCA (eso sería evadir
+  controles; sí sirve llevar registro completo de las operaciones para Ganancias y Bienes Personales).
+- **Sin tope de capital** (el dueño: "elimina los topes, siempre se va a trabajar e invertir con todo el dinero
+  disponible"): fuera `capital.max_live_usdt` y la calibración de 20 USDT; el real opera con todo el saldo de
+  la cuenta (`LiveTrader.sync_capital`: sin posiciones abiertas, la caja es el saldo real; depósitos y retiros
+  corren los frenos); el venue controla el margen contra el saldo disponible de MEXC; F-3 se mide sin frenar.
+  Los porcentajes de riesgo del sobre no cambiaron (1 % por operación, 40 %, 80 %, 30 %, 2 %, 4 %, 8 %, 1x).
+- Ruido de Windows (WinError 10054 al cerrar conexiones) fuera de `errores.jsonl`.
 
 ## Próximo: aprender de la historia y reaccionar más rápido (pedido del dueño, 3-nov)
 
@@ -77,8 +105,9 @@ Binance) y la PC del dueño (instalador completo, Telegram, tarea `trading-agent
 
 Rama `pc` del repo, un solo commit que se reemplaza cada 15 min: empezar por `tablero.json` (estado,
 cuenta, posiciones, últimas operaciones y decisiones, motivos de descarte, salud, IA, supervisor, tests y
-errores). Al lado: `paper-vivo/<mercado>/` (estado, operaciones, decisiones recientes), `errores.jsonl`,
-`tests.txt`, `supervisor.json` y `agente-salida.txt`.
+errores). Al lado: `paper-vivo/<mercado>/` y `simulacro/<mercado>/` (estado, operaciones, decisiones
+recientes), `errores.jsonl`, `tests.txt`, `supervisor.json` y `agente-salida.txt`. La cuenta de dinero real
+nunca se publica (G-8).
 
 ## Pasos siguientes (en orden)
 1. Que el dueño fusione el PR protegido (CI ignora `pc`, prueba en Windows, G-7/G-8).
@@ -86,12 +115,11 @@ errores). Al lado: `paper-vivo/<mercado>/` (estado, operaciones, decisiones reci
 3. Juntar evidencia: F-3 pide 60 operaciones cerradas en 21 días con DSR ≥ 0,95 (la da la PC).
 4. Calibración con ≥ 30 etiquetas por categoría: κ, M por categoría, motivos de descarte. Fuentes más
    rápidas (webhook) si el RSS llega tarde.
-5. Etapa 4 (conector real con armado local) recién con F-3 cumplido y el armado del dueño (A-2). La
-   calibración con dinero real (F-4) es de ≤ 20 USDT.
+5. Dinero real con todo el saldo desde el armado del dueño (A-2); seguir la evidencia (F-3) en el tablero.
 
 ## Reglas que no cambian
 - Nunca tocar el repo ni las carpetas de nexus.
-- Nada de dinero real hasta F-3 y el armado del dueño (no hay código de órdenes reales: `test_a3`).
+- Dinero real solo con el armado del dueño (A-2) y solo desde `execution/live/` (`test_a3`).
 - No aflojar `config/limits.yaml`.
 - No imprimir ni publicar secretos (el repo, los logs y la rama `pc` son públicos).
 - Acciones fijadas por SHA.

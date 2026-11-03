@@ -15,7 +15,8 @@ class FakeClaude:
     def __init__(self):
         self.script: list[str] = []
         self.reply = {"category": "hack", "polarity": -0.7, "certainty": 0.9, "assets": ["SOL"], "horizon_min": 120,
-                      "new_event": True, "reason": "Robo confirmado en un exchange."}
+                      "new_event": True, "relevance": 10, "importance": 8, "impact": 8,
+                      "reason": "Robo confirmado en un exchange."}
         self.requests: list[dict] = []
         self.release = asyncio.Event()
 

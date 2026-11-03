@@ -13,8 +13,8 @@ aprueba el dueño (fusionando el PR protegido de cada etapa, REGLAS G-2).
 |---|---|---|
 | R0 · Práctica (hecho) | La PC opera 24/7 en práctica con precios reales: avisos, tablero, revisión diaria | Ya |
 | R1 · Conector real y prueba sin riesgo | **Construido** (PR protegido: lo fusiona el dueño). Probado de punta a punta contra un MEXC falso con órdenes | Cuando `mexc-real-check` da todo OK en la PC y el dueño decide el sobre (abajo) |
-| R2 · Calibración con dinero real (F-4) | Hasta 20 USDT de capital, 3x como máximo, riesgo 1 % por operación, stop de emergencia en el exchange. Se mide lo real contra la práctica: precio de entrada, deslizamiento y comisiones | ~20 operaciones reales sin sorpresas de ejecución |
-| R3 · Escalar | Con evidencia (F-3: 60 operaciones con DSR ≥ 0,95 entre práctica y real), el capital sube por escalones (×2), nunca por encima del sobre | Cada escalón con su evidencia |
+| R1.5 · Simulacro (sin plata) | **Construido.** El operador real completo en la PC, con la misma decisión y el mismo cuerpo de cada orden, pero ejecutado contra el libro real de MEXC en un exchange simulado: ninguna orden sale | Cuando el dueño quiera: no hace falta plata ni la prueba con órdenes |
+| R2 · Dinero real con todo el saldo (decisión del dueño, 3-nov) | Sin tope de capital: opera con todo el saldo de la cuenta de futuros (empieza con 100 USDT) y con lo que se gane. Riesgo 1 % del saldo por operación, stop de emergencia en el exchange, frenos del día, la semana y el drawdown. Se mide lo real contra la práctica: precio de entrada, deslizamiento y comisiones | El tablero muestra la evidencia (F-3: operaciones, DSR); no frena |
 
 ## R1 · Conector real (lo que hay que construir)
 
@@ -43,36 +43,67 @@ aprueba el dueño (fusionando el PR protegido de cada etapa, REGLAS G-2).
   - Para desarmar: `armar-real --desarmar`. KILL sigue frenando entradas, y
     `python -m tradingagent cerrar-todo` cierra todo.
 
+## Simulacro: probar el dinero real sin plata
+
+Pedido del dueño (3-nov): "resolve como probar sin dinero real". En la PC, en PowerShell:
+
+```powershell
+python -m tradingagent armar-real --simulacro --capital 100 --dias 2
+```
+
+- No pide frase ni claves: no hay plata en juego. El agente se reinicia solo y avisa por Telegram
+  ("🧪 Empecé el SIMULACRO del dinero real...").
+- Es el **mismo operador real**: misma noticia, misma IA, mismo venue real (armado, capital, conciliación,
+  stop de emergencia, órdenes IOC con tope). Solo cambia el cliente: en vez de mandar la orden a MEXC, la
+  ejecuta contra el libro real del momento, con la comisión de taker (0,05 %, conservadora), y guarda el
+  cuerpo exacto que hubiera recibido MEXC.
+- El "exchange simulado" se guarda en `TRADING_HOME\simulacro\mexc-futuros\exchange-simulado.json`:
+  sobrevive a reinicios. También simula el stop de emergencia del exchange.
+- Se ve en el tablero ("🧪 Simulacro del dinero real") y se publica en la rama `pc` (es plata de mentira).
+- Para pasar a dinero real: `armar-real --capital ... --dias ...` (con la frase) reemplaza al simulacro.
+
+## Qué se puede operar con 100 USDT (datos en vivo de MEXC, 3-nov)
+
+| Contrato | Mínimo (1 contrato) | Con 100 USDT y el sobre de hoy (1x, neta 30 % = 30 USDT) |
+|---|---|---|
+| BTC_USDT | 0,0001 BTC ≈ 7,75 USDT | entra (hasta 3 contratos) |
+| SOL_USDT | 0,1 SOL ≈ 9,3 USDT | entra (hasta 3 contratos) |
+| ETH_USDT | 0,01 ETH ≈ 22,9 USDT | entra (1 contrato) |
+
+Con 100 USDT **no hace falta apalancamiento** para que entren los lotes mínimos. El riesgo por operación
+sigue siendo 1 % (1 USDT) con el stop, y los frenos diario (2 %) y de drawdown (8 %) siguen iguales.
+
+**Sin tope de capital** (el dueño, 3-nov: "elimina los topes, siempre se va a trabajar e invertir con todo el
+dinero disponible"): el programa opera con **todo el saldo** de la cuenta de futuros. Si gana, el saldo crece
+y las operaciones crecen con él, siempre en la misma proporción: cada una arriesga como mucho el 1 % del saldo
+(con 100 USDT, 1 USDT; con 1.000, 10). Un depósito o un retiro cambian el capital sin contar como ganancia o
+pérdida para los frenos.
+
 ## Protecciones con plata real
 
 - La clave con permiso de futuros vive **solo en la PC** (`.env`). En GitHub no va; como mucho, una de solo
   lectura.
 - La clave **sin permiso de retiro** (se revisa en MEXC).
 - Margen **aislado**: una posición no arrastra a las demás.
-- 3x como máximo en la calibración, con la liquidación al menos a 3 veces la distancia del stop.
+- 1x (el sobre), con la liquidación al menos a 3 veces la distancia del stop.
 - Riesgo 1 % del capital por operación; freno diario 2 %, semanal, y drawdown 8 % (cierra todo y no vuelve
   a operar hasta revisarlo).
-- Cada aviso de Telegram dice "💵 DINERO REAL" o "práctica (sin plata real)".
+- Cada aviso de Telegram dice "💵 DINERO REAL", "SIMULACRO de dinero real (sin plata)" o "práctica (sin
+  plata real)".
+- **La IA lee cada noticia antes de entrar** (C-4). Con dinero real, sin IA no se abre nada. Motivo: el 3-nov,
+  en la PC, las reglas solas abrieron 3 cortos mal leídos ("Mercado Bitcoin" es un exchange de Brasil, no BTC;
+  "los IOU de Liquid vuelven a estar respaldados" no es una mala noticia).
+- Si MEXC cierra una posición solo (stop de emergencia) o el dueño la cierra a mano, el programa no manda
+  nada: la saca de su cuenta con precio estimado, avisa, y la conciliación vuelve a coincidir.
+- Nunca se cierra más de lo que MEXC tiene abierto.
 
-## El sobre para una cuenta chica (decisión del dueño, pendiente)
+## Apalancamiento
 
-Con el sobre actual (40 % por posición, 30 % de exposición neta, 1x), una cuenta de 20 USDT abre como mucho
-~6 USDT por posición. El contrato mínimo de BTC (0,0001 BTC, ~10 USDT) **no entra**, así que con 20 USDT
-reales el programa no va a poder operar BTC.
-
-Propuesta (la decide el dueño):
-
-- `max_leverage` 3;
-- `max_position_pct` 150;
-- `max_gross_exposure_pct` 200;
-- `max_net_exposure_pct` 150, en `config/limits.yaml` y en la línea base de `src/tradingagent/limits.py`.
-
-El riesgo no sube: 1 % por operación con el stop, freno diario 2 %, semanal 4 % y drawdown 8 %. El
-apalancamiento no aumenta la ganancia esperada por unidad de riesgo. Sirve para que entren los lotes
-mínimos y para no inmovilizar toda la cuenta.
-
-Como afloja el sobre, Claude no lo puede cambiar solo: el sistema de permisos lo frenó, y está bien que sea
-así. Lo hace el dueño o se lo pide a Claude explícitamente.
+El sobre sigue en 1x (sin apalancamiento). Con 100 USDT ya entran los lotes mínimos de BTC, SOL y ETH (tabla
+de arriba), así que no hace falta. El apalancamiento no aumenta la ganancia esperada por unidad de riesgo:
+con el mismo stop y el mismo 1 % de riesgo, solo inmoviliza menos margen y acerca la liquidación. Si algún día
+se quiere, es `per_trade.max_leverage` en `config/limits.yaml` y su línea base en `src/tradingagent/limits.py`
+(lo decide el dueño).
 
 ## Cómo dimensiona (corregido el 3-nov)
 
@@ -82,12 +113,11 @@ veces más chicas. Ahora manda el más estricto entre Kelly, el 1 % de riesgo y 
 
 ## Lo que tiene que hacer el dueño
 
-1. **Ya:** en GitHub → Settings → Secrets and variables → Actions, borrar `ACCESS_KEY_MEXC` y
-   `SECRET_KEY_MEXC`. La clave que puede operar no debe estar en GitHub (el repo es público). El recolector
-   sigue andando sin ellas.
-2. En MEXC, confirmar que la clave **no** tiene permiso de retiro.
-3. Para que Claude lea la documentación oficial de MEXC: permitir `www.mexc.com` y `mexcdevelop.github.io`
-   en la red del entorno (menú del entorno → Edit → Allowed domains).
-4. Cuando esté el PR de R1: fusionarlo y correr en la PC `python -m tradingagent mexc-real-check`. El
-   resultado también queda en la rama `pc`.
-5. Pasar a la cuenta de futuros el monto de calibración (≤ 20 USDT) y armar.
+1. Fusionar el PR protegido de hoy (simulacro, IA antes de cada entrada, sin tope de capital). La PC se
+   actualiza sola en unos minutos.
+2. **Hoy, sin plata:** `armar-real --simulacro --capital 100 --dias 2` y mirar los avisos "SIMULACRO".
+3. **Mañana, con los 100 USDT en la cuenta de futuros de MEXC:**
+   1. `mexc-real-check` (pone órdenes que no se pueden ejecutar y las cancela);
+   2. `armar-real` y escribir la frase `ARMO DINERO REAL CON TODO EL SALDO POR 30 DIAS`.
+4. En MEXC: la clave **sin** permiso de retiro y el modo de posición en **Cobertura (Hedge)**.
+5. Para frenar: `armar-real --desarmar` (no abre nada nuevo) o `cerrar-todo` (cierra todo y desarma).

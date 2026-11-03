@@ -182,3 +182,19 @@ async def test_cancelar_al_agente_como_ctrl_c_en_windows_cierra_en_orden():
     kinds = [json.loads(x)["kind"] for f in sorted((paths.home() / "journal").glob("*.jsonl"))
              for x in f.read_text().splitlines()]
     assert kinds[0] == "start" and kinds[-1] == "stop" and verify(paths.home() / "journal")[0]
+
+
+def test_el_error_inofensivo_de_windows_al_cortar_una_conexion_no_ensucia_el_registro(caplog):
+    from tradingagent.app import quiet_connection_resets
+
+    loop = asyncio.new_event_loop()
+    try:
+        with caplog.at_level("DEBUG"):
+            quiet_connection_resets(loop, {
+                "message": "Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)",
+                "exception": ConnectionResetError(10054, "WinError 10054")})
+            quiet_connection_resets(loop, {"message": "otra cosa", "exception": RuntimeError("de verdad")})
+    finally:
+        loop.close()
+    errors = [r for r in caplog.records if r.levelname == "ERROR"]
+    assert len(errors) == 1 and "otra cosa" in errors[0].getMessage()      # solo el error de verdad

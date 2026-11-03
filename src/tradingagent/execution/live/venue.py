@@ -4,7 +4,8 @@ decisión y de riesgo es exactamente el mismo (C-3). Ruta protegida (G-2).
 Antes de CADA orden:
 - el armado local tiene que estar vigente (`arming.status`: archivo del dueño, misma clave, prueba sin riesgo
   aprobada, sin KILL);
-- el margen de todo lo abierto más lo nuevo no puede pasar el capital armado;
+- el margen de lo nuevo no puede pasar el saldo DISPONIBLE de la cuenta de futuros (sin tope de capital: se
+  trabaja con todo el saldo; el tamaño lo decide el motor con los porcentajes del sobre);
 - si la conciliación encontró diferencias con el exchange, no se abre nada nuevo (salir siempre se puede).
 
 Cómo opera:
@@ -20,13 +21,15 @@ import logging
 from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 
 from ...marketdata import mexc
-from ..orders import Fill, Order, OrderEvent, OrderIntent, OrderStatus, Side
+from ..orders import EXCHANGE_FLAT, Fill, Order, OrderEvent, OrderIntent, OrderStatus, Side
 from . import arming
 from .mexc_futures import DONE_STATES, FILLED, IOC, TradingClient, TradingError, side_code
 
 log = logging.getLogger("tradingagent.real")
 BPS = Decimal(10_000)
 POLL_S, POLL_TRIES = 0.25, 24
+BALANCE_TTL_S = 60                        # el saldo se relee en cada conciliación, después de cada ejecución y
+MARGIN_BUFFER = Decimal("0.98")           # si tiene más de 1 min; se deja 2 % para comisiones
 
 
 class RealVenue:
@@ -41,6 +44,8 @@ class RealVenue:
         self.marks: dict[str, Decimal] = {}
         self.on_event = None
         self.blocked = ""                         # motivo de la conciliación que impide entrar ("" = ok)
+        self.balance: dict | None = None          # último saldo leído de la cuenta (equity, disponible)
+        self._balance_at = 0.0
         self._specs: dict[str, dict] = {}
         self._seq = 0
         self.stats = {"ordenes": 0, "rechazadas": 0, "llenadas": 0}
@@ -72,12 +77,12 @@ class RealVenue:
     def summary(self) -> dict:
         return {**self.stats, "bloqueado": self.blocked, "apalancamiento": self.leverage}
 
-    def margin_in_use(self) -> Decimal:
-        total = Decimal(0)
-        for sym, pos in self.portfolio.positions.items():
-            mark = self.marks.get(sym) or pos.avg_price
-            total += abs(pos.qty) * (mark or Decimal(0))
-        return total / Decimal(self.leverage)
+    async def account(self, fresh: bool = False) -> dict:
+        """Saldo de la cuenta de futuros: {'equity', 'available'} en USDT (con caché corta)."""
+        if fresh or self.balance is None or self.clock.time() - self._balance_at > BALANCE_TTL_S:
+            self.balance = await self.client.usdt()
+            self._balance_at = self.clock.time()
+        return self.balance
 
     # -- órdenes ------------------------------------------------------------------------------------------
     async def submit(self, intent: OrderIntent) -> Order:
@@ -87,7 +92,7 @@ class RealVenue:
                       ref_price=intent.ref_price)
         self.orders[intent.client_id] = order
         self.stats["ordenes"] += 1
-        armed, why, arm = arming.status(self.home, self._key, self.limits)
+        armed, why, arm = arming.status(self.home, self._key)
         if not intent.reduce_only:                            # salir siempre se puede (A-2): solo se frenan entradas
             if not armed:
                 return self._reject(order, f"real_no_armado:{why}")
@@ -123,17 +128,31 @@ class RealVenue:
             return self._reject(order, "menos_de_un_contrato")
         notional = Decimal(vol) * spec["size"] * ref
         if not intent.reduce_only:
-            capital = Decimal(str(arm["capital_usdt"]))
-            if self.margin_in_use() + notional / Decimal(self.leverage) > capital:
-                return self._reject(order, "supera_el_capital_armado")
+            try:
+                free = Decimal(str((await self.account())["available"]))
+            except Exception as e:                                   # noqa: BLE001 (sin saldo, no se entra)
+                return self._reject(order, f"sin_saldo_leido:{str(e)[:80]}")
+            if notional / Decimal(self.leverage) > free * MARGIN_BUFFER:
+                return self._reject(order, "supera_el_saldo_disponible")
         opening = not intent.reduce_only
         long_side = buy if opening else held > 0
         order.qty, order.limit_price = Decimal(vol) * spec["size"], cap
         stop = intent.tags.get("emergency_stop") if opening else None
+        position_id = None
         try:
+            if not opening:                                   # al cerrar, MEXC recomienda decir qué posición
+                theirs = [p for p in await self.client.positions(intent.symbol)
+                          if int(p.get("positionType", 0)) == (1 if long_side else 2)
+                          and int(float(p.get("holdVol", 0) or 0)) > 0]
+                if not theirs:                                # ya la cerró el exchange (stop de emergencia) o
+                    return self._reject(order, EXCHANGE_FLAT)  # el dueño a mano: el motor se sincroniza
+                position_id = theirs[0].get("positionId")
+                vol = min(vol, int(float(theirs[0]["holdVol"])))    # nunca cerrar más de lo que hay
+                order.qty = Decimal(vol) * spec["size"]
             oid = await self.client.submit(symbol=intent.symbol, side=side_code(opening, long_side), vol=vol,
                                            price=cap, leverage=self.leverage, order_type=IOC,
-                                           external_oid=_oid(intent.client_id), stop_loss=stop)
+                                           external_oid=_oid(intent.client_id), stop_loss=stop,
+                                           position_id=position_id)
         except (TradingError, ValueError, PermissionError) as e:
             return self._reject(order, f"exchange:{str(e)[:160]}")
         order.order_id = oid
@@ -149,6 +168,7 @@ class RealVenue:
         order.updated_at = self.clock.time()
         if order.filled_qty:
             self.stats["llenadas"] += 1
+            self.balance = None                               # cambió el saldo: se relee la próxima vez
             self._emit("filled", order)
         return order
 
@@ -206,17 +226,18 @@ class RealVenue:
     # -- conciliación -------------------------------------------------------------------------------------
     async def reconcile(self) -> str:
         """Compara las posiciones del exchange con las del motor. Si no coinciden, bloquea entradas y lo dice."""
+        theirs: dict[str, Decimal] = {}
         try:
             live = await self.client.positions()
-        except TradingError as e:
+            await self.account(fresh=True)
+            for p in live:
+                sym = p.get("symbol", "")
+                spec = await self._spec(sym)
+                sign = 1 if int(p.get("positionType", 1)) == 1 else -1
+                theirs[sym] = theirs.get(sym, Decimal(0)) + Decimal(str(p.get("holdVol", 0) or 0)) * spec["size"] * sign
+        except Exception as e:                                       # noqa: BLE001 (sin datos, no se entra)
             self.blocked = "exchange_sin_respuesta"
             return f"sin respuesta: {str(e)[:120]}"
-        theirs: dict[str, Decimal] = {}
-        for p in live:
-            sym = p.get("symbol", "")
-            spec = await self._spec(sym)
-            sign = 1 if int(p.get("positionType", 1)) == 1 else -1
-            theirs[sym] = theirs.get(sym, Decimal(0)) + Decimal(str(p.get("holdVol", 0) or 0)) * spec["size"] * sign
         ours = {s: p.qty for s, p in self.portfolio.positions.items() if p.qty}
         diff = sorted(s for s in set(theirs) | set(ours) if theirs.get(s, Decimal(0)) != ours.get(s, Decimal(0)))
         self.blocked = f"diferencias:{','.join(diff)}" if diff else ""

@@ -19,6 +19,7 @@ from .labeler import MIN, CandleStore
 
 log = logging.getLogger("tradingagent.futures")
 INFO_TTL_S = 86_400
+FUNDING_TTL_S = 600                 # la tasa vigente se vuelve a leer cada 10 min y siempre después de cada cobro
 
 
 def liquidation_price(entry: float, side: int, leverage: float, mmr: float) -> float:
@@ -79,19 +80,42 @@ class MexcFutures:
     def mmr_for(self, sym: str) -> float:
         return self.mmr.get(sym, 0.005)
 
-    async def _rate(self, session, sym: str) -> dict:
-        if sym not in self._funding:
-            self._funding[sym] = await mexc.funding(session, sym, self.base)
-        return self._funding[sym]
+    async def _rate(self, session, sym: str, now_ms: int) -> dict:
+        """Tasa vigente y próximo cobro. Antes quedaban en memoria para siempre: el agente de la PC corre días, y
+        una entrada de hoy recibía el "próximo cobro" de ayer (y se le cobraba funding de horas en que no estaba)."""
+        f = self._funding.get(sym)
+        if f is None or now_ms >= f["next_ms"] or now_ms - f["_leido"] > FUNDING_TTL_S * 1000:
+            f = self._funding[sym] = {**await mexc.funding(session, sym, self.base), "_leido": now_ms}
+        return f
+
+    def funding_cost(self, sym: str, rate: float | None, side: int, now: float, horizon_s: float) -> float:
+        """Funding EN CONTRA (fracción del nominal) si la posición llega a su expiración después de uno o más
+        cobros: un costo más de la operación. Lo que se cobraría a favor no se cuenta (conservador)."""
+        if not rate or not side:
+            return 0.0
+        now_ms = int(now * 1000)
+        f = self._funding.get(sym)
+        if f is not None and f["next_ms"] > now_ms:
+            nxt, cycle = f["next_ms"], int(f["cycle_h"]) * 3600_000
+        else:                                                      # sin dato fresco: la grilla estándar de 8 h
+            cycle = 8 * 3600_000
+            nxt = (now_ms // cycle + 1) * cycle
+        end = now_ms + int(horizon_s * 1000)
+        times = 0 if end < nxt else 1 + (end - nxt) // cycle
+        return max(0.0, float(rate) * side) * times
 
     async def on_entry(self, run, sym: str, meta: dict) -> None:
         """Al abrir: precio de liquidación y próximo cobro de funding con su tasa vigente."""
         side = 1 if meta["side"] == "largo" else -1
         lev = float(run.reg.get(sym).max_leverage)
         meta["liq"] = str(round(liquidation_price(float(meta["avg_price"]), side, lev, self.mmr_for(sym)), 8))
+        now_ms = int(run.now * 1000)
         try:
-            f = await self._rate(run.session, sym)
-            meta.update(funding_next=f["next_ms"], funding_rate=f["rate"], funding_cycle_h=f["cycle_h"])
+            f = await self._rate(run.session, sym, now_ms)
+            nxt, cycle = f["next_ms"], int(f["cycle_h"]) * 3600_000
+            while nxt <= now_ms:                                       # nunca un cobro anterior a la entrada
+                nxt += cycle
+            meta.update(funding_next=nxt, funding_rate=f["rate"], funding_cycle_h=f["cycle_h"])
         except MarketDataError as e:                               # sin dato: se asume el peor caso razonable
             log.warning("sin funding de %s: %s", sym, e)
             nxt = (int(run.now * 1000) // (8 * 3600_000) + 1) * 8 * 3600_000
@@ -114,6 +138,6 @@ class MexcFutures:
             run.counts["funding"] += 1
             meta["funding_next"] += int(meta.get("funding_cycle_h", 8)) * 3600_000
             try:                                                   # la tasa del próximo cobro: la vigente
-                meta["funding_rate"] = (await self._rate(run.session, sym))["rate"]
+                meta["funding_rate"] = (await self._rate(run.session, sym, int(run.now * 1000)))["rate"]
             except MarketDataError:
                 pass

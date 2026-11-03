@@ -65,12 +65,12 @@ def test_a2_dinero_real_solo_con_el_armado_del_dueno(tmp_path):
     from tradingagent.execution.live import arming
     lim = limits.load()
     home = tmp_path / "h"
-    assert arming.CALIBRATION_MAX_USDT == 20 and arming.CALIBRATION_MAX_DAYS == 7 and arming.MAX_DAYS == 30
-    for capital, days, typed, calib in ((20, 7, "si", True), (21, 7, None, True), (20, 8, None, True),
-                                        (20, 31, None, False)):
-        with pytest.raises(ValueError):                          # frase exacta, F-4 (20 USDT, 7 días), A-2 (30)
-            arming.arm(home, capital, days, "k", lim, typed or arming.phrase(capital, days), calibration=calib)
-    assert arming.status(home, "k", lim)[1] == "no_armado"
+    assert arming.MAX_DAYS == 30 and lim["capital"]["todo_el_saldo"] is True      # sin tope de capital (dueño)
+    for days, typed, sim, capital in ((7, "si", False, None), (31, None, False, None), (7, None, True, 0),
+                                      (31, None, True, 100)):
+        with pytest.raises(ValueError):                          # frase exacta, A-2 (30 días), simulacro con saldo
+            arming.arm(home, days, "k", typed or arming.phrase(days), simulacro=sim, capital=capital)
+    assert arming.status(home, "k")[1] == "no_armado"
     callers = sorted(f.name for f in code_files() if "arming.arm(" in f.read_text(encoding="utf-8"))
     assert callers == ["__main__.py"]                             # solo el comando del dueño arma
 
@@ -90,6 +90,7 @@ def test_a3_ordenes_solo_en_el_modulo_real_y_nunca_retiros_ni_transferencias():
     assert hits == []
     from tradingagent.execution.live import mexc_futures as mf
     assert mf.GET_PATHS == ("/api/v1/private/account/assets", "/api/v1/private/position/open_positions",
+                            "/api/v1/private/position/position_mode",           # solo LEER el modo (cobertura)
                             "/api/v1/private/order/get/{}", "/api/v1/private/order/deal_details/{}",
                             "/api/v1/private/order/list/open_orders/{}")
     assert mf.POST_PATHS == ("/api/v1/private/order/submit", "/api/v1/private/order/cancel",

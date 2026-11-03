@@ -41,6 +41,7 @@ class PolicyConfig:
     max_spread_z: float = 2.5
     l3_multiple: float = 5.0
     max_divergence: float = 0.01
+    max_basis: float = 0.01                 # futuros: el libro, a ≤ 1 % del precio de marca (investigación nueva)
     max_kyle_ratio: float = 4.0
     depth_band_bps: float = 50
     impact_y: float = 0.6
@@ -142,8 +143,9 @@ def kelly(p: float, b: float, fraction: float = 0.25) -> float:
 def plan(a: Assessment, sig: Signal, symbol: str, *, equity: float, cash: float, gross: float, net: float,
          n_positions: int, price: float, sigma_1m: float | None, adv: float | None, fee_taker: float,
          spread: float, kind: str, max_leverage: float, min_notional: float, limits: dict,
-         cfg: PolicyConfig) -> tuple[EntryPlan | None, list[str]]:
-    """Tamaño y barreras (sin el chequeo de libro, que se hace con el libro real al ejecutar)."""
+         cfg: PolicyConfig, funding: float = 0.0) -> tuple[EntryPlan | None, list[str]]:
+    """Tamaño y barreras (sin el chequeo de libro, que se hace con el libro real al ejecutar). `funding`: lo que
+    se pagaría de funding en contra si la posición llega a su expiración (fracción del nominal): es un costo más."""
     pt, pf = limits["per_trade"], limits["portfolio"]
     if n_positions >= pf["max_positions"]:
         return None, ["maximo_de_posiciones"]
@@ -161,7 +163,7 @@ def plan(a: Assessment, sig: Signal, symbol: str, *, equity: float, cash: float,
     notional, impact, cost, b_net, f = min(caps), 0.0, 0.0, 0.0, 0.0
     for _ in range(2):                                      # el impacto depende del tamaño: dos pasadas
         impact = sqrt_impact(max(notional, min_notional), adv, sigma_daily, cfg.impact_y)
-        cost = round_trip(fee_taker, spread, impact)
+        cost = round_trip(fee_taker, spread, impact) + max(0.0, funding)
         b_net = (tp - cost) / (sl + cost)
         f = kelly(a.p, b_net, cfg.kelly_fraction)
         # Kelly dice qué fracción del capital ARRIESGAR (lo que se pierde si salta el stop), no el nominal: el
@@ -188,7 +190,7 @@ def liquidation_ok(entry: float, side: int, sl: float, leverage: float, mmr: flo
 
 def market_blocks(book: OrderBook, notional: D, limits: dict, cfg: PolicyConfig, side: int = 1, *,
                   spread_z: float | None = None, last: float | None = None,
-                  kyle_ratio: float | None = None) -> list[str]:
+                  kyle_ratio: float | None = None, fair: float | None = None) -> list[str]:
     if book.spread_bps is None:
         return ["libro_vacio"]
     out = []
@@ -207,4 +209,7 @@ def market_blocks(book: OrderBook, notional: D, limits: dict, cfg: PolicyConfig,
         out.append(f"divergencia:{div * 100:.2f}%")
     if kyle_ratio is not None and kyle_ratio > cfg.max_kyle_ratio:
         out.append(f"kyle:{kyle_ratio:.1f}x")
+    basis = divergence(book, fair) if fair else None       # el futuro se despegó del precio de marca: una mecha
+    if basis is not None and basis > cfg.max_basis:          # o un libro raro; se espera a que vuelva
+        out.append(f"base_vs_marca:{basis * 100:.2f}%")
     return out

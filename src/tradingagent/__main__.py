@@ -11,7 +11,8 @@
                                              ...y del operador paper (rearme tras un halt)
   python -m tradingagent mexc-check          prueba la API de futuros de MEXC (y las claves de lectura, si hay)
   python -m tradingagent mexc-real-check     prueba SIN RIESGO del modo real (órdenes que no se pueden ejecutar)
-  python -m tradingagent armar-real --capital 20 --dias 7   arma el DINERO REAL (frase exacta; --desarmar)
+  python -m tradingagent armar-real          arma el DINERO REAL con todo el saldo (frase exacta; --desarmar)
+  python -m tradingagent armar-real --simulacro --capital 100 --dias 2   lo mismo SIN plata (ninguna orden)
   python -m tradingagent cerrar-todo         emergencia: cancela, cierra todo lo real y desarma
   python -m tradingagent llm-check           prueba la clave de Claude con una consulta mínima (centavos de centavo)
   python -m tradingagent sources [--check]   fuentes y su estado; --check lee cada una una vez
@@ -288,34 +289,62 @@ def cmd_mexc_real_check(args) -> int:
     return 1
 
 
+def _restart_agent(home, why: str) -> None:
+    """Pide al agente que se cierre prolijo: el supervisor lo relanza en segundos con el armado nuevo."""
+    (home / "state").mkdir(parents=True, exist_ok=True)
+    (home / "state" / "parar").write_text(why, encoding="utf-8")
+
+
 def cmd_armar_real(args) -> int:
-    """Armado local del dueño (REGLAS A-2, F-4): frase exacta, tope, activos y vencimiento."""
+    """Armado local del dueño (REGLAS A-2): frase exacta, activos y vencimiento. Sin tope de capital: el real
+    opera con todo el saldo de la cuenta de futuros. `--simulacro`: lo mismo sin mandar órdenes."""
     _setup("WARNING")
-    from . import limits as limits_mod
     from .execution.live import arming
     home = paths.home()
     if args.desarmar:
         print("Desarmado: el modo real no abre nada nuevo (lo abierto sale normal)." if arming.disarm(home)
               else "No estaba armado.")
         return 0
+    assets = tuple(a.strip().upper() for a in args.activos.split(",") if a.strip())
+    current = paths.read_json(home / arming.ARM_FILE, None)
+    real_armed = isinstance(current, dict) and not current.get("simulacro")
+    if args.simulacro:                                # sin plata en juego: sin frase ni claves
+        if real_armed:
+            print("Ya hay DINERO REAL armado. Si querés volver al simulacro, primero: "
+                  "python -m tradingagent armar-real --desarmar")
+            return 1
+        capital = 100.0 if args.capital is None else args.capital
+        try:
+            data = arming.arm(home, args.dias, "", "", assets=assets, simulacro=True, capital=capital)
+        except ValueError as e:
+            print(f"No se armó el simulacro: {e}")
+            return 1
+        _restart_agent(home, "simulacro")
+        print(f"Simulacro armado: {data['capital_usdt']:g} USDT de mentira, activos {', '.join(data['activos'])}, "
+              f"por {args.dias} días. Opera igual que el dinero real (mismo programa, precios reales de MEXC) pero NO "
+              "manda órdenes. El agente se reinicia solo en segundos y te avisa por Telegram.")
+        return 0
+    if args.capital is not None:
+        print("Con dinero real no hay tope: opera con TODO el saldo de la cuenta de futuros de MEXC. "
+              "--capital es solo para el simulacro.")
+        return 1
     access, _ = _trading_keys()
     if not access:
         print("Faltan MEXC_ACCESS_KEY y MEXC_SECRET_KEY en", home / ".env")
         return 2
-    lim = limits_mod.load()
-    assets = tuple(a.strip().upper() for a in args.activos.split(",") if a.strip())
-    want = arming.phrase(args.capital, args.dias)
-    print(f"Vas a armar DINERO REAL: hasta {args.capital:g} USDT, activos {', '.join(assets)}, por {args.dias} "
-          f"días.\nPara confirmar, escribí exactamente:  {want}")
+    want = arming.phrase(args.dias)
+    print(f"Vas a armar DINERO REAL con TODO el saldo de tu cuenta de futuros de MEXC (y lo que se gane), activos "
+          f"{', '.join(assets)}, por {args.dias} días. Cada operación arriesga como mucho 1 % del saldo.\n"
+          f"Para confirmar, escribí exactamente:  {want}")
     typed = input("> ")
     try:
-        data = arming.arm(home, args.capital, args.dias, access, lim, typed, assets=assets)
+        arming.arm(home, args.dias, access, typed, assets=assets)
     except ValueError as e:
         print(f"No se armó: {e}")
         return 1
-    ok, why, _ = arming.status(home, access, lim)
-    (home / "state" / "parar").write_text("armado real", encoding="utf-8")   # el supervisor lo relanza ya armado
-    print(f"Armado hasta {data['capital_usdt']:g} USDT.", "El agente se reinicia solo en segundos y empieza." if ok
+    ok, why, _ = arming.status(home, access)
+    _restart_agent(home, "armado real")
+    print("Armado con todo el saldo.", "El agente se reinicia solo en segundos y empieza." if ok
           else f"Todavía no opera: {why} (corré python -m tradingagent mexc-real-check).")
     return 0
 
@@ -494,10 +523,13 @@ def main(argv=None) -> int:
     rc = sub.add_parser("mexc-real-check")
     rc.add_argument("--simbolo", default="BTC_USDT")
     ar = sub.add_parser("armar-real")
-    ar.add_argument("--capital", type=float, default=20.0, help="USDT máximos para el modo real (F-4: hasta 20)")
-    ar.add_argument("--dias", type=int, default=7, help="vencimiento (F-4: hasta 7 días)")
+    ar.add_argument("--capital", type=float, help="solo para el simulacro: USDT de mentira (100 si no se dice). "
+                    "Con dinero real no hay tope: opera con todo el saldo de la cuenta")
+    ar.add_argument("--dias", type=int, default=30, help="vencimiento del armado (hasta 30 días)")
     ar.add_argument("--activos", default="BTC,ETH,SOL")
     ar.add_argument("--desarmar", action="store_true")
+    ar.add_argument("--simulacro", action="store_true", help="probar el modo real SIN plata: mismo programa, "
+                    "precios reales de MEXC, ninguna orden (capital hasta el tope del sobre, hasta 30 días)")
     ct = sub.add_parser("cerrar-todo")
     ct.add_argument("--simbolos", default="BTC_USDT,ETH_USDT,SOL_USDT")
     sub.add_parser("llm-check")

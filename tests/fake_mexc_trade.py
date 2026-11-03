@@ -26,6 +26,7 @@ class FakeMexcTrade(FakeMexc):
         self.balance = D("20")
         self.swap_sides = False                               # el exchange "entiende" otro lado
         self.reject_submit = ""                               # mensaje de rechazo para toda orden
+        self.mode = 1                                         # 1 cobertura, 2 unidireccional
         self.calls: list[tuple[str, str]] = []
         self._next = 1000
 
@@ -117,6 +118,8 @@ class FakeMexcTrade(FakeMexc):
             return ok([{"currency": "USDT", "equity": float(self.balance), "availableBalance": float(self.balance)}])
         if path.endswith("/account/tiered_fee_rate"):
             return ok({"level": 0, **self.account_fees})
+        if path.endswith("/position/position_mode"):
+            return ok(self.mode)
         if path.endswith("/position/open_positions"):
             sym = request.query.get("symbol")
             return ok([p for (s, _), p in self.positions.items() if p["holdVol"] > 0 and (not sym or s == sym)])
@@ -125,6 +128,7 @@ class FakeMexcTrade(FakeMexc):
         if path.endswith("/order/cancel") and method == "POST":
             out = []
             for oid in data:
+                assert isinstance(oid, int), "MEXC espera ids numéricos"
                 o = self.orders.get(str(oid))
                 if o and o["state"] in (1, 2):
                     o["state"] = 4
