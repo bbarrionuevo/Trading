@@ -222,6 +222,25 @@ Opera con **todo el saldo** de la cuenta de futuros (sin tope) y pide escribir u
 (`ARMO DINERO REAL CON TODO EL SALDO POR 30 DIAS`). Para frenar: `armar-real --desarmar` (no abre nada nuevo) o
 `python -m tradingagent cerrar-todo` (cancela, cierra todo lo real y desarma).
 
+## Vigilancia de Claude (con dinero real)
+
+El dueño pidió que Claude vigile "prácticamente de forma sincrónica" cuando opere con plata real. Hay tres
+niveles:
+
+1. **Rama `pc` (automática):** el supervisor publica la práctica, el simulacro, la salud y los errores cada
+   **2 minutos** si hay algo armado o posiciones abiertas (si no, cada 15). La cuenta de dinero real **no se
+   publica** (REGLAS G-8). La práctica toma las mismas decisiones con las mismas noticias, y los avisos del real
+   (órdenes rechazadas, conciliación, "MEXC no responde") quedan en `errores.jsonl`.
+2. **Tareas programadas de Claude:** una revisión completa cada día a las 7:36 y una vigilancia corta cada 2
+   horas, de 8 a 24 (hora argentina). Solo avisan al celular si hay algo. Corren sin el conector de GitHub, así
+   que si encuentran un arreglo lo dejan en una rama `claude/...` y te avisan para que abras el PR. Para que
+   también abran y fusionen PRs solos, agregales el conector de GitHub en claude.ai → Rutinas.
+3. **Acceso directo a la PC (para corregir en el momento):** en la app de Claude de la PC, en Configuración →
+   Claude Code → Remote Control, agregá la carpeta `%USERPROFILE%\TRADING`. O abrí una terminal en esa carpeta y
+   corré `claude remote-control`. Después avisale a Claude: va a pedir conectarse y vos lo aprobás. Con eso
+   puede ver los registros y la cuenta real ahí mismo y correr `armar-real --desarmar` o `cerrar-todo` si hace
+   falta.
+
 ## Parada de emergencia y verificación
 
 - **Pausa (KILL):** creá un archivo vacío `%LOCALAPPDATA%\TRADING\KILL`. Con ese archivo no se abren

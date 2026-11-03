@@ -107,6 +107,18 @@ Binance) y la PC del dueño (instalador completo, Telegram, tarea `trading-agent
 - **Spread y profundidad** no son un límite para las monedas chicas: 0,4 a 6 bps y 3.700 a 166.000 USDT a 0,5 %
   (medido el 3-nov) contra órdenes de ~20 a 30 USDT.
 
+## Vigilancia con dinero real (3-nov, noche)
+
+- Pedido del dueño: "voy a necesitar que estés conectado prácticamente de forma sincrónica con mi PC para
+  vigilar cómo está actuando el programa y poder realizar modificaciones rápidas".
+- Supervisor: con algo armado o posiciones abiertas publica cada 2 min (`PUBLISH_FAST_S`) y busca correcciones
+  cada 5 (`CHECK_FAST_S`). La cuenta real sigue sin publicarse: publicar un resumen sin montos lo frenó el
+  sistema de permisos (la rama `pc` es pública) y está bien así.
+- Tareas programadas: "Revisión diaria de TRADING" (7:36, actualizada al estado de hoy) y "Vigilancia de
+  TRADING cada 2 horas" (8 a 24). Sin conector de GitHub: dejan las correcciones en una rama.
+- Para ver la cuenta real y actuar en el momento: Remote Control de la carpeta `%USERPROFILE%\TRADING` en la
+  PC (docs/OPERACION.md, "Vigilancia de Claude").
+
 ## Próximo: aprender de la historia y reaccionar más rápido (pedido del dueño, 3-nov)
 
 > "Quizás sea bueno también buscar en historial para que pueda entender más rápido cómo repercute las noticias
