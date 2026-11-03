@@ -1,96 +1,55 @@
 {
  "pending": [
   {
-   "id": "3ba88484fa8d21116bb0",
-   "received_at": 1793655880.5508246,
-   "published_at": 1793645163.0,
+   "id": "23deefdbe4204278efb4",
+   "received_at": 1793667229.7882621,
+   "published_at": 1793656481.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "b1a5e51e78d55baff8e4",
-   "received_at": 1793655880.5630186,
-   "published_at": 1793646335.0,
+   "id": "773c55934bcc90e169b5",
+   "received_at": 1793667229.785019,
+   "published_at": 1793657762.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "31f5522e6d3f93cc5eb6",
-   "received_at": 1793655880.5668795,
-   "published_at": 1793646948.0,
+   "id": "3d07f25b2b9f640d30c6",
+   "received_at": 1793667229.7882621,
+   "published_at": 1793658150.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "1b59c159a8de9b222ee9",
-   "received_at": 1793655880.5630186,
-   "published_at": 1793647678.0,
+   "id": "42e64640a40cc4243228",
+   "received_at": 1793667229.7810817,
+   "published_at": 1793658366.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "d7af6d5a2f094968a027",
-   "received_at": 1793655880.5508246,
-   "published_at": 1793648762.0,
+   "id": "1814e027ce10de50d374",
+   "received_at": 1793667229.7882621,
+   "published_at": 1793660827.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "fffd8f0ee9a63814499e",
-   "received_at": 1793655880.5668795,
-   "published_at": 1793650789.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "b3b6a300566961d6fff0",
-   "received_at": 1793655880.5630186,
-   "published_at": 1793650943.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "7dbecc1801e6ccebb8c9",
-   "received_at": 1793655880.5508246,
-   "published_at": 1793651763.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "37a174b635e00b273ce0",
-   "received_at": 1793655880.5508246,
-   "published_at": 1793654163.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "b13c0b5062f99bf78bc3",
-   "received_at": 1793655880.5630186,
-   "published_at": 1793654184.0,
-   "symbols": [
-    "SOLUSDT",
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "665ffc0503d1ec0279e9",
-   "received_at": 1793655880.5880523,
-   "published_at": 1793655533.0,
+   "id": "dfebd4cd58f25a209524",
+   "received_at": 1793667229.785019,
+   "published_at": 1793661025.0,
    "symbols": [
     "BTCUSDT"
    ]
   }
  ],
- "digest_day": "2026-11-02",
+ "digest_day": "2026-11-03",
  "sources": {
   "fed.press": {
    "etag": "W/\"4654ee50e467dd1:0\"",
@@ -177,13 +136,20 @@
   },
   "cointelegraph": {
    "etag": null,
-   "last_modified": "Mon, 02 Nov 2026 21:43:59 GMT",
+   "last_modified": "Tue, 03 Nov 2026 00:48:58 GMT",
    "seen": [
     "0f51768fe66a6a58",
     "967cf016c49850c7",
     "7a8f19ad659dda88",
     "dc21d99b53aed185",
     "6093696a590ea1d3",
+    "f24676b86544ce70",
+    "8ed7d0935ccee248",
+    "bf2d24de6fe9f0bf",
+    "90621eaeea7958ac",
+    "458fdcffb7b7b6a2",
+    "b23ab8485c2ece2b",
+    "85b4879de0d98e3d",
     "52153c571ae85fc3",
     "4dc5bc7d53529e72",
     "36eed24ac834d485",
@@ -191,7 +157,6 @@
     "481c2f2915d9e196",
     "d084bbdef50b22af",
     "a8f6be3bbd434fe3",
-    "458fdcffb7b7b6a2",
     "4aa3b3bd9629902b",
     "51eb801e902fdf23",
     "dbf811265df4d3e8",
@@ -210,16 +175,13 @@
     "eb922db4ee85d6ea",
     "9769b05e601c0726",
     "f996888223ac2aea",
-    "01410511dc464bb6",
-    "f24676b86544ce70",
-    "8ed7d0935ccee248",
-    "bf2d24de6fe9f0bf"
+    "01410511dc464bb6"
    ],
    "first_done": true
   },
   "decrypt": {
    "etag": null,
-   "last_modified": "Mon, 02 Nov 2026 21:44:33 GMT",
+   "last_modified": "Tue, 03 Nov 2026 00:53:49 GMT",
    "seen": [
     "42336da52963f891",
     "9a334bafcb613a57",
@@ -227,6 +189,10 @@
     "1dc0c27199faef98",
     "d864b4a7ee16d86c",
     "dc21b7fc081ccee7",
+    "b9c8107aadce75be",
+    "48fcfc8068bb0d18",
+    "9c11023c4a8dacba",
+    "b14f3dcc9cd1f354",
     "303f1027258368a2",
     "43754eb6402c66d4",
     "eb0d2dab134e54cd",
@@ -263,18 +229,18 @@
     "4a4f42a3f253880d",
     "e45b00a906e44626",
     "b4513a99517ec9e8",
-    "80cc1a8dbd5ccd95",
-    "b9c8107aadce75be",
-    "48fcfc8068bb0d18"
+    "80cc1a8dbd5ccd95"
    ],
    "first_done": true
   },
   "theblock": {
-   "etag": "W/\"2ae8ca01164f366bf6566e3edac643c9\"",
-   "last_modified": "Mon, 02 Nov 2026 20:19:49 GMT",
+   "etag": "W/\"2fc95db257a592502e15f1ac9cca2928\"",
+   "last_modified": "Mon, 02 Nov 2026 22:28:00 GMT",
    "seen": [
     "26223633be604dbf",
     "c94ea8363ae429f4",
+    "a27c0fe4d4f90e15",
+    "6dccc2e4d8173c38",
     "fa918dfafafa1bc2",
     "afe7ce1e4b31b310",
     "7a0ccb26a9ea9330",
@@ -293,8 +259,7 @@
     "c07df6bcdfa3bb01",
     "99540a239c52b465",
     "ab320c70db7d7cee",
-    "85154b68d38c690f",
-    "a27c0fe4d4f90e15"
+    "85154b68d38c690f"
    ],
    "first_done": true
   }
@@ -303,38 +268,38 @@
   "fed.press": {
    "ok": true,
    "items": 0,
-   "ts": 1793655880,
-   "latency_ms": 76.1
+   "ts": 1793667230,
+   "latency_ms": 52.5
   },
   "fed.monetary": {
    "ok": true,
    "items": 0,
-   "ts": 1793655880,
-   "latency_ms": 45.4
+   "ts": 1793667230,
+   "latency_ms": 51.0
   },
   "coindesk": {
    "ok": true,
-   "items": 2,
-   "ts": 1793655880,
-   "latency_ms": 78.7
+   "items": 0,
+   "ts": 1793667230,
+   "latency_ms": 92.3
   },
   "cointelegraph": {
    "ok": true,
-   "items": 4,
-   "ts": 1793655880,
-   "latency_ms": 52.7
+   "items": 3,
+   "ts": 1793667230,
+   "latency_ms": 42.1
   },
   "decrypt": {
    "ok": true,
-   "items": 5,
-   "ts": 1793655880,
-   "latency_ms": 38.9
+   "items": 2,
+   "ts": 1793667230,
+   "latency_ms": 37.1
   },
   "theblock": {
    "ok": true,
-   "items": 2,
-   "ts": 1793655880,
-   "latency_ms": 56.1
+   "items": 1,
+   "ts": 1793667230,
+   "latency_ms": 33.1
   }
  },
  "counts": {
@@ -342,9 +307,13 @@
    "backlog": 150,
    "stale": 141,
    "nuevas": 11
+  },
+  "2026-11-03": {
+   "nuevas": 6,
+   "etiquetadas": 11
   }
  },
- "updated_at": 1793655880,
+ "updated_at": 1793667230,
  "version": "0.1.0",
  "schema": 1,
  "aviso_inicio": 1793642808
