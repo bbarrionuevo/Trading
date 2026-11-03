@@ -408,7 +408,7 @@ class _Run:
             analysis["plan"] = p.as_dict()
             moved = news_move(candles, t0, price, p.side)
             analysis["movido_desde_la_noticia"] = None if moved is None else round(moved, 5)
-            why = chase_blocks(moved, p.sl_frac, p.tp_frac) + market_blocks(
+            why = chase_blocks(moved, p.sl_frac, p.tp_frac, sig.category) + market_blocks(
                 book, p.notional, self.limits, self.cfg, p.side, spread_z=z, last=tick["last"],
                 kyle_ratio=kyle_ratio(candles, minute(self.now)), fair=tick.get("fair") or None)
             if self.market.kind != "spot" and not liquidation_ok(1.0, p.side, p.sl_frac, float(inst.max_leverage),

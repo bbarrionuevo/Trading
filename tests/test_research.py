@@ -362,3 +362,32 @@ async def test_cli_avisar_manda_el_numero_por_telegram_y_no_lo_imprime(monkeypat
     assert "devolvió 0 mensajes" in out3 and "otro programa" in out3 and "@userinfobot" in out3
     for out in (out1, out2, out3):
         assert "5150" not in out and "6160" not in out and "777" not in out and TOKEN not in out
+
+
+async def test_estudio_de_listados_mide_la_reaccion_en_mexc():
+    import json as _json
+
+    from fake_mexc import FakeMexc
+    from tradingagent.research.history import listing_study
+
+    t_ann = T0_STUDY = 1793700000
+    clock = ManualClock(t_ann + 6 * 3600)
+    mk = FakeMexc(lambda sym, m: 100.0 * (1.2 if m >= (t_ann + 300) * 1000 else 1.0), clock)
+    arts = [{"title": "Binance Will List Foo (BTC) with Seed Tag Applied", "releaseDate": T0_STUDY * 1000},
+            {"title": "Binance Futures Will Launch USDⓈ-Margined ETHUSDT Perpetual Contract", "releaseDate": T0_STUDY * 1000},
+            {"title": "Binance Will Add Bar on Earn", "releaseDate": T0_STUDY * 1000}]
+
+    async def page(request):
+        page_no = int(request.query.get("pageNo", 1))
+        body = {"code": "000000", "data": {"catalogs": [{"articles": arts if page_no == 1 else []}]}}
+        return web.Response(text=_json.dumps(body), content_type="application/json")
+
+    app = mk.app()
+    app.router.add_get("/bapi", page)
+    async with serve(app) as url, aiohttp.ClientSession() as s:
+        rep = await listing_study(s, days=30, now=clock.time(), page_url=url + "/bapi?pageNo={page}", base=url)
+    kinds = {e["tipo"]: e for e in rep["eventos"]}
+    assert set(kinds) == {"listado_spot", "futuros"}                        # el de Earn no es un listado
+    assert kinds["listado_spot"]["simbolo_mexc"] == "BTC_USDT"
+    assert kinds["listado_spot"]["reaccion"]["r60"] > 0.15                  # subió 20 % después del anuncio
+    assert rep["resumen"]["listado_spot"]["r60"]["positivos"] == 1

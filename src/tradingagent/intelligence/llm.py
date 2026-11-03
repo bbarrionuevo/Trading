@@ -80,8 +80,9 @@ Return the JSON object required by the schema:
 - polarity: expected price direction for the named assets, from -1 (very negative) to 1 (very positive).
 - certainty: from 0 to 1, how firm the reported fact is (rumors, "reportedly", denials and speculation are low).
 - assets: tickers of what the event moves, only from this list (crypto, stocks, indexes, gold XAU, silver,
-  crude oil USOIL/UKOIL, S&P 500 SP500, Nasdaq 100 NAS100), only if the text names them: {assets}. For a
-  company use its stock ticker (Tesla is TSLA). Empty if none.
+  crude oil USOIL/UKOIL, S&P 500 SP500, Nasdaq 100 NAS100), only if the text names them: {assets}; or any
+  other ticker written as a ticker in the text, like "(FOO)" or "$FOO". For a company use its stock ticker
+  (Tesla is TSLA). Empty if none.
 - horizon_min: how long the price effect should last: 30, 60, 120 or 240 minutes.
 - new_event: true only if the text reports a new, material fact (not commentary or a recap).
 - relevance: 0 to 10, how directly the event is about the listed assets themselves (if several, the least
@@ -277,7 +278,7 @@ class LlmClassifier:
         estimate = (len(SYSTEM) + len(text)) / 3 * USD_IN + MAX_TOKENS * USD_OUT
         if not self.budget.allows(self._now(), self.limit_usd, estimate):
             return LlmResult(None, "presupuesto_agotado")
-        system = SYSTEM.replace("{assets}", ", ".join(asset_mod.all_keys()))
+        system = SYSTEM.replace("{assets}", ", ".join(asset_mod.liquid_keys()))
         t0 = time.monotonic()
         try:
             async with self._sem:

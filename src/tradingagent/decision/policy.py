@@ -193,12 +193,19 @@ def news_move(candles: dict, t_pub: float | None, price_now: float, side: int) -
     return (price_now / float(c[0]) - 1) * side
 
 
-def chase_blocks(move: float | None, sl_frac: float, tp_frac: float) -> list[str]:
-    """No correr detrás del precio: si desde la noticia ya recorrió el objetivo, la ganancia ya la tomaron otros;
-    si fue en contra más que el stop, el mercado no le cree a la noticia (o pesa otra cosa)."""
+# Categorías cuyo efecto sigue después del primer salto (estudio del 3-nov, docs/ESTUDIO-LISTADOS.md: con los
+# listados spot de Binance la moneda siguió subiendo en MEXC hasta la hora, mediana +12,5 % a los 5 min y +28 % a
+# los 60). Ahí, que ya se haya movido a favor no es motivo para no entrar.
+DRIFT = {"listado"}
+
+
+def chase_blocks(move: float | None, sl_frac: float, tp_frac: float, category: str = "") -> list[str]:
+    """No correr detrás del precio: si desde la noticia ya recorrió el objetivo, la ganancia ya la tomaron otros
+    (salvo en las categorías que siguen de largo, `DRIFT`); si fue en contra más que el stop, el mercado no le
+    cree a la noticia (o pesa otra cosa)."""
     if move is None:
         return []
-    if move >= tp_frac:
+    if move >= tp_frac and category not in DRIFT:
         return [f"ya_recorrio_el_objetivo:{move * 100:+.2f}%"]
     if move <= -sl_frac:
         return [f"el_mercado_va_en_contra:{move * 100:+.2f}%"]

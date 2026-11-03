@@ -93,6 +93,11 @@ Binance) y la PC del dueño (instalador completo, Telegram, tarea `trading-agent
   chicas; el libro se revisa igual contra el tamaño de la orden.
 - Tickers también como `FOO/USDT` ("OKX to list FOO/USDT").
 
+- **Estudio de listados** (`research/history.py`, `estudio-listados`, `docs/ESTUDIO-LISTADOS.md`): listados spot
+  de Binance siguen subiendo hasta la hora (mediana +28 % a 60 min, n = 7) → `policy.DRIFT` los exime de "ya
+  recorrió el objetivo"; lanzamientos de futuros saltan y se devuelven (≈ 0 % a 60 min, n = 9) → no se operan.
+  Universo con monedas chicas (≥ 0,1 M USDT/día) reconocidas solo por su ticker escrito.
+
 ## Próximo: aprender de la historia y reaccionar más rápido (pedido del dueño, 3-nov)
 
 > "Quizás sea bueno también buscar en historial para que pueda entender más rápido cómo repercute las noticias

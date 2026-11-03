@@ -64,3 +64,18 @@ async def test_un_listado_oficial_entra_por_la_misma_tuberia_y_se_reconoce_la_mo
     assert sig.category == "listado" and sig.assets == ("FOO",) and sig.polarity > 0
     assert classify("OKX to list FOO/USDT for spot trading").assets == ("FOO",)
     assert classify("Foo fighters will tour").assets != ("FOO",)          # la palabra suelta no es el ticker
+
+
+def test_universo_con_monedas_chicas_solo_por_su_ticker_escrito():
+    from tradingagent.marketdata import universe as uni_mod
+
+    det = [{"symbol": s, "baseCoin": b, "baseCoinName": b, "quoteCoin": "USDT", "state": 0, "apiAllowed": True,
+            "type": 1} for s, b in (("MARS_USDT", "MARS"), ("BIG_USDT", "BIG"), ("DUST_USDT", "DUST"))]
+    tick = [{"symbol": "MARS_USDT", "amount24": 300_000}, {"symbol": "BIG_USDT", "amount24": 5e6},
+            {"symbol": "DUST_USDT", "amount24": 10_000}]
+    u = uni_mod.build(det, tick)
+    assert u.keys() == {"MARS", "BIG"} and u.liquid_keys() == {"BIG"}      # la casi sin volumen no entra
+    assets.register(u.by_key.values())
+    assert assets.liquid_keys().count("MARS") == 0 and "BIG" in assets.liquid_keys()
+    assert classify("Binance Will List Mars Token (MARS)").assets == ("MARS",)
+    assert assets.detect("Mars mission launches") == []
