@@ -20,6 +20,14 @@ def _home(tmp_path, monkeypatch):
         monkeypatch.delenv(k, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _universe():
+    """El universo de MEXC que un test registra (acciones, índices...) no se filtra a los demás tests."""
+    from tradingagent.research import assets
+    yield
+    assets.register([])
+
+
 @contextlib.asynccontextmanager
 async def serve(app: web.Application):
     """Servidor HTTP real en 127.0.0.1 con puerto libre. Devuelve la URL base."""

@@ -46,6 +46,43 @@ _NOT_ASSET = re.compile(
     r"ethereum (classic|name service|pow))\b")
 
 
+# El resto del universo de MEXC (acciones, índices, metales, petróleo y criptos fuera de las de arriba), que se
+# carga en vivo (marketdata/universe.py). Para no inventar activos (C-1), su ticker solo cuenta escrito como
+# ticker: "$FOO", "(FOO)", "FOO shares/stock/token/coin", "NASDAQ: FOO"; o por un nombre conocido ("Tesla").
+_EXTRA: set[str] = set()
+_EXTRA_NAME_RE: dict[str, re.Pattern] = {}
+_EXTRA_TICKER_RE: re.Pattern | None = None
+
+
+def register(entries) -> int:
+    """Suma al reconocimiento los activos del universo operable (los `Entry` de marketdata/universe.py)."""
+    global _EXTRA_TICKER_RE
+    extra = [e for e in entries if e.key not in ASSETS]
+    _EXTRA.clear()
+    _EXTRA.update(e.key for e in extra)
+    _EXTRA_NAME_RE.clear()
+    for e in extra:
+        if e.names:
+            _EXTRA_NAME_RE[e.key] = re.compile(r"\b(" + "|".join(map(re.escape, e.names)) + r")\b", re.IGNORECASE)
+    if not _EXTRA:
+        _EXTRA_TICKER_RE = None
+        return 0
+    alt = "|".join(map(re.escape, sorted(_EXTRA, key=len, reverse=True)))
+    _EXTRA_TICKER_RE = re.compile(
+        rf"\$({alt})(?![A-Za-z0-9])|\(({alt})\)|(?<![A-Za-z0-9])({alt})(?=\s+(?:shares|stock|stocks|token|tokens|coin|"
+        rf"futures)\b)|(?:NASDAQ|NYSE|Nasdaq|Nyse)\s*:\s*({alt})(?![A-Za-z0-9])")
+    return len(_EXTRA)
+
+
+def known(asset: str) -> bool:
+    """¿Es un activo que el programa reconoce (los de siempre o el universo de MEXC)?"""
+    return asset in ASSETS or asset in _EXTRA
+
+
+def all_keys() -> list[str]:
+    return sorted(set(ASSETS) | _EXTRA)
+
+
 def detect(text: str, limit: int = 3) -> list[str]:
     """Activos mencionados, en orden de primera aparición (máximo `limit`)."""
     text = _NOT_ASSET.sub(lambda m: " " * len(m.group(0)), text)
@@ -60,6 +97,16 @@ def detect(text: str, limit: int = 3) -> list[str]:
             pos.append(t.start())
         if pos:
             found.append((min(pos), a))
+    first: dict[str, int] = {}
+    for a, rx in _EXTRA_NAME_RE.items():
+        m = rx.search(text)
+        if m:
+            first[a] = m.start()
+    if _EXTRA_TICKER_RE is not None:
+        for m in _EXTRA_TICKER_RE.finditer(text):
+            a = next(g for g in m.groups() if g)
+            first[a] = min(first.get(a, m.start()), m.start())
+    found += [(pos, a) for a, pos in first.items()]
     return [a for _, a in sorted(found)][:limit]
 
 

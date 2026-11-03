@@ -14,6 +14,7 @@ from decimal import Decimal as D
 
 from ..execution.instruments import Instrument, InstrumentRegistry
 from ..marketdata import mexc
+from ..marketdata import universe as universe_mod
 from ..marketdata.providers import MarketDataError
 from .labeler import MIN, CandleStore
 
@@ -35,9 +36,21 @@ class MexcFutures:
         self.sizes: dict[str, D] = {}
         self.mmr: dict[str, float] = {}
         self._funding: dict[str, dict] = {}
+        self.universe = universe_mod.Universe()
 
     def symbol(self, asset: str) -> str:
-        return mexc.contract(asset)
+        """El contrato de un activo: del universo de MEXC (TSLA → TESLA_USDT, XAU → XAU_USDT) o el de siempre."""
+        return self.universe.symbol(asset) or mexc.contract(asset)
+
+    async def load_universe(self, session, cache, now: float | None = None) -> int:
+        """Todo lo operable en MEXC futuros (criptos, acciones, índices, metales, petróleo) para que el agente
+        opere lo que mueva la noticia. Se renueva solo cada 6 h (caché en disco)."""
+        from ..research import assets as asset_mod
+        uni = await universe_mod.load(session, cache, base=self.base, now=now)
+        if len(uni):
+            self.universe = uni
+            asset_mod.register(uni.by_key.values())
+        return len(self.universe)
 
     async def instruments(self, session, symbols, cache: dict, now: float) -> InstrumentRegistry:
         for sym in symbols:

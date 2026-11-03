@@ -56,7 +56,8 @@ EVENT_CUES = re.compile(
     r"paus\w*|freez\w*|froze\w*|seiz\w*|arrest\w*|launch\w*|partner\w*|acquir\w*|merg\w*|invest\w*|"
     r"buy(s|ing)?|bought|purchas\w*|sell(s|ing)?|sold|dump\w*|etfs?|sec|cftc|fed|fomc|rates?|cut(s)?|hike[sd]?|"
     r"inflation|cpi|unlock\w*|burn\w*|buybacks?|upgrade\w*|fork\w*|outage\w*|bankrupt\w*|insolven\w*|"
-    r"withdraw\w*|treasury|reserves?|integrat\w*|adopt\w*)\b")
+    r"withdraw\w*|treasury|reserves?|integrat\w*|adopt\w*|earnings|beats?|miss(es|ed)?|guidance|outlook|"
+    r"revenue|profit\w*|takeover|merger|downgrad\w*|recall\w*|tariffs?|opec|sanction\w*)\b")
 TIMEOUT_S = 8.0
 MAX_CERTAINTY = 0.8                               # sin calibrar, la IA nunca está "segura" del todo
 CATEGORIES = sorted({r.category for r in RULES} | NOT_TRADABLE)
@@ -73,12 +74,14 @@ Return the JSON object required by the schema:
   etf (ETF approvals, rejections, delays, flows), macro (central banks, rates, inflation), desbloqueo (token
   unlocks), caida_red (network outage), listado (new exchange listing), tesoreria (company or state buying
   crypto), adopcion (partnerships, integrations, payments), quema (token burns, buybacks), mejora_red (network
-  upgrade going live), precio (a report of a price move that already happened), otro (anything else:
-  opinion, analysis, previews, education).
+  upgrade going live), resultados (company earnings beat or miss, guidance raised or cut), fusion (mergers,
+  acquisitions, takeover bids), precio (a report of a price move that already happened), otro (anything
+  else: opinion, analysis, previews, education).
 - polarity: expected price direction for the named assets, from -1 (very negative) to 1 (very positive).
 - certainty: from 0 to 1, how firm the reported fact is (rumors, "reportedly", denials and speculation are low).
-- assets: tickers of the crypto assets the event is about, only from this list, only if the text names them:
-  {assets}. Empty if none.
+- assets: tickers of what the event moves, only from this list (crypto, stocks, indexes, gold XAU, silver,
+  crude oil USOIL/UKOIL, S&P 500 SP500, Nasdaq 100 NAS100), only if the text names them: {assets}. For a
+  company use its stock ticker (Tesla is TSLA). Empty if none.
 - horizon_min: how long the price effect should last: 30, 60, 120 or 240 minutes.
 - new_event: true only if the text reports a new, material fact (not commentary or a recap).
 - relevance: 0 to 10, how directly the event is about the listed assets themselves (if several, the least
@@ -98,7 +101,7 @@ SCHEMA = {
         "category": {"type": "string", "enum": CATEGORIES},
         "polarity": {"type": "number"},
         "certainty": {"type": "number"},
-        "assets": {"type": "array", "items": {"type": "string", "enum": sorted(asset_mod.ASSETS)}},
+        "assets": {"type": "array", "items": {"type": "string"}},   # el universo cambia: se valida abajo (C-1)
         "horizon_min": {"type": "integer", "enum": list(HORIZONS)},
         "new_event": {"type": "boolean"},
         "relevance": {"type": "integer", "enum": SCALE},
@@ -194,7 +197,8 @@ def validate(data, title: str, body: str, fallback: Signal) -> tuple[Signal | No
     if any(isinstance(x, bool) or not isinstance(x, int | float) or not 0 <= x <= 10 for x in scores):
         return None, "escala_fuera_de_rango"
     mentioned = set(asset_mod.detect(f"{title} {body[:600]}", limit=10))
-    grounded = tuple(a for a in dict.fromkeys(data["assets"]) if a in asset_mod.ASSETS and a in mentioned)
+    grounded = tuple(a for a in dict.fromkeys(str(x).upper() for x in data["assets"] if isinstance(x, str))
+                     if asset_mod.known(a) and a in mentioned)
     if not data["new_event"] or cat in NOT_TRADABLE:
         return Signal("precio" if cat == "precio" else "otro", 0.0, 0.0, grounded or fallback.assets, 0, ("llm",),
                       version=VERSION, certainty=0.0), ""
@@ -273,7 +277,7 @@ class LlmClassifier:
         estimate = (len(SYSTEM) + len(text)) / 3 * USD_IN + MAX_TOKENS * USD_OUT
         if not self.budget.allows(self._now(), self.limit_usd, estimate):
             return LlmResult(None, "presupuesto_agotado")
-        system = SYSTEM.replace("{assets}", ", ".join(sorted(asset_mod.ASSETS)))
+        system = SYSTEM.replace("{assets}", ", ".join(asset_mod.all_keys()))
         t0 = time.monotonic()
         try:
             async with self._sem:

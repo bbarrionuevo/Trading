@@ -63,6 +63,25 @@ Binance) y la PC del dueño (instalador completo, Telegram, tarea `trading-agent
   Los porcentajes de riesgo del sobre no cambiaron (1 % por operación, 40 %, 80 %, 30 %, 2 %, 4 %, 8 %, 1x).
 - Ruido de Windows (WinError 10054 al cerrar conexiones) fuera de `errores.jsonl`.
 
+## Todo lo que mueva la noticia (3-nov, noche)
+
+- Pedido del dueño: "operar con distintas monedas, cripto, acciones o lo que sea necesario según la noticia".
+- `marketdata/universe.py`: el catálogo público de MEXC futuros (activos, por API, con volumen de 24 h ≥ 2 M
+  USDT), unos 120 activos: criptos, acciones, índices, metales y petróleo. Caché `datos/universo-mexc.json`,
+  renovada cada 6 h. `research/assets.register` suma esos activos al reconocimiento (nombres de empresas y
+  materias primas; tickers solo escritos como ticker) y `MexcFutures.symbol` los mapea (TSLA → TESLA_USDT).
+- La IA nombra cualquier activo del universo (la lista va en el prompt) y se valida igual (C-1).
+- Categorías nuevas: `resultados` (supera o no lo esperado, sube o baja la guía) y `fusion` (siempre la decide
+  la IA: la comprada sube, la que compra suele bajar).
+- Fuentes nuevas: `cnbc.top`, `cnbc.earnings`, `seekingalpha`, `investing`.
+- Armado real con activos "todos" por defecto.
+- **MEXC spot, todavía no (datos del 3-nov):** de 1.367 pares USDT, solo 22 mueven ≥ 2 M USDT por día y solo
+  6 no tienen futuro en MEXC (ZIG, PUMP, XAUT, UPC y dos stablecoins). Futuros a 1x cobran menos (0 a 0,02 %
+  contra 0,05 %), permiten cortos y no se liquidan. Cuando aparezca un caso (un listado nuevo solo en spot y
+  líquido): `MexcSpot` como `BinanceSpot` (la API v3 de MEXC es compatible en libro, velas y ticker; los
+  filtros vienen como precisiones: `quotePrecision`, `baseAssetPrecision`, `baseSizePrecision`,
+  `quoteAmountPrecision`), primero en práctica; el real necesita enmendar A-3 (`/api/v3/order`).
+
 ## Próximo: aprender de la historia y reaccionar más rápido (pedido del dueño, 3-nov)
 
 > "Quizás sea bueno también buscar en historial para que pueda entender más rápido cómo repercute las noticias
