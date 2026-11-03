@@ -84,6 +84,50 @@ def quiet_connection_resets(loop, context) -> None:
     loop.default_exception_handler(context)
 
 
+class OwnerActions:
+    """Lo que el dueño puede pedir por Telegram (alerts/commands.py): informar y bajar riesgo, nunca armar."""
+
+    def __init__(self, agent: "Agent"):
+        self.agent = agent
+
+    async def status_text(self) -> str:
+        from .execution.live import arming
+        a, home = self.agent, paths.home()
+        lines = ["📊 Estado"]
+        if a.trader is not None:
+            lines += a.trader.status_lines("Práctica")
+        if a.real_trader is not None:
+            lines += a.real_trader.status_lines("Simulacro" if a.real_trader.simulated else "💵 DINERO REAL")
+        ok, why, data = arming.status(home, a.env.get("MEXC_ACCESS_KEY"))
+        if data:
+            left = (float(data.get("vence", 0)) - time.time()) / 86400
+            lines.append(f"Armado ({'simulacro' if data.get('simulacro') else 'dinero real'}): "
+                         + (f"opera, vence en {left:.0f} días" if ok else f"no abre nada nuevo ({why})"))
+        else:
+            lines.append("Dinero real: no armado")
+        if (home / "KILL").exists():
+            lines.append("⏸ En pausa (/seguir para volver)")
+        return "\n".join(lines)
+
+    async def disarm(self) -> str:
+        from .execution.live import arming
+        had = arming.disarm(paths.home())
+        return ("🔒 Dinero real desarmado: no abro nada nuevo. Lo abierto sale normal con sus límites." if had
+                else "No había nada armado.")
+
+    async def close_all(self, why: str) -> str:
+        from .execution.live import arming
+        arming.disarm(paths.home())
+        t = self.agent.real_trader
+        if t is None:
+            return "No hay operador de dinero real corriendo: no había nada que cerrar. Quedó desarmado."
+        before, left = await t.close_all(why)
+        if left:
+            return (f"Cerré {before - left} de {before}. Quedan {left} abiertas: cerralas a mano en MEXC o en la PC "
+                    "con python -m tradingagent cerrar-todo. Quedó desarmado.")
+        return f"✅ Cerré todo ({before} posiciones) y quedó desarmado. Para volver: armar-real en la PC."
+
+
 class Agent:
     def __init__(self, cfg: dict, env, *, clock=None, sources: list[SourceSpec] | None = None, book_provider=None,
                  telegram_base_url: str | None = None, printer=print, trader_market=None, llm_base_url=None):
@@ -151,6 +195,15 @@ class Agent:
             await (trader or self.trader).on_news(ev)
         except Exception:                                    # una noticia mal procesada no tira el agente
             log.exception("falló la evaluación de %s", ev.item.id)
+
+    def _build_commands(self):
+        from .alerts.commands import POLL_S, Commands
+        token, chat = self.env.get("TELEGRAM_BOT_TOKEN"), self.env.get("TELEGRAM_CHAT_ID")
+        if not (self.cfg["alerts"].get("telegram") and self.cfg["alerts"].get("ordenes", True) and token and chat):
+            return None
+        transport = TelegramTransport(token, chat, base_url=self.telegram_base_url or api_base(self.env),
+                                      timeout_s=POLL_S + 15)
+        return Commands(transport, paths.home(), OwnerActions(self), chat_id=chat)
 
     async def _probe_loop(self, session, first_s: float = 90.0) -> None:
         """Una vez por día: qué fuentes candidatas se pueden leer desde esta PC (research/probe.py). El resultado
@@ -306,6 +359,9 @@ class Agent:
                           asyncio.create_task(self._print_accepted(), name="consola"),
                           asyncio.create_task(self._watch_stop_file(stop_file), name="parada")]
                 tasks.append(asyncio.create_task(self._probe_loop(session), name="red"))
+                commands = self._build_commands()
+                if commands is not None:                             # órdenes del dueño por Telegram
+                    tasks.append(asyncio.create_task(commands.run(self.stop_event), name="ordenes"))
                 if self.trader is not None:
                     from .live import learn_loop
                     tasks.append(asyncio.create_task(self.trader.watch(self.stop_event), name="vigilancia"))
@@ -325,7 +381,8 @@ class Agent:
                     if self.news_tasks:                   # una noticia a medio operar se termina y se guarda
                         await asyncio.wait(set(self.news_tasks), timeout=10)
                     for t in tasks:
-                        if t.get_name() in ("lag", "consola", "aprendizaje", "red") or t.get_name().startswith("fuente-"):
+                        if t.get_name() in ("lag", "consola", "aprendizaje", "red", "ordenes") or \
+                                t.get_name().startswith("fuente-"):
                             t.cancel()
                     await asyncio.wait(tasks, timeout=15)
                     if webhook:

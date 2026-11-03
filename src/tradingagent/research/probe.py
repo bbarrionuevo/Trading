@@ -24,15 +24,33 @@ CANDIDATES = {
     "kraken.activos": "https://api.kraken.com/0/public/Assets",
     "bls.cpi": "https://www.bls.gov/feed/cpi.rss",
 }
+# Las mismas, verificando el certificado con el almacén de Windows (truststore) en vez del de Python: en la PC
+# los avisos de Upbit fallan con "SSLCertVerificationError" (la cadena del servidor está incompleta y Windows la
+# completa solo; Python no).
+OS_TRUST = {"upbit.avisos.windows": CANDIDATES["upbit.avisos"]}
 SAMPLE_CHARS = 300
 EVERY_S = 86_400
 
 
-async def probe(session, candidates: dict | None = None, timeout_s: float = 15.0) -> dict:
-    async def one(name: str, url: str) -> tuple[str, dict]:
+def os_trust_ssl():
+    """Contexto TLS que verifica con el almacén del sistema (Windows/macOS/Linux), o None si no está."""
+    try:
+        import ssl
+
+        import truststore
+        return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    except Exception:                                                # noqa: BLE001 (sin truststore, sin esta prueba)
+        return None
+
+
+async def probe(session, candidates: dict | None = None, timeout_s: float = 15.0,
+                os_trust: dict | None = None) -> dict:
+    ctx = os_trust_ssl()
+
+    async def one(name: str, url: str, ssl_ctx=None) -> tuple[str, dict]:
         t0 = time.monotonic()
         try:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout_s),
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout_s), ssl=ssl_ctx if ssl_ctx else True,
                                    headers={"User-Agent": "Mozilla/5.0 (compatible; TradingAgent/0.1)"}) as r:
                 body = await r.content.read(200_000)
                 return name, {"codigo": r.status, "ms": round((time.monotonic() - t0) * 1000),
@@ -41,5 +59,8 @@ async def probe(session, candidates: dict | None = None, timeout_s: float = 15.0
             return name, {"codigo": None, "ms": round((time.monotonic() - t0) * 1000),
                           "error": f"{type(e).__name__}: {redact(str(e))[:120]}"}
 
-    pairs = await asyncio.gather(*(one(n, u) for n, u in (candidates or CANDIDATES).items()))
+    jobs = [one(n, u) for n, u in (candidates or CANDIDATES).items()]
+    if ctx is not None:
+        jobs += [one(n, u, ctx) for n, u in (OS_TRUST if os_trust is None else os_trust).items()]
+    pairs = await asyncio.gather(*jobs)
     return {"ts": round(time.time()), "fuentes": dict(pairs)}

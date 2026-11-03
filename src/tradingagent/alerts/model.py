@@ -220,6 +220,7 @@ EXIT_REASON_ES = {
     "freno": "Lo cerró el freno de seguridad (la cuenta perdió demasiado en el día).",
     "liquidacion": "El precio saltó de golpe más allá del límite y la posición se liquidó.",
     "stop_movil": "El precio retrocedió desde su mejor nivel y salí con la ganancia asegurada{level}.",
+    "pedido_del_dueno": "La cerré porque lo pediste.",
     "cerrada_en_el_exchange": "MEXC ya la había cerrado sola (el stop de emergencia) o la cerraste a mano. La saqué "
                               "de la cuenta del programa con un precio estimado: el resultado exacto está en MEXC.",
 }
@@ -277,7 +278,8 @@ def system_alert(text: str, *, silent: bool = True, key: str = "") -> Alert:
 
 def startup_alert(mode: str, sources_active: int, sources_total: int, version: str, extra: str = "") -> Alert:
     text = (f"✅ <b>TRADING está funcionando</b> · {esc(mode_es(mode))}\nLeo {sources_active} de {sources_total} "
-            "fuentes de noticias. Te aviso cada operación y te mando un resumen por día."
+            "fuentes de noticias. Te aviso cada operación y te mando un resumen por día. Mandame /estado para ver "
+            "cómo va, /pausa para frenar o /ayuda para ver todas las órdenes."
             + (f"\n{esc(extra)}" if extra else ""))
     return Alert(Priority.SYSTEM, "startup", clip(text), key="startup")
 
@@ -294,8 +296,8 @@ def daily_alert(day: str, *, mode: str, closed: int, won: int, pnl, equity, init
     lines = [f"📊 <b>Resumen del {dd}/{mm}</b> · {esc(mode_es(mode))}", esc(result),
              f"Cuenta: {esc(usdt_es(equity, False))} (empezó con {esc(usdt_es(initial, False))})."]
     if total_closed < needed:
-        lines.append(f"Para pasar a dinero real hacen falta {needed} operaciones cerradas con buen resultado: van "
-                     f"{total_closed}.")
+        lines.append(f"Van {total_closed} operaciones cerradas: con {needed} ya se puede medir bien si el sistema "
+                     "gana.")
     if llm:
         calls, usd, fails = llm.get("calls", 0), llm.get("usd", 0.0), llm.get("failures", 0)
         line = f"IA: {calls} consulta{'s' if calls != 1 else ''} ({esc(num_es(round(usd, 4)))} USD)."

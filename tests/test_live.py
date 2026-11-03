@@ -189,7 +189,7 @@ async def test_resumen_diario_de_la_cuenta_de_la_pc(tmp_path):
     texts = [x for x in alerts.texts() if "Resumen del 02/11" in x]
     assert len(texts) == 1
     assert "1 operación cerrada (1 ganada): +0,50 USDT." in texts[0] and "Cuenta: 120,00 USDT" in texts[0]
-    assert "Para pasar a dinero real hacen falta 60 operaciones" in texts[0]
+    assert "con 60 ya se puede medir bien si el sistema gana" in texts[0]
 
 
 async def test_opera_la_accion_que_mueve_la_noticia_con_el_universo_de_mexc(tmp_path):

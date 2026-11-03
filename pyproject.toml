@@ -12,6 +12,7 @@ dependencies = [
     "anthropic==2.4.0",
     "defusedxml==0.7.1",
     "PyYAML==6.0.3",
+    "truststore==0.10.1",
 ]
 
 [project.optional-dependencies]
