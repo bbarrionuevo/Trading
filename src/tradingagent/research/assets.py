@@ -43,7 +43,8 @@ _TICKER_RE = {a: re.compile(r"(?<![A-Za-z0-9])\$?(" + "|".join(tickers) + r")(?!
 # (en la PC, el 3-nov, "Mercado Bitcoin", un exchange de Brasil, abrió un corto en BTC).
 _NOT_ASSET = re.compile(
     r"(?i)\b(mercado bitcoin|bitcoin (cash|sv|gold|depot|suisse|magazine|well|group)|bitcoin\.com|"
-    r"ethereum (classic|name service|pow))\b")
+    r"ethereum (classic|name service|pow))\b|"
+    r"\([A-Z, ]*마켓\)")                                  # Upbit: "(KRW, BTC, USDT 마켓)" son mercados, no la moneda
 
 
 # El resto del universo de MEXC (acciones, índices, metales, petróleo y criptos fuera de las de arriba), que se

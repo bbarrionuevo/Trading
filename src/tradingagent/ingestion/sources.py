@@ -45,6 +45,7 @@ class SourceSpec:
     cooldown_s: float = 600.0
     note: str = ""
     format: str = "rss"                  # rss (RSS/Atom) o el lector JSON de ingestion/announcements.py
+    os_trust: bool = False               # verificar el certificado con el almacén del sistema (truststore): Upbit
 
 
 @dataclass
@@ -110,6 +111,15 @@ class PollingSource:
         self._first = not d.get("first_done", False)
 
     # -- red ----------------------------------------------------------------------------------
+    def _ssl(self):
+        """Con `os_trust`, el almacén de certificados del sistema (en Windows completa cadenas que Python no)."""
+        if not self.spec.os_trust:
+            return True
+        if not hasattr(self, "_os_ctx"):
+            from ..research.probe import os_trust_ssl
+            self._os_ctx = os_trust_ssl()
+        return self._os_ctx or True
+
     async def fetch(self) -> bytes | None:
         """Cuerpo del feed, o None si no cambió (304). Lanza FetchError ante cualquier falla."""
         headers = {"User-Agent": USER_AGENT, "Accept": "application/rss+xml, application/atom+xml, application/xml;q=0.9, */*;q=0.5",
@@ -120,7 +130,7 @@ class PollingSource:
             headers["If-Modified-Since"] = self._last_modified
         t0 = self.clock.monotonic()
         try:
-            async with self.session.get(self.spec.url, headers=headers,
+            async with self.session.get(self.spec.url, headers=headers, ssl=self._ssl(),
                                         timeout=aiohttp.ClientTimeout(total=self.spec.timeout_s)) as r:
                 if r.status == 304:
                     return None
