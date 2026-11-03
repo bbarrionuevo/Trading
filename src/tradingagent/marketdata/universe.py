@@ -6,8 +6,8 @@ MEXC tiene más de mil perpetuos USDT operables por API: criptos, acciones (Tesl
 `contract/ticker`):
 
 - solo contratos activos, en USDT y con `apiAllowed` (los demás no se pueden operar por API);
-- solo los líquidos: volumen de 24 h ≥ `MIN_ADV_USDT` (un contrato sin volumen es una trampa: spread y
-  deslizamiento comen cualquier ventaja);
+- solo los líquidos: volumen de 24 h ≥ `MIN_ADV_USDT` (1 M USDT; un contrato sin volumen es una trampa: spread
+  y deslizamiento comen cualquier ventaja, y antes de cada orden se revisan spread y profundidad);
 - la clave de cada activo es como lo nombra la noticia: el ticker cripto (BTC), el de la acción (TSLA aunque
   el contrato sea TESLA_USDT) o el nombre del metal o el índice (XAU, SP500);
 - nombres para reconocerlo en un texto: los de las empresas y materias primas que más noticias generan (para
@@ -25,7 +25,7 @@ from .. import paths
 from . import mexc
 
 log = logging.getLogger("tradingagent.universe")
-MIN_ADV_USDT = 2_000_000
+MIN_ADV_USDT = 1_000_000          # los listados suelen ser monedas chicas; el libro se revisa contra la orden
 TTL_S = 6 * 3600
 CRYPTO, STOCK, INDEX, COMMODITY = "cripto", "accion", "indice", "materia_prima"
 _TICKER = re.compile(r"^[A-Z0-9]{1,12}$")

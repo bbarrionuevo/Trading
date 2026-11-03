@@ -48,7 +48,7 @@ _NOT_ASSET = re.compile(
 
 # El resto del universo de MEXC (acciones, índices, metales, petróleo y criptos fuera de las de arriba), que se
 # carga en vivo (marketdata/universe.py). Para no inventar activos (C-1), su ticker solo cuenta escrito como
-# ticker: "$FOO", "(FOO)", "FOO shares/stock/token/coin", "NASDAQ: FOO"; o por un nombre conocido ("Tesla").
+# ticker: "$FOO", "(FOO)", "FOO/USDT", "FOO shares/stock/token/coin", "NASDAQ: FOO"; o por un nombre conocido.
 _EXTRA: set[str] = set()
 _EXTRA_NAME_RE: dict[str, re.Pattern] = {}
 _EXTRA_TICKER_RE: re.Pattern | None = None
@@ -70,7 +70,7 @@ def register(entries) -> int:
     alt = "|".join(map(re.escape, sorted(_EXTRA, key=len, reverse=True)))
     _EXTRA_TICKER_RE = re.compile(
         rf"\$({alt})(?![A-Za-z0-9])|\(({alt})\)|(?<![A-Za-z0-9])({alt})(?=\s+(?:shares|stock|stocks|token|tokens|coin|"
-        rf"futures)\b)|(?:NASDAQ|NYSE|Nasdaq|Nyse)\s*:\s*({alt})(?![A-Za-z0-9])")
+        rf"futures)\b)|(?:NASDAQ|NYSE|Nasdaq|Nyse)\s*:\s*({alt})(?![A-Za-z0-9])|(?<![A-Za-z0-9])({alt})/USDT?\b")
     return len(_EXTRA)
 
 

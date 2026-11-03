@@ -130,7 +130,8 @@ CATEGORY_ES = {
 SOURCE_ES = {"fed.press": "la Reserva Federal", "fed.monetary": "la Reserva Federal (tasas de interés)",
              "sec.press": "la SEC (el regulador de EE. UU.)", "sec.edgar.8k": "la SEC (informe de una empresa)",
              "cnbc.top": "CNBC", "cnbc.earnings": "CNBC (resultados de empresas)", "seekingalpha": "Seeking Alpha",
-             "investing": "Investing.com"}
+             "investing": "Investing.com", "binance.listados": "Binance (anuncio oficial)",
+             "okx.listados": "OKX (anuncio oficial)", "bitget.listados": "Bitget (anuncio oficial)"}
 
 
 def category_es(category: str) -> str:

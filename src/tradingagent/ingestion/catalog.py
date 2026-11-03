@@ -12,6 +12,7 @@ import os
 from dataclasses import replace
 
 from ..core.events import TIER_MEDIA, TIER_OFFICIAL
+from .announcements import BINANCE_LISTINGS, BITGET_LISTINGS, OKX_LISTINGS
 from .sources import SourceSpec
 
 EDGAR_8K = ("https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&company=&dateb=&owner=include"
@@ -46,6 +47,14 @@ DEFAULT_SOURCES = (
                max_age_s=300, category="bolsa"),
     SourceSpec("investing", "https://www.investing.com/rss/news.rss", tier=TIER_MEDIA, interval_s=60,
                max_age_s=300, category="bolsa"),
+    # Anuncios OFICIALES de listados (APIs públicas en JSON, verificadas el 3-nov-2026): la noticia que más mueve
+    # un precio, al segundo en vez de los minutos que tardan los medios.
+    SourceSpec("binance.listados", BINANCE_LISTINGS, tier=TIER_OFFICIAL, interval_s=15, max_age_s=600,
+               category="listado", format="binance"),
+    SourceSpec("okx.listados", OKX_LISTINGS, tier=TIER_OFFICIAL, interval_s=20, max_age_s=600, category="listado",
+               format="okx"),
+    SourceSpec("bitget.listados", BITGET_LISTINGS, tier=TIER_OFFICIAL, interval_s=30, max_age_s=600,
+               category="listado", format="bitget"),
 )
 
 

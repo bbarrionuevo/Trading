@@ -82,6 +82,17 @@ Binance) y la PC del dueño (instalador completo, Telegram, tarea `trading-agent
   filtros vienen como precisiones: `quotePrecision`, `baseAssetPrecision`, `baseSizePrecision`,
   `quoteAmountPrecision`), primero en práctica; el real necesita enmendar A-3 (`/api/v3/order`).
 
+## Más inteligente (3-nov, noche)
+
+- **No corre detrás del precio** (`policy.news_move` / `chase_blocks`): si desde la publicación el precio ya
+  recorrió el objetivo, no entra (la ganancia ya la tomaron otros); si fue en contra más que el stop, tampoco
+  (el mercado no le cree a la noticia). El análisis de cada decisión guarda `movido_desde_la_noticia`.
+- **Anuncios oficiales de listados** (`ingestion/announcements.py`): Binance (catálogo 48), OKX y Bitget, cada
+  15 a 30 s, por la misma tubería que un RSS (`SourceSpec.format`). Bybit y Upbit bloquean por país.
+- El universo baja el piso de liquidez a 1 M USDT por día (~170 activos): los listados suelen ser monedas
+  chicas; el libro se revisa igual contra el tamaño de la orden.
+- Tickers también como `FOO/USDT` ("OKX to list FOO/USDT").
+
 ## Próximo: aprender de la historia y reaccionar más rápido (pedido del dueño, 3-nov)
 
 > "Quizás sea bueno también buscar en historial para que pueda entender más rápido cómo repercute las noticias

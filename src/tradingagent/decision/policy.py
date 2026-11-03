@@ -182,6 +182,29 @@ def plan(a: Assessment, sig: Signal, symbol: str, *, equity: float, cash: float,
                      cost, b_net, round(notional * (sl + cost), 6), sigma_1m, impact, schedule["tramos"]), []
 
 
+def news_move(candles: dict, t_pub: float | None, price_now: float, side: int) -> float | None:
+    """Cuánto se movió el precio A FAVOR (+) o EN CONTRA (−) del lado de la noticia desde que se publicó: de la
+    apertura del minuto de la publicación al precio de ahora. None sin hora creíble o sin la vela."""
+    if t_pub is None or price_now <= 0 or not side:
+        return None
+    c = candles.get(int(float(t_pub) * 1000) // 60_000 * 60_000)
+    if not c or float(c[0]) <= 0:
+        return None
+    return (price_now / float(c[0]) - 1) * side
+
+
+def chase_blocks(move: float | None, sl_frac: float, tp_frac: float) -> list[str]:
+    """No correr detrás del precio: si desde la noticia ya recorrió el objetivo, la ganancia ya la tomaron otros;
+    si fue en contra más que el stop, el mercado no le cree a la noticia (o pesa otra cosa)."""
+    if move is None:
+        return []
+    if move >= tp_frac:
+        return [f"ya_recorrio_el_objetivo:{move * 100:+.2f}%"]
+    if move <= -sl_frac:
+        return [f"el_mercado_va_en_contra:{move * 100:+.2f}%"]
+    return []
+
+
 def liquidation_ok(entry: float, side: int, sl: float, leverage: float, mmr: float, cfg: PolicyConfig) -> bool:
     """Futuros con margen aislado: la liquidación tiene que quedar a ≥ `min_liq_multiple` veces el stop."""
     dist = 1 / max(leverage, 1e-9) - mmr                    # distancia a la liquidación, fracción del precio
