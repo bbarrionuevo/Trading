@@ -8,6 +8,9 @@ del anuncio: a los 5, 15, 60 y 240 minutos, y el pico en 4 h. MEXC guarda velas 
 Resultado del 3-nov-2026 (docs/ESTUDIO-LISTADOS.md): los listados spot siguen subiendo hasta la hora (mediana
 +12,5 % a 5 min, +28 % a 60 min, n = 7); los lanzamientos de futuros saltan y se devuelven (mediana +5,9 % a 5 min,
 ≈ 0 % a 60 min, n = 9). Sirve para calibrar (solo con evidencia, C-5) y para la revisión diaria.
+
+`exchange="bybit"`: lo mismo con los avisos de Bybit ("Bybit to List Foo (FOO) on Spot" y los perpetuos de
+criptos; los "TradFi" son acciones y no cuentan). Su API solo responde desde la PC (desde la nube está bloqueada).
 """
 import asyncio
 import re
@@ -23,6 +26,10 @@ BINANCE_PAGE = ("https://www.binance.com/bapi/composite/v1/public/cms/article/li
                 "&pageNo={page}&pageSize=20")
 SPOT = re.compile(r"Binance Will List .+? \(([A-Z0-9]{2,15})\)")
 FUTURES = re.compile(r"Binance Futures Will Launch USD.-Margined ([A-Z0-9]{2,15}?)USDT Perpetual")
+BYBIT_PAGE = "https://api.bybit.com/v5/announcements/index?locale=en-US&type=new_crypto&limit=50&page={page}"
+BYBIT_SPOT = re.compile(r"(?i:Bybit\s+(?:to\s+|will\s+)?lists?)\s+.+?\(([A-Z0-9]{2,15})\)|"
+                        r"New listing:\s+([A-Z0-9]{2,15})/USDT\b")
+BYBIT_FUTURES = re.compile(r"New listing: (?:Listing of )?([A-Z0-9]{2,15}?)USDT (?:on Bybit )?Perpetual")
 HORIZONS_MIN = (5, 15, 60, 240)
 STEP_S = 300
 
@@ -51,6 +58,32 @@ async def binance_events(session, days: int, now: float, page_url: str = BINANCE
         if not arts or float(arts[-1].get("releaseDate") or 0) / 1000 < now - days * 86400:
             break
     return out
+
+
+async def bybit_events(session, days: int, now: float, page_url: str = BYBIT_PAGE, max_pages: int = 60) -> list[dict]:
+    """Listados spot y perpetuos de criptos anunciados por Bybit en los últimos `days` días (el primer aviso de cada
+    moneda: Bybit repite avisos, por ejemplo con promociones)."""
+    first: dict[tuple, dict] = {}
+    since = now - days * 86400
+    for page in range(1, max_pages + 1):                 # no vienen en orden estricto (el 3-nov la página 9 era toda
+        data = await _json(session, page_url.format(page=page))     # vieja y la 10 no): se leen todas (~37)
+        arts = ((data or {}).get("result") or {}).get("list") or []
+        if not arts:
+            break
+        await asyncio.sleep(0.2)
+        for a in arts:
+            t = float(a.get("publishTime") or a.get("dateTimestamp") or 0) / 1000
+            title = a.get("title") or ""
+            if t < since or "tradfi" in title.lower():                # TradFi: acciones, no criptos
+                continue
+            for kind, rx in (("listado_spot", BYBIT_SPOT), ("futuros", BYBIT_FUTURES)):
+                m = rx.search(title)
+                if m:
+                    key = (kind, next(g for g in m.groups() if g).upper())
+                    if key not in first or t < first[key]["t"]:
+                        first[key] = {"tipo": kind, "ticker": key[1], "t": t, "titulo": title}
+                    break
+    return sorted(first.values(), key=lambda e: e["t"])
 
 
 def reaction(candles: dict[int, tuple], t: float) -> dict | None:
@@ -83,10 +116,13 @@ def summarize(rows: list[dict]) -> dict:
     return out
 
 
-async def listing_study(session, *, days: int = 180, now: float | None = None, page_url: str = BINANCE_PAGE,
-                        base: str = mexc.BASE) -> dict:
+async def listing_study(session, *, days: int = 180, now: float | None = None, page_url: str | None = None,
+                        base: str = mexc.BASE, exchange: str = "binance") -> dict:
     now = time.time() if now is None else now
-    events = await binance_events(session, days, now, page_url)
+    if exchange == "bybit":
+        events = await bybit_events(session, days, now, page_url or BYBIT_PAGE)
+    else:
+        events = await binance_events(session, days, now, page_url or BINANCE_PAGE)
     rows = []
     for e in events:
         sym = f"{e['ticker']}_USDT"
@@ -101,4 +137,4 @@ async def listing_study(session, *, days: int = 180, now: float | None = None, p
             candles = {}
         rows.append({**e, "simbolo_mexc": sym, "reaccion": reaction(candles, e["t"])})
         await asyncio.sleep(0.2)
-    return {"ts": round(now), "dias": days, "eventos": rows, "resumen": summarize(rows)}
+    return {"ts": round(now), "dias": days, "exchange": exchange, "eventos": rows, "resumen": summarize(rows)}

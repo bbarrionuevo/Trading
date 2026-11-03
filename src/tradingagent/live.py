@@ -37,6 +37,9 @@ from .research.labeler import MIN, minute
 
 log = logging.getLogger("tradingagent.live")
 WATCH_S, HOUSEKEEP_S, LEARN_EVERY_S = 1.0, 30.0, 900.0
+# La caché del universo dura 6 h. Releerla en cada vuelta (30 s, por cuenta) costaba ~17 ms del bucle (leer 140 KB
+# y registrar ~1.000 tickers, medido en la PC el 3-nov) y dejó 1.538 líneas iguales en el log en un día.
+UNIVERSE_EVERY_S = 600.0
 
 
 class _LiveRun(shadow._Run):
@@ -65,6 +68,7 @@ class LiveTrader:
         self.paper_config = paper_config
         self.lock = asyncio.Lock()
         self.counts: dict[str, int] = {}
+        self._universe_at, self._universe_n = float("-inf"), None
 
     # -- arranque y estado ------------------------------------------------------------------------------
     async def start(self) -> None:
@@ -106,12 +110,19 @@ class LiveTrader:
                 "la pena, opero en segundos y te aviso.", silent=False))
 
     async def refresh_universe(self) -> None:
-        """Futuros de MEXC: todo lo operable (criptos, acciones, índices, metales y petróleo), renovado cada 6 h."""
+        """Futuros de MEXC: todo lo operable (criptos, acciones, índices, metales y petróleo), renovado cada 6 h.
+        Se mira cada `UNIVERSE_EVERY_S` (no en cada vuelta) y se avisa en el log solo si cambia la cantidad."""
         if not hasattr(self.market, "load_universe"):
             return
+        now = self.clock.time()
+        if now - self._universe_at < UNIVERSE_EVERY_S:
+            return
+        self._universe_at = now
         try:
             n = await self.market.load_universe(self.session, self.universe_cache)
-            log.info("universo de %s: %d activos operables", self.market.name, n)
+            if n != self._universe_n:
+                log.info("universo de %s: %d activos operables", self.market.name, n)
+                self._universe_n = n
         except Exception:                                              # sin universo, los de siempre
             log.exception("no pude cargar el universo de MEXC")
 

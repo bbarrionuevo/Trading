@@ -141,7 +141,7 @@ Siempre así: `cd $env:USERPROFILE\TRADING; .\.venv\Scripts\python -m tradingage
 | `cerrar-todo` | Emergencia: cancela y cierra todo lo real en MEXC, y desarma |
 | `sources` / `sources --check` | Qué fuentes están activas / leer cada una una vez |
 | `mexc-check` | Datos públicos de MEXC y si las claves leen la cuenta |
-| `estudio-listados` | Repite el estudio de listados de Binance (`datos\estudios\listados.json`) |
+| `estudio-listados` | Repite el estudio de listados de Binance (`datos\estudios\listados.json`); con `--exchange bybit`, el de Bybit (`listados-bybit.json`, solo desde la PC) |
 | `journal-verify` | Verifica que el diario firmado no se tocó |
 | `tablero` | El tablero local |
 
@@ -213,6 +213,8 @@ dueño qué hiciste y por qué.
   - **entrando a los 5 minutos, todo pierde**: llegar primero es todo.
 - **Lanzamientos de futuros de Binance** (n = 9): saltan y se devuelven. No se operan.
 - **OKX** (n = 4): sin efecto. Bitget: casi todo acciones. Apagados.
+- **Bybit** (3-nov, desde la PC): listados spot +0,4 % a 5 min (n = 4) y perpetuos +0,03 % (n = 48). Sin efecto: no
+  es fuente.
 - **Fed** (`docs/ESTUDIO-MACRO.md`, n = 4): reacción en los primeros minutos y después va para cualquier lado en BTC
   y los índices. Macro solo con menos de 90 s.
 - **Spread y profundidad** de las monedas chicas en MEXC: 0,4 a 6 bps y miles de USDT. No limitan órdenes de
@@ -237,8 +239,9 @@ dueño qué hiciste y por qué.
    avisos. Antes de armar, confirmar que el aprendizaje recalculado dejó `meta` sin κ = 0.
 2. **Upbit** (PR #22). La fuente `upbit.avisos` lee bien con el almacén de Windows (3-nov: 20 avisos de historia,
    sin fallas). Falta ver que un listado en wones ("신규 거래지원") se reconozca y opere.
-3. **Bybit:** desde la PC sus avisos andan (`red.json`). Estudiar si sus listados mueven el precio antes de
-   sumarlos (como OKX, quizá no). El estudio tiene que correr en la PC: desde la nube Bybit está bloqueado.
+3. ~~Bybit~~ **Estudiado el 3-nov desde la PC** (`estudio-listados --exchange bybit`, `docs/ESTUDIO-LISTADOS.md`):
+   en 180 días sus listados spot dieron +0,4 % a 5 min (n = 4 con futuro en MEXC; 6 de 10 ni cotizaban) y sus
+   perpetuos +0,03 % (n = 48). No mueve el precio como Binance: **no se suma como fuente**.
 4. **Proteger la ganancia del stop móvil en el exchange** (si se apaga la PC, hoy el stop de emergencia queda en
    el lugar inicial). Necesita sumar un endpoint de órdenes de stop a la lista de A-3: es ruta protegida, lo
    aprueba el dueño.
