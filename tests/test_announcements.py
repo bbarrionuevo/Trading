@@ -102,3 +102,33 @@ async def test_prueba_de_red_informa_que_fuentes_se_leen_desde_la_pc():
     assert f["bien.windows"]["codigo"] == 200                               # el intento con el almacén de Windows
     assert f["bien"]["codigo"] == 200 and "Upbit lists FOO" in f["bien"]["muestra"]
     assert f["bloqueada"]["codigo"] == 403 and f["caida"]["codigo"] is None and f["caida"]["error"]
+
+
+UPBIT = {"success": True, "data": {"total_pages": 41, "total_count": 806, "notices": [
+    {"listed_at": "2026-11-03T22:00:00+09:00", "first_listed_at": "2026-11-03T22:00:00+09:00", "id": 6730,
+     "title": "푸코인(FOO) 신규 거래지원 안내 (KRW, BTC, USDT 마켓)", "category": "거래"},
+    {"listed_at": "2026-10-30T16:00:00+09:00", "id": 6721, "title": "블러(BLUR) 거래지원 종료 안내 (11/30 15:00)",
+     "category": "거래"}]}}
+
+
+def test_avisos_de_upbit_en_coreano_listado_y_deslistado():
+    """Formato verificado desde la PC del dueño (3-nov): desde la nube Upbit bloquea por país."""
+    es = an.parse_upbit(json.dumps(UPBIT).encode())
+    assert [e.guid for e in es] == ["upbit:6730", "upbit:6721"]
+    assert parse_datetime(es[0].published) == parse_datetime("2026-11-03T13:00:00+00:00")
+    assets.register([Entry("FOO", "FOO_USDT", "cripto", 5e6), Entry("BLUR", "BLUR_USDT", "cripto", 5e6)])
+    new = classify(es[0].title)
+    assert new.category == "listado" and new.polarity > 0 and new.assets == ("FOO",)   # "BTC 마켓" no es BTC
+    gone = classify(es[1].title)
+    assert gone.category == "deslistado" and gone.polarity < 0 and gone.assets == ("BLUR",)
+    spec = {s.id: s for s in DEFAULT_SOURCES}["upbit.avisos"]
+    assert spec.enabled and spec.os_trust and spec.format == "upbit" and spec.interval_s <= 10
+
+
+def test_una_fuente_con_almacen_del_sistema_usa_ese_contexto_tls():
+    import ssl
+
+    spec = SourceSpec("x", "https://example.invalid/x", os_trust=True)
+    p = PollingSource(spec, None, ManualClock(0), None)
+    assert isinstance(p._ssl(), ssl.SSLContext)                            # truststore (almacén de Windows)
+    assert PollingSource(SourceSpec("y", "https://example.invalid/y"), None, ManualClock(0), None)._ssl() is True

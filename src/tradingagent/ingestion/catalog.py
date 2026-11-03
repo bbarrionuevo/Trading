@@ -12,7 +12,7 @@ import os
 from dataclasses import replace
 
 from ..core.events import TIER_MEDIA, TIER_OFFICIAL
-from .announcements import BINANCE_LISTINGS, BITGET_LISTINGS, OKX_LISTINGS
+from .announcements import BINANCE_LISTINGS, BITGET_LISTINGS, OKX_LISTINGS, UPBIT_NOTICES
 from .sources import SourceSpec
 
 EDGAR_8K = ("https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&company=&dateb=&owner=include"
@@ -51,6 +51,10 @@ DEFAULT_SOURCES = (
     # 3-nov (docs/ESTUDIO-LISTADOS.md): entrando al minuto gana, a los 5 minutos ya no; por eso cada 10 s.
     SourceSpec("binance.listados", BINANCE_LISTINGS, tier=TIER_OFFICIAL, interval_s=10, max_age_s=600,
                category="listado", format="binance"),
+    # Avisos de mercado de Upbit (en coreano: listados y deslistados en wones, de los que más mueven un precio).
+    # Desde la PC solo andan con el almacén de certificados de Windows (prueba de red del 3-nov).
+    SourceSpec("upbit.avisos", UPBIT_NOTICES, tier=TIER_OFFICIAL, interval_s=10, max_age_s=600, category="listado",
+               format="upbit", os_trust=True),
     # OKX y Bitget quedan apagadas: en el mismo estudio, los listados de OKX no movieron la moneda en MEXC (mediana
     # ≈ 0 % a 5, 15 y 60 min) y los de Bitget son casi todos de acciones. Se prenden en config.yaml si cambia.
     SourceSpec("okx.listados", OKX_LISTINGS, tier=TIER_OFFICIAL, interval_s=20, max_age_s=600, category="listado",

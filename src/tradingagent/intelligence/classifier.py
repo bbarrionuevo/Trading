@@ -67,7 +67,8 @@ RULES = (
     Rule("hackeo", "hack", -0.8, 0.6, 120, _r(
         r"\b(hack(s|ed|er|ers)?|exploit(s|ed)?|drain(s|ed)?|stolen|breach(es|ed)?|compromised|rug[- ]?pull(s|ed)?)\b")),
     Rule("deslistado", "deslistado", -0.7, 0.6, 120, _r(
-        r"\b(delist(s|ed|ing)?|will remove .{0,30}trading|suspend(s|ed)? (trading|deposits|withdrawals))\b")),
+        r"\b(delist(s|ed|ing)?|will remove .{0,30}trading|suspend(s|ed)? (trading|deposits|withdrawals))\b|"
+        r"거래지원 종료|유의 종목 지정")),                       # Upbit: fin del soporte / designación de alerta
     Rule("quiebra", "quiebra", -0.8, 0.6, 240, _r(
         r"\b(bankrupt(cy)?|insolven(t|cy)|chapter 11|(halt(s|ed)?|freez(e|es)|froze) withdrawals|collaps(e|es|ed))\b")),
     Rule("demanda", "regulatorio", -0.5, 0.5, 120, _r(
@@ -95,7 +96,8 @@ RULES = (
         r"takeover (bid|offer)|buyout)\b")),
     Rule("listado", "listado", 0.6, 0.55, 60, _r(
         r"\b(will list|lists|to list|listing of|adds? (trading|support) for|launch(es|ed)? (spot )?trading (for|of))\b|"
-        r"\bwill (launch|open) \S+/USDT? (for )?(spot|margin) trading\b")),
+        r"\bwill (launch|open) \S+/USDT? (for )?(spot|margin) trading\b|"
+        r"신규 거래지원|디지털 자산 추가")),                       # Upbit: nuevo soporte de trading (listado)
     Rule("etf_positivo", "etf", 0.6, 0.55, 120, _r(
         r"\bETFs?\b.{0,60}\b(approv(es|ed|al)|greenlight(s|ed)?|launch(es|ed)?|record inflows|inflows)\b|"
         r"\b(approv(es|ed)|greenlight(s|ed)?)\b.{0,40}\bETFs?\b")),

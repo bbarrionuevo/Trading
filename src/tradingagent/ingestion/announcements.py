@@ -3,7 +3,8 @@ mueve un precio, y por estas APIs llega al segundo (los medios la publican minut
 
 Cada lector convierte la respuesta en `FeedEntry`, igual que un RSS, así el resto de la ingesta (deduplicado,
 frescura, ruido, clasificación) es el mismo. Verificados el 3-nov-2026 contra las APIs reales: Binance (nuevos
-listados, catálogo 48), OKX (nuevos listados) y Bitget (listados). Bybit y Upbit bloquean por país.
+listados, catálogo 48), OKX (nuevos listados), Bitget (listados) y Upbit (avisos de mercado, en coreano: desde la
+PC y solo con el almacén de certificados de Windows, `SourceSpec.os_trust`).
 """
 import json
 from datetime import UTC, datetime
@@ -14,6 +15,7 @@ BINANCE_LISTINGS = ("https://www.binance.com/bapi/composite/v1/public/cms/articl
                     "&pageNo=1&pageSize=20")
 OKX_LISTINGS = "https://www.okx.com/api/v5/support/announcements?annType=announcements-new-listings"
 BITGET_LISTINGS = "https://api.bitget.com/api/v2/public/annoucements?language=en_US&annType=coin_listings"
+UPBIT_NOTICES = "https://api-manager.upbit.com/api/v1/announcements?os=web&page=1&per_page=20&category=trade"
 
 
 def _iso(ms) -> str:
@@ -67,4 +69,17 @@ def parse_bitget(body: bytes) -> list[FeedEntry]:
     return out
 
 
-PARSERS = {"binance": parse_binance, "okx": parse_okx, "bitget": parse_bitget}
+def parse_upbit(body: bytes) -> list[FeedEntry]:
+    """Avisos de Upbit (en coreano): `data.notices[]` con `id`, `title`, `category` y `listed_at` (ISO, +09:00).
+    Formato verificado desde la PC del dueño el 3-nov-2026 (desde la nube Upbit bloquea por país)."""
+    out = []
+    for a in (_load(body).get("data") or {}).get("notices") or []:
+        if not a.get("title"):
+            continue
+        nid = str(a.get("id") or a.get("uuid") or a["title"])
+        out.append(FeedEntry(title=str(a["title"]), link=f"https://upbit.com/service_center/notice?id={nid}",
+                             guid=f"upbit:{nid}", published=str(a.get("listed_at") or a.get("first_listed_at") or "")))
+    return out
+
+
+PARSERS = {"binance": parse_binance, "okx": parse_okx, "bitget": parse_bitget, "upbit": parse_upbit}
