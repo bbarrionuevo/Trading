@@ -28,13 +28,13 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(d, ensure_ascii=False)
 
 
-def setup(log_dir, level: str = "INFO", console: bool = True) -> None:
+def setup(log_dir, level: str = "INFO", console: bool = True, name: str = "agent.log") -> None:
     root = logging.getLogger()
     root.setLevel(level)
     for h in list(root.handlers):
         root.removeHandler(h)
     flt = RedactFilter()
-    fh = RotatingFileHandler(log_dir / "agent.log", maxBytes=5_000_000, backupCount=5, encoding="utf-8")
+    fh = RotatingFileHandler(log_dir / name, maxBytes=5_000_000, backupCount=5, encoding="utf-8")
     fh.setFormatter(JsonFormatter())
     fh.addFilter(flt)
     root.addHandler(fh)

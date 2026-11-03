@@ -65,6 +65,8 @@ class LiveTrader:
         st = await asyncio.to_thread(paths.read_json, self.base / shadow.STATE, None)
         self.first = st is None
         self.st = st or shadow.new_state(self.capital, now, self.market)
+        if self.llm is not None:                       # el tope diario de la IA sobrevive a reinicios (C-4)
+            self.llm.budget = llm_mod.Budget.from_dict(self.st.get("llm"))
         self.pf = shadow._portfolio(self.st, self.market)
         symbols = sorted(set(self.st["positions"]) | {self.market.symbol(a) for a in shadow.CORE})
         self.registry = await self.market.instruments(self.session, symbols, self.st["instruments"], now)
@@ -97,7 +99,10 @@ class LiveTrader:
         now = self.clock.time()
         self.st.update(cash=str(self.pf.cash), fees=str(self.pf.fees_total), realized=str(self.pf.realized_total),
                        risk=run.risk.as_dict(), updated_at=round(now), equity=str(round(run.equity(), 6)),
-                       spreads={s: v.as_dict() for s, v in run.spreads.items()})
+                       spreads={s: v.as_dict() for s, v in run.spreads.items()},
+                       marks={s: str(m) for s, m in self.venue.marks.items()})      # para el tablero
+        if self.llm is not None:
+            self.st["llm"] = self.llm.budget.as_dict()
         for sym, meta in self.st["positions"].items():
             if sym in self.pf.positions:
                 meta["avg_price"] = str(self.pf.positions[sym].avg_price)
@@ -238,7 +243,7 @@ class LiveTrader:
         return {"mercado": self.market.name, "cash": self.st.get("cash"), "equity": self.st.get("equity"),
                 "abiertas": sorted(self.st.get("positions", {})), "operaciones": self.st["stats"]["operaciones"],
                 "pnl_neto": self.st["stats"]["pnl_neto"], "halt": bool((self.st.get("risk") or {}).get("halted")),
-                **self.counts}
+                "llm": self.llm.budget.as_dict() if self.llm is not None else None, **self.counts}
 
 
 async def learn_loop(stop: asyncio.Event, cfg: dict, env, limits: dict, data_dir: Path,

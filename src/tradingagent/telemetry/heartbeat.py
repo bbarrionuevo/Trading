@@ -36,8 +36,11 @@ class Heartbeat:
         s["uptime_min"] = round((time.time() - self.started) / 60, 1)
         s["ts"] = time.time()
         self.beats += 1
-        self.printer(self.line(s))
-        await asyncio.to_thread(paths.write_json_atomic, self.state_file, s)
+        await asyncio.to_thread(paths.write_json_atomic, self.state_file, s)    # primero el estado (tablero)
+        try:
+            self.printer(self.line(s))
+        except Exception:                                         # la consola nunca frena el latido
+            log.warning("no se pudo mostrar el latido en la consola", exc_info=True)
         return s
 
     async def run(self, stop: asyncio.Event) -> None:

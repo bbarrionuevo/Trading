@@ -1,6 +1,8 @@
 """Línea de comandos del agente.
 
   python -m tradingagent run                 agente completo en paper (Ctrl+C para cerrar)
+  python -m tradingagent supervisar          el agente 24/7: lo relanza, lo actualiza solo y sirve el tablero
+  python -m tradingagent tablero [--abrir]   tablero local en http://127.0.0.1:8765 (solo lectura)
   python -m tradingagent telegram-test       verifica TELEGRAM_BOT_TOKEN/CHAT_ID y manda un mensaje de prueba
   python -m tradingagent telegram-chats      lista los chats que le escribieron al bot (para el CHAT_ID)
   python -m tradingagent telegram-chats --avisar   el bot le manda a cada chat que le escribió /id su número
@@ -25,9 +27,22 @@ from decimal import Decimal as D
 
 from . import __version__, config, paths
 
+EXIT_LOCKED = 3                                    # el supervisor lo reconoce: hay otro agente corriendo
+
+
+def _utf8_console() -> None:
+    """En Windows, con la salida redirigida a un archivo (el supervisor), Python escribe en cp1252 y un emoji
+    lanzaría UnicodeEncodeError. UTF-8 y, por las dudas, reemplazar en vez de fallar."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError, OSError):
+            pass
+
 
 def _setup(level="INFO"):
     from .telemetry import logs
+    _utf8_console()
     loaded = paths.load_env()
     logs.setup(paths.home() / "logs", level)
     return loaded
@@ -35,6 +50,12 @@ def _setup(level="INFO"):
 
 def cmd_run(args) -> int:
     _setup()
+    from .core.instance import InstanceLock
+    lock = InstanceLock(paths.state("agente.lock"))
+    if not lock.acquire():                         # dos agentes sobre el mismo estado se pisarían
+        print("Ya hay un agente corriendo con esta carpeta (TRADING_HOME): no arranco otro.")
+        return EXIT_LOCKED
+    paths.state("agente.pid").write_text(str(os.getpid()), encoding="utf-8")
     cfg = config.load(args.config or paths.home() / "config.yaml")
     from .app import Agent, install_signal_handlers
     agent = Agent(cfg, os.environ)
@@ -49,6 +70,60 @@ def cmd_run(args) -> int:
         asyncio.run(main())
     except KeyboardInterrupt:
         pass
+    finally:
+        lock.release()
+    return 0
+
+
+def cmd_supervisar(args) -> int:
+    from .core.instance import InstanceLock
+    from .telemetry import logs
+    _utf8_console()
+    paths.load_env()
+    home = paths.home()
+    logs.setup(home / "logs", "INFO", name="supervisor.log")
+    lock = InstanceLock(home / "state" / "supervisor.lock")
+    if not lock.acquire():
+        print("Ya hay un supervisor corriendo con esta carpeta: no arranco otro.")
+        return 0
+    import signal
+
+    from .supervisor import Supervisor
+
+    def graceful(*_a):                             # `kill` o un apagado: cerrar en orden, como con Ctrl+C
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, graceful)
+    try:
+        return Supervisor(home=home, port=args.puerto or None).run()
+    except KeyboardInterrupt:
+        return 0
+    finally:
+        lock.release()
+
+
+def cmd_tablero(args) -> int:
+    import time
+    import webbrowser
+
+    from . import dashboard
+    try:
+        srv = dashboard.start(paths.home(), args.puerto)
+    except OSError:
+        url = f"http://127.0.0.1:{args.puerto}"
+        print(f"El tablero ya está abierto (lo sirve el supervisor): {url}")
+        if args.abrir:
+            webbrowser.open(url)
+        return 0
+    url = dashboard.url(srv)
+    print(f"Tablero en {url} (Ctrl+C para cerrar)")
+    if args.abrir:
+        webbrowser.open(url)
+    try:
+        while True:
+            time.sleep(3600)
+    except KeyboardInterrupt:
+        srv.shutdown()
     return 0
 
 
@@ -301,6 +376,11 @@ def main(argv=None) -> int:
     r = sub.add_parser("run")
     r.add_argument("--config")
     r.add_argument("--seconds", type=float, help="cerrar solo después de N segundos")
+    sv = sub.add_parser("supervisar")
+    sv.add_argument("--puerto", type=int, default=8765, help="puerto del tablero (0 = sin tablero)")
+    tb = sub.add_parser("tablero")
+    tb.add_argument("--puerto", type=int, default=8765)
+    tb.add_argument("--abrir", action="store_true", help="abrirlo en el navegador")
     sub.add_parser("telegram-test")
     tc = sub.add_parser("telegram-chats")
     tc.add_argument("--avisar", action="store_true", help="mandarle a cada chat que escribió /id su número")
@@ -324,7 +404,8 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     handlers = {"run": cmd_run, "telegram-test": cmd_telegram_test, "telegram-chats": cmd_telegram_chats,
                 "sources": cmd_sources, "journal-verify": cmd_journal_verify, "paper-sim": cmd_paper_sim,
-                "collect": cmd_collect, "mexc-check": cmd_mexc_check, "llm-check": cmd_llm_check}
+                "collect": cmd_collect, "mexc-check": cmd_mexc_check, "llm-check": cmd_llm_check,
+                "supervisar": cmd_supervisar, "tablero": cmd_tablero}
     if args.cmd not in handlers:
         ap.print_help()
         return 2

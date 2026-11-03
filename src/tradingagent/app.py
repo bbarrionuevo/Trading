@@ -4,7 +4,8 @@ su propia tarea; las alertas y el diario en hilos. En segundo plano, el recolect
 
 Arranque: carga TRADING_HOME/.env y config.yaml, abre el diario, lanza el despachador de alertas (que
 hace su prueba de inicio y manda el mensaje "Agente iniciado" por Telegram sin que el motor lo espere),
-y empieza a leer fuentes. Ctrl+C (o `stop`) cierra todo en orden y deja el diario escrito.
+y empieza a leer fuentes. Ctrl+C (o `stop`) cierra todo en orden y deja el diario escrito. El supervisor
+(supervisor.py) pide la misma parada con calma creando `TRADING_HOME/state/parar` (para actualizarse).
 """
 import asyncio
 import logging
@@ -38,6 +39,7 @@ from .telemetry.heartbeat import Heartbeat
 from .telemetry.journal import Journal
 
 log = logging.getLogger("tradingagent")
+STOP_FILE, STOP_POLL_S = "parar", 1.0
 
 
 def build_sources(cfg: dict, env, limits: dict | None = None) -> tuple[list[SourceSpec], dict[str, str]]:
@@ -81,9 +83,22 @@ class Agent:
         self.telegram_base_url, self.printer = telegram_base_url, printer
         self.stop_event = asyncio.Event()
         self.started = time.time()
+        self.news_tasks: set[asyncio.Task] = set()     # noticias que el operador está evaluando ahora
 
     def stop(self) -> None:
         self.stop_event.set()
+
+    async def _watch_stop_file(self, path) -> None:
+        """Parada con calma pedida por el supervisor (archivo `state/parar`): cierra igual que Ctrl+C."""
+        while not self.stop_event.is_set():
+            if await asyncio.to_thread(path.exists):
+                log.info("parada pedida por el supervisor: cierro en orden")
+                self.stop()
+                return
+            try:
+                await asyncio.wait_for(self.stop_event.wait(), timeout=STOP_POLL_S)
+            except TimeoutError:
+                pass
 
     def collect(self) -> dict:
         """Estado para el latido (sin E/S)."""
@@ -105,15 +120,17 @@ class Agent:
     async def _print_accepted(self) -> None:
         """Cada noticia aceptada se muestra en consola y, si el operador en vivo está prendido, se evalúa ya."""
         sub = self.bus.subscribe(TOPIC_ACCEPTED, "consola", maxsize=200)
-        pending: set[asyncio.Task] = set()
         async for ev in sub:
             it = ev.item
-            age = f"{ev.age_s:.0f}s" if ev.age_s is not None else "s/h"
-            self.printer(f"📰 [{it.source} n{it.tier} {age}] {it.title[:140]}")
             if self.trader is not None:                          # no frena la lectura: cada noticia en su tarea
                 t = asyncio.create_task(self._trade(ev), name=f"noticia-{it.id[:8]}")
-                pending.add(t)
-                t.add_done_callback(pending.discard)
+                self.news_tasks.add(t)
+                t.add_done_callback(self.news_tasks.discard)
+            age = f"{ev.age_s:.0f}s" if ev.age_s is not None else "s/h"
+            try:
+                self.printer(f"📰 [{it.source} n{it.tier} {age}] {it.title[:140]}")
+            except Exception:                                    # la consola nunca frena una noticia
+                log.warning("no se pudo mostrar una noticia en la consola", exc_info=True)
 
     async def _trade(self, ev) -> None:
         try:
@@ -145,6 +162,8 @@ class Agent:
         cfg, env = self.cfg, self.env
         lim = limits_mod.load()                       # sobre inválido o más laxo que la línea base: no arranca
         home = paths.home()
+        stop_file = home / "state" / STOP_FILE
+        stop_file.unlink(missing_ok=True)             # un pedido viejo (de antes de arrancar) ya no vale
         self.journal = Journal(home / "journal", self.clock).start()
         self.bus = EventBus()
         enabled, self.sources_off = build_sources(cfg, env, lim)
@@ -205,7 +224,8 @@ class Agent:
                           asyncio.create_task(self.venue.run_monitor(self.stop_event), name="monitor-ordenes"),
                           asyncio.create_task(self.lag.run(), name="lag"),
                           asyncio.create_task(hb.run(self.stop_event), name="latido"),
-                          asyncio.create_task(self._print_accepted(), name="consola")]
+                          asyncio.create_task(self._print_accepted(), name="consola"),
+                          asyncio.create_task(self._watch_stop_file(stop_file), name="parada")]
                 if self.trader is not None:
                     from .live import learn_loop
                     tasks.append(asyncio.create_task(self.trader.watch(self.stop_event), name="vigilancia"))
@@ -220,6 +240,8 @@ class Agent:
                     await self.stop_event.wait()
                 finally:
                     self.stop_event.set()                 # si fue una cancelación, avisa a todas las tareas
+                    if self.news_tasks:                   # una noticia a medio operar se termina y se guarda
+                        await asyncio.wait(set(self.news_tasks), timeout=10)
                     for t in tasks:
                         if t.get_name() in ("lag", "consola", "aprendizaje") or t.get_name().startswith("fuente-"):
                             t.cancel()
