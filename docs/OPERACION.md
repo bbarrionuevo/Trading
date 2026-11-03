@@ -93,9 +93,9 @@ un chat.
 ```
 
 Qué lee: la Reserva Federal; medios cripto (CoinDesk, Cointelegraph, Decrypt, The Block); bolsa y materias
-primas (CNBC titulares y resultados, Seeking Alpha, Investing.com); y los **anuncios oficiales de listados** de
-Binance, OKX y Bitget, leídos cada 15 a 30 segundos (la noticia que más mueve un precio, sin esperar a los
-medios).
+primas (CNBC titulares y resultados, Seeking Alpha, Investing.com); y el **anuncio oficial de listados de
+Binance**, leído cada 10 segundos (la noticia que más mueve un precio: hay que llegar en el primer minuto). OKX y
+Bitget están apagados porque sus listados no movieron el precio (`docs/ESTUDIO-LISTADOS.md`).
 
 Las de la SEC piden `SEC_USER_AGENT=Tu Nombre tu-mail@dominio` en el `.env` (norma de la SEC). Fuentes
 propias, intervalos y apagados van en `%LOCALAPPDATA%\TRADING\config.yaml`; hay un ejemplo en

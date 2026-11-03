@@ -16,6 +16,7 @@ from fake_telegram import TOKEN, FakeTelegram
 from tradingagent import limits as limits_mod
 from tradingagent.alerts.telegram import TelegramTransport
 from tradingagent.core.clock import ManualClock
+from tradingagent.decision.policy import PolicyConfig
 from tradingagent.execution.paper import LatencyModel, PaperConfig
 from tradingagent.intelligence.classifier import classify
 from tradingagent.research.collector import _Telegram
@@ -68,6 +69,9 @@ class Paper:
         await self.stack.aclose()
 
     async def run(self, events=(), **kw):
+        # Estos tests miden la mecánica genérica (barreras por volatilidad, saltos, frenos, KILL) con un listado
+        # como noticia operable; la salida propia de los listados (stop que sigue al precio) se prueba aparte.
+        kw.setdefault("cfg", PolicyConfig(exits={}))
         items = [(e, classify(e["title"], tier=e["tier"], cluster_sources=e["cluster_sources"])) for e in events]
         return await run_paper(self.data, items, clock=self.clock, session=self.session, limits=self.limits,
                                telegram=self.telegram, capital=120.0, urls=self.urls, candle_urls=self.candle_urls,

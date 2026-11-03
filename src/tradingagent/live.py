@@ -250,7 +250,7 @@ class LiveTrader:
             if not self.st["positions"]:
                 return
             run = self.run()
-            changed = False
+            changed = moved_any = False
             for sym, meta in list(self.st["positions"].items()):
                 side = 1 if meta["side"] == "largo" else -1
                 try:
@@ -263,9 +263,21 @@ class LiveTrader:
                 if px is None:
                     continue
                 stop, tp = shadow.D(meta["stop"]), shadow.D(meta["tp"])
+                trail = shadow.D(str(meta.get("trail") or 0))
+                if trail:                                              # stop que sigue al mejor precio
+                    best = shadow.D(meta.get("best") or meta["avg_price"])
+                    best = max(best, px) if side > 0 else min(best, px)
+                    moved = best * (1 - trail) if side > 0 else best * (1 + trail)
+                    inst = self.registry.get(sym)
+                    if inst is not None:
+                        moved = inst.round_price(moved, up=side < 0)
+                    new_stop = max(stop, moved) if side > 0 else min(stop, moved)
+                    if new_stop != stop or str(best) != meta.get("best"):
+                        meta["best"], meta["stop"], stop, moved_any = str(best), str(new_stop), new_stop, True
                 reason = None
                 if (px <= stop) if side > 0 else (px >= stop):
-                    reason, theo = "stop_loss", stop
+                    reason = "stop_movil" if shadow.trail_in_profit(meta, side) else "stop_loss"
+                    theo = stop
                 elif (px > tp) if side > 0 else (px < tp):
                     reason, theo = "take_profit", tp
                 elif run.now >= meta["until"]:
@@ -275,6 +287,8 @@ class LiveTrader:
                     changed = True
             if changed:
                 await self.after_exits(run)
+                await self.save(run)
+            elif moved_any:                                            # el stop subió: que un reinicio no lo pierda
                 await self.save(run)
 
     async def after_exits(self, run: _LiveRun) -> None:

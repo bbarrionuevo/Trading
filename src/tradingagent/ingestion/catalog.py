@@ -47,14 +47,16 @@ DEFAULT_SOURCES = (
                max_age_s=300, category="bolsa"),
     SourceSpec("investing", "https://www.investing.com/rss/news.rss", tier=TIER_MEDIA, interval_s=60,
                max_age_s=300, category="bolsa"),
-    # Anuncios OFICIALES de listados (APIs públicas en JSON, verificadas el 3-nov-2026): la noticia que más mueve
-    # un precio, al segundo en vez de los minutos que tardan los medios.
-    SourceSpec("binance.listados", BINANCE_LISTINGS, tier=TIER_OFFICIAL, interval_s=15, max_age_s=600,
+    # Anuncio OFICIAL de listados de Binance (API pública en JSON): la noticia que más mueve un precio. Estudio del
+    # 3-nov (docs/ESTUDIO-LISTADOS.md): entrando al minuto gana, a los 5 minutos ya no; por eso cada 10 s.
+    SourceSpec("binance.listados", BINANCE_LISTINGS, tier=TIER_OFFICIAL, interval_s=10, max_age_s=600,
                category="listado", format="binance"),
+    # OKX y Bitget quedan apagadas: en el mismo estudio, los listados de OKX no movieron la moneda en MEXC (mediana
+    # ≈ 0 % a 5, 15 y 60 min) y los de Bitget son casi todos de acciones. Se prenden en config.yaml si cambia.
     SourceSpec("okx.listados", OKX_LISTINGS, tier=TIER_OFFICIAL, interval_s=20, max_age_s=600, category="listado",
-               format="okx"),
+               format="okx", enabled=False),
     SourceSpec("bitget.listados", BITGET_LISTINGS, tier=TIER_OFFICIAL, interval_s=30, max_age_s=600,
-               category="listado", format="bitget"),
+               category="listado", format="bitget", enabled=False),
 )
 
 

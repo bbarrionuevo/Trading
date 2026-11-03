@@ -48,6 +48,7 @@ class PolicyConfig:
     max_slippage_bps: float = 30            # tope de precio de la entrada (≤ per_trade.max_slippage_bps)
     cash_buffer: float = 0.99               # spot: deja 1 % para comisiones
     min_liq_multiple: float = 3.0           # futuros: la liquidación, a ≥ 3 veces la distancia del stop
+    exits: dict = field(default_factory=lambda: dict(EXITS))   # salida propia por categoría (medida con datos)
 
 
 @dataclass(frozen=True)
@@ -84,13 +85,15 @@ class EntryPlan:
     sigma_1m: float
     impact: float
     slices: int = 1
+    trail: float = 0.0                      # > 0: stop que sigue al precio a esa distancia (sin objetivo fijo)
 
     def as_dict(self) -> dict:
         return {"lado": SIDE_NAME[self.side], "notional": str(self.notional), "sl": round(self.sl_frac, 5),
                 "tp": round(self.tp_frac, 5), "horizonte_s": self.horizon_s, "p": round(self.p, 4),
                 "alfa": round(self.alpha, 4), "kelly": round(self.kelly, 4), "costo": round(self.cost, 5),
                 "b_neto": round(self.b_net, 3), "riesgo_usd": round(self.risk_usd, 4),
-                "sigma_1m": round(self.sigma_1m, 6), "impacto": round(self.impact, 7), "tramos": self.slices}
+                "sigma_1m": round(self.sigma_1m, 6), "impacto": round(self.impact, 7), "tramos": self.slices,
+                "stop_movil": round(self.trail, 4)}
 
 
 def news_blocks(event: dict, sig: Signal, now: float, limits: dict,
@@ -122,6 +125,9 @@ def assess(event: dict, sig: Signal, asset: str, now: float, cfg: PolicyConfig, 
     reasons = []
     if vec.stale(dt, cfg.half_life_s):
         reasons.append(f"alfa_obsoleta:{dt:.0f}s")
+    prof = cfg.exits.get(sig.category)
+    if prof is not None and dt > prof.max_age_s:
+        reasons.append(f"{sig.category}_tarde:{dt:.0f}s")
     if v.C < cfg.c_min:
         reasons.append(f"relevancia_baja:C={v.C:.0f}")
     if abs(alpha) < cfg.alpha_min:
@@ -152,6 +158,10 @@ def plan(a: Assessment, sig: Signal, symbol: str, *, equity: float, cash: float,
     if sigma_1m is None or price <= 0 or equity <= 0:
         return None, ["sin_volatilidad_medible"]
     sl, tp = barriers(sigma_1m, sig.horizon_min, cfg.barrier)
+    prof = cfg.exits.get(sig.category)
+    if prof is not None:                                    # salida medida para esta categoría
+        sl = max(sl, prof.min_stop)
+        tp = sl * prof.b_kelly
     sigma_daily = sigma_1m * math.sqrt(1440)
     risk_target = equity * pt["max_risk_pct"] / 100
     lev = min(float(max_leverage), float(pt["max_leverage"]))
@@ -179,7 +189,8 @@ def plan(a: Assessment, sig: Signal, symbol: str, *, equity: float, cash: float,
     urgency = max(edge, 0.0) * price * math.log(2) / (cfg.half_life_s / 60)   # lo que se pierde por minuto de espera
     schedule = best_schedule(notional / price, price, sigma_1m, impact, drift=urgency)
     return EntryPlan(symbol, a.side, D(str(round(notional, 2))), sl, tp, int(sig.horizon_min * 60), a.p, a.alpha, f,
-                     cost, b_net, round(notional * (sl + cost), 6), sigma_1m, impact, schedule["tramos"]), []
+                     cost, b_net, round(notional * (sl + cost), 6), sigma_1m, impact, schedule["tramos"],
+                     prof.trail if prof is not None else 0.0), []
 
 
 def news_move(candles: dict, t_pub: float | None, price_now: float, side: int) -> float | None:
@@ -197,6 +208,22 @@ def news_move(candles: dict, t_pub: float | None, price_now: float, side: int) -
 # listados spot de Binance la moneda siguió subiendo en MEXC hasta la hora, mediana +12,5 % a los 5 min y +28 % a
 # los 60). Ahí, que ya se haya movido a favor no es motivo para no entrar.
 DRIFT = {"listado"}
+
+
+@dataclass(frozen=True)
+class ExitProfile:
+    """Salida propia de una categoría, medida con datos reales (docs/ESTUDIO-LISTADOS.md)."""
+    min_stop: float                         # el stop nunca más cerca que esto (la moneda estaba quieta antes)
+    trail: float                            # stop que sigue al mejor precio a esta distancia, sin objetivo fijo
+    b_kelly: float                          # ganancia/pérdida esperada que usa Kelly (no hay objetivo fijo)
+    max_age_s: float                        # pasado esto la noticia ya no se opera: el salto ya pasó
+    max_slippage_bps: float = 30            # tope de precio de la entrada (nunca más que el del sobre)
+
+
+# Listados spot: 7 casos reales, entrando al minuto: con stop fijo y objetivo 10 % la media fue +4,9 % por
+# operación; con stop que sigue al precio a 5 %, +12,7 % (5 de 7 ganan). Entrando a los 5 minutos, todo pierde:
+# solo vale llegar primero.
+EXITS = {"listado": ExitProfile(min_stop=0.05, trail=0.05, b_kelly=2.5, max_age_s=120, max_slippage_bps=50)}
 
 
 def chase_blocks(move: float | None, sl_frac: float, tp_frac: float, category: str = "") -> list[str]:

@@ -310,8 +310,13 @@ class _Run:
             c = self.store.candles.get(sym) or {}
             side = 1 if meta["side"] == "largo" else -1
             start = max(minute(meta["entry_ts"]), minute(self.st["last_check"]))
+            trail = float(meta.get("trail") or 0)
+            state = {"stop": float(meta["stop"]), "best": float(meta.get("best") or meta["avg_price"])} if trail else None
             hit = bar.walk(c, side=side, stop=float(meta["stop"]), tp=float(meta["tp"]), start_ms=start, end_ms=end,
-                           entry_ms=minute(meta["entry_ts"]), until_ms=minute(meta["until"]) + MIN, slip=slip)
+                           entry_ms=minute(meta["entry_ts"]), until_ms=minute(meta["until"]) + MIN, slip=slip,
+                           trail=trail, state=state)
+            if state is not None:                                      # el stop móvil queda donde llegó
+                meta["stop"], meta["best"] = str(state["stop"]), str(state["best"])
             await self.market.settle(self, sym, meta, hit[2] if hit else int(self.now * 1000))   # funding hasta salir
             if hit is None:
                 continue
@@ -319,6 +324,8 @@ class _Run:
             inst = self.reg.get(sym)
             price = D(str(px))
             reason = {"sl": "stop_loss", "tp": "take_profit", "exp": "expiracion"}[kind]
+            if kind == "sl" and trail_in_profit(meta, side):
+                reason = "stop_movil"
             liq = float(meta["liq"]) if meta.get("liq") else None
             if liq is not None and kind != "tp" and (px <= liq if side > 0 else px >= liq):
                 price, reason = D(meta["liq"]), "liquidacion"           # un salto pasó la liquidación: se pierde el margen
@@ -422,7 +429,7 @@ class _Run:
         emergency = inst.round_price(ref_px * (1 - D(str(EMERGENCY_STOP_MULT * p.sl_frac)) * p.side), up=p.side < 0)
         order, block = await self.service.execute(OrderIntent(
             client_id=f"pp-{ev['id']}-{sym}", symbol=sym, side=entry_side, type=OrderType.MARKET, notional=p.notional,
-            max_slippage_bps=D(str(self.cfg.max_slippage_bps)), ref_price=ref_px,
+            max_slippage_bps=D(str(entry_slippage(self.cfg, sig.category, self.limits))), ref_price=ref_px,
             tags={"decision_id": ev["id"], "role": "entry", "strategy_tag": STRATEGY_TAG,
                   "emergency_stop": str(emergency)}))
         if order is None or not order.filled_qty:
@@ -433,6 +440,8 @@ class _Run:
         stop_px, tp_px = bar.prices(float(avg), p.side, p.sl_frac, p.tp_frac)
         stop = inst.round_price(D(str(stop_px)), up=p.side < 0)          # el stop, del lado de más protección
         tp = inst.round_price(D(str(tp_px)), up=p.side > 0)              # el take-profit, del lado más exigente
+        if p.trail:                                                      # stop que sigue al precio: sin techo
+            tp = inst.round_price(avg * D(100) if p.side > 0 else avg / D(100), up=p.side > 0)
         notional = order.filled_qty * avg
         self.st["positions"][sym] = {
             "side": SIDE_NAME[p.side], "qty": str(order.filled_qty * p.side), "avg_price": str(avg),
@@ -440,6 +449,8 @@ class _Run:
             "event_id": ev["id"], "cluster": ev.get("cluster"), "category": sig.category, "p": round(p.p, 4),
             "alpha": round(p.alpha, 4), "entry_fee": str(order.fees), "notional": str(round(notional, 8)),
             "risk_usd": p.risk_usd, "strategy_tag": STRATEGY_TAG, "emergency_stop": str(emergency)}
+        if p.trail:
+            self.st["positions"][sym].update(trail=p.trail, best=str(avg))
         await self.market.on_entry(self, sym, self.st["positions"][sym])
         self.st["clusters"] = (self.st["clusters"] + [ev.get("cluster")])[-500:]
         self.counts["entradas"] += 1
@@ -452,7 +463,23 @@ class _Run:
         await self._alert(entry_alert(sym, p.side, order.filled_qty, avg, notional, stop=stop, tp=tp, p=p.p,
                                       alpha=p.alpha, category=sig.category, title=ev["title"], source=ev["source"],
                                       order_id=order.order_id, mode=self.market.label,
-                                      expiry_min=p.horizon_s // 60))
+                                      expiry_min=p.horizon_s // 60, trail=p.trail))
+
+
+def entry_slippage(cfg: PolicyConfig, category: str, limits: dict) -> float:
+    """Tope de precio de la entrada: el de la categoría (en un listado el precio se escapa rápido), nunca más que
+    el del sobre (`per_trade.max_slippage_bps`)."""
+    prof = cfg.exits.get(category)
+    want = prof.max_slippage_bps if prof is not None else cfg.max_slippage_bps
+    return min(float(want), float(limits["per_trade"]["max_slippage_bps"]))
+
+
+def trail_in_profit(meta: dict, side: int) -> bool:
+    """¿El stop móvil ya está del lado de la ganancia? Entonces salir por él es cobrar, no cortar una pérdida."""
+    if not meta.get("trail"):
+        return False
+    stop, entry = D(meta["stop"]), D(meta["avg_price"])
+    return stop > entry if side > 0 else stop < entry
 
 
 def _save(base: Path, now: float, st: dict, trades: list[dict], decisions: list[dict]) -> None:

@@ -43,6 +43,8 @@ def test_catalogo_trae_los_anuncios_oficiales_como_fuentes_de_nivel_1():
     ids = {s.id: s for s in DEFAULT_SOURCES}
     for sid, fmt in (("binance.listados", "binance"), ("okx.listados", "okx"), ("bitget.listados", "bitget")):
         assert ids[sid].format == fmt and ids[sid].tier == TIER_OFFICIAL and ids[sid].interval_s <= 30
+    assert ids["binance.listados"].enabled and ids["binance.listados"].interval_s <= 10     # llegar primero
+    assert not ids["okx.listados"].enabled and not ids["bitget.listados"].enabled          # sin efecto medido
 
 
 async def test_un_listado_oficial_entra_por_la_misma_tuberia_y_se_reconoce_la_moneda():

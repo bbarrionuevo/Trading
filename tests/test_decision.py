@@ -184,3 +184,25 @@ def test_no_correr_detras_salvo_en_listados_que_siguen_de_largo():
     assert chase_blocks(0.03, 0.01, 0.02, "listado") == []                 # estudio: el listado sigue de largo
     assert chase_blocks(-0.02, 0.01, 0.02, "listado") == ["el_mercado_va_en_contra:-2.00%"]
     assert chase_blocks(None, 0.01, 0.02) == [] and chase_blocks(0.005, 0.01, 0.02) == []
+
+
+def test_stop_que_sigue_al_precio_en_las_velas():
+    from tradingagent.decision import barriers as bar
+    m = 60_000
+    c = {0: (100, 100, 100, 100), m: (100, 112, 100, 111), 2 * m: (111, 120, 110, 119), 3 * m: (119, 119, 113, 114)}
+    state = {"stop": 95.0, "best": 100.0}
+    hit = bar.walk(c, side=1, stop=95.0, tp=10_000, start_ms=0, end_ms=3 * m, entry_ms=0, trail=0.05, state=state)
+    assert hit == ("sl", 114.0, 3 * m) and state["best"] == 120 and state["stop"] == 114.0   # 5 % debajo de 120
+    short = {"stop": 105.0, "best": 100.0}
+    c2 = {0: (100, 100, 100, 100), m: (100, 100, 90, 91), 2 * m: (91, 96, 91, 95)}
+    hit = bar.walk(c2, side=-1, stop=105.0, tp=0.0, start_ms=0, end_ms=2 * m, entry_ms=0, trail=0.05, state=short)
+    assert hit[0] == "sl" and short["best"] == 90 and short["stop"] == 94.5                     # el corto también
+
+
+def test_tope_de_precio_de_la_entrada_por_categoria_nunca_mas_que_el_sobre(lim):
+    from tradingagent.research.shadow import entry_slippage
+    cfg = PolicyConfig()
+    assert entry_slippage(cfg, "hack", lim) == 30                            # el de siempre
+    assert entry_slippage(cfg, "listado", lim) == min(50, lim["per_trade"]["max_slippage_bps"])
+    tight = {**lim, "per_trade": {**lim["per_trade"], "max_slippage_bps": 20}}
+    assert entry_slippage(cfg, "listado", tight) == 20                       # el sobre manda
