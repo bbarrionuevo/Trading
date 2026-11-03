@@ -26,7 +26,7 @@ import os, pathlib, sys, time
 home = pathlib.Path(sys.argv[1])
 (home / "state").mkdir(parents=True, exist_ok=True)
 with open(home / "hijos.txt", "a") as f:
-    f.write(f"{os.getpid()}\n")
+    f.write(f"{os.getpid()} {os.environ.get('PYTHONUTF8')}\n")
 if sys.argv[2] != "vive":
     sys.exit(int(sys.argv[2]))
 while not (home / "state" / "parar").exists():
@@ -218,6 +218,8 @@ async def test_relanza_al_agente_y_avisa_una_vez_si_se_cae_seguido(tmp_path, gh)
         await asyncio.to_thread(wait_exit, sup)
         await asyncio.to_thread(sup.watch_child)
     assert waits == [2.0, 5.0, 15.0, 30.0]                                      # espera creciente
+    lines = (sup.home / "hijos.txt").read_text().split("\n")[:-1]
+    assert len(lines) == 5 and all(x.endswith(" 1") for x in lines)            # el agente corre en modo UTF-8
     assert sum("se cayó" in m["text"] for m in tg.messages) == 1                 # un aviso por hora, no spam
     crashes = sup.state["caidas"]
     assert crashes[0]["codigo"] == 1 and crashes[-1]["motivo"] == "otro_agente_corriendo"
@@ -334,6 +336,7 @@ def test_los_tests_de_la_pc_corren_sin_claves_y_con_carpeta_aparte(tmp_path, gh)
     assert not {"TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "MEXC_SECRET_KEY", "GITHUB_TOKEN_PC",
                 "ANTHROPIC_API_KEY"} & set(got["env"])
     assert not [k for k in got["env"] if k.startswith("GIT_CONFIG")]          # la familia entera, no a medias
+    assert got["env"]["PYTHONUTF8"] == "1" and got["env"]["PYTHONIOENCODING"] == "utf-8"
     assert sup.state["tests_resultado"]["codigo"] == 0 and sup.tests is None
 
 
@@ -389,3 +392,44 @@ def test_borra_aunque_haya_solo_lectura_y_guardar_nunca_lo_tumba(tmp_path, gh, m
     assert paths.read_json(sup.state_file, {})["x"] == 1
     monkeypatch.setattr(supervisor.paths, "write_json_atomic", lambda *_a: (_ for _ in ()).throw(OSError("lleno")))
     sup.save()                                                               # no lanza: sigue andando
+
+
+async def test_la_consola_de_windows_nunca_frena_las_noticias_ni_el_latido(tmp_path, monkeypatch):
+    """Con la salida en un archivo, Windows escribe en cp1252: un emoji no puede frenar al operador."""
+    import io
+
+    from test_live import news
+    from tradingagent import __main__ as main_mod
+    from tradingagent.core.bus import EventBus
+    from tradingagent.ingestion.engine import TOPIC_ACCEPTED
+    from tradingagent.telemetry.heartbeat import Heartbeat
+
+    def cp1252_console(text):
+        text.encode("cp1252")                                                   # lanza con 📰 y con ♥
+
+    got = []
+
+    class Trader:
+        async def on_news(self, ev):
+            got.append(ev.item.id)
+
+    agent = Agent(config.load(None), {}, printer=cp1252_console)
+    agent.bus, agent.trader = EventBus(), Trader()
+    task = asyncio.create_task(agent._print_accepted())
+    await asyncio.sleep(0)
+    for i in range(2):
+        agent.bus.publish(TOPIC_ACCEPTED, news(f"n{i}", "Bitcoin ETF approved", time.time()))
+    await asyncio.sleep(0.05)
+    task.cancel()
+    assert got == ["n0", "n1"]                                                  # el operador las recibió igual
+    hb = Heartbeat(lambda: {"mode": "PAPER"}, state_file=tmp_path / "hb.json", printer=cp1252_console)
+    await hb.beat()
+    assert json.loads((tmp_path / "hb.json").read_text(encoding="utf-8"))["mode"] == "PAPER"
+
+    raw, err = io.BytesIO(), io.BytesIO()
+    monkeypatch.setattr(sys, "stdout", io.TextIOWrapper(raw, encoding="cp1252"))
+    monkeypatch.setattr(sys, "stderr", io.TextIOWrapper(err, encoding="cp1252"))
+    main_mod._utf8_console()                                                    # lo que hace cada comando
+    print("📰 ♥ ñ")
+    sys.stdout.flush()
+    assert raw.getvalue().decode("utf-8").strip() == "📰 ♥ ñ"

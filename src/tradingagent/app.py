@@ -122,12 +122,15 @@ class Agent:
         pending: set[asyncio.Task] = set()
         async for ev in sub:
             it = ev.item
-            age = f"{ev.age_s:.0f}s" if ev.age_s is not None else "s/h"
-            self.printer(f"📰 [{it.source} n{it.tier} {age}] {it.title[:140]}")
             if self.trader is not None:                          # no frena la lectura: cada noticia en su tarea
                 t = asyncio.create_task(self._trade(ev), name=f"noticia-{it.id[:8]}")
                 pending.add(t)
                 t.add_done_callback(pending.discard)
+            age = f"{ev.age_s:.0f}s" if ev.age_s is not None else "s/h"
+            try:
+                self.printer(f"📰 [{it.source} n{it.tier} {age}] {it.title[:140]}")
+            except Exception:                                    # la consola nunca frena una noticia
+                log.warning("no se pudo mostrar una noticia en la consola", exc_info=True)
 
     async def _trade(self, ev) -> None:
         try:

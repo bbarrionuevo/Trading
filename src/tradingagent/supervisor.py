@@ -56,6 +56,7 @@ NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 LOW_PRIORITY = getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)
 GIT = shutil.which("git") or (r"C:\Program Files\Git\cmd\git.exe" if os.name == "nt" else "git")
 GIT_ENV = {"GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "never"}
+UTF8 = {"PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}   # Windows: la salida va a un archivo, no a la consola
 SCRUB = ("TELEGRAM_", "ANTHROPIC_", "CLAUDE_", "MEXC_", "GITHUB_", "SEC_USER_AGENT", "WEBHOOK_", "TRADING_HOME",
          "GIT_CONFIG")                     # la familia GIT_CONFIG_* va entera: a medias, git no arranca
 
@@ -248,7 +249,7 @@ class Supervisor:
             log.warning("no pude rotar la salida del agente: %s", e)
         with open(out_path, "a", encoding="utf-8") as out:
             self.child = subprocess.Popen(self.child_cmd, cwd=self.repo, stdout=out, stderr=subprocess.STDOUT,
-                                          creationflags=NO_WINDOW)
+                                          env={**self.env, **UTF8}, creationflags=NO_WINDOW)
         self._contain(self.child)
         self.started_at = time.monotonic()
         self.state.update(arranques=self.state.get("arranques", 0) + 1, version=self.version[:12],
@@ -317,7 +318,7 @@ class Supervisor:
         code = ("import tradingagent.app, tradingagent.live, tradingagent.supervisor, tradingagent.dashboard, "
                 "tradingagent.research.collector")
         for cmd in ([self.python, "-c", code], [self.python, "-m", "tradingagent", "--version"]):
-            r = _run(cmd, cwd=self.repo, timeout=120)
+            r = _run(cmd, cwd=self.repo, timeout=120, env={**self.env, **UTF8})
             if r.returncode != 0:
                 return False, redact((r.stderr or r.stdout).strip()[-400:])
         return True, ""
@@ -406,7 +407,7 @@ class Supervisor:
             rmtree(scratch)
         except OSError as e:
             log.warning("no pude limpiar la carpeta de pruebas: %s", e)
-        env["TRADING_HOME"] = str(scratch)
+        env.update(UTF8, TRADING_HOME=str(scratch))
         (self.home / "logs").mkdir(parents=True, exist_ok=True)
         with open(self.home / "logs" / "tests.txt", "w", encoding="utf-8") as out:
             self.tests = subprocess.Popen([self.python, "-m", "pytest", "-p", "no:cacheprovider", "-rfE"], cwd=self.repo,

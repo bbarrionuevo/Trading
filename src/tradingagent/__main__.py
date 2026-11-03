@@ -30,8 +30,19 @@ from . import __version__, config, paths
 EXIT_LOCKED = 3                                    # el supervisor lo reconoce: hay otro agente corriendo
 
 
+def _utf8_console() -> None:
+    """En Windows, con la salida redirigida a un archivo (el supervisor), Python escribe en cp1252 y un emoji
+    lanzaría UnicodeEncodeError. UTF-8 y, por las dudas, reemplazar en vez de fallar."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError, OSError):
+            pass
+
+
 def _setup(level="INFO"):
     from .telemetry import logs
+    _utf8_console()
     loaded = paths.load_env()
     logs.setup(paths.home() / "logs", level)
     return loaded
@@ -67,6 +78,7 @@ def cmd_run(args) -> int:
 def cmd_supervisar(args) -> int:
     from .core.instance import InstanceLock
     from .telemetry import logs
+    _utf8_console()
     paths.load_env()
     home = paths.home()
     logs.setup(home / "logs", "INFO", name="supervisor.log")
