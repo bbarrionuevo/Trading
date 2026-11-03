@@ -18,7 +18,10 @@
    - un resumen por día;
    - un aviso, una sola vez, si todas las fuentes o todas las velas fallan, y otro al volver.
    Nunca imprime ni guarda secretos.
-6. Con `--paper`, el operador paper (shadow.py) opera las noticias originales de esta corrida contra
+6. Si hay clave de Anthropic, las noticias originales que la capa rápida no resuelve sola se consultan a
+   Claude Haiku 5.5 (intelligence/llm.py): la respuesta validada queda en `nlp_llm` y es la que usa el
+   paper; el gasto del día va al estado (`llm`) y nunca pasa del sobre (REGLAS C-4).
+7. Con `--paper`, el operador paper (shadow.py) opera las noticias originales de esta corrida contra
    los libros reales, con llenados simulados, y el resumen diario suma una línea de paper.
 Todo se escribe al final de la corrida: si algo falla a mitad de camino, no queda nada a medias. Si el
 paper falla, los datos del recolector ya quedaron guardados.
@@ -44,6 +47,7 @@ from ..ingestion.dedup import DedupIndex
 from ..ingestion.engine import IngestionEngine
 from ..ingestion.noise import NoiseConfig, NoiseFilter
 from ..ingestion.sources import PollingSource
+from ..intelligence import llm as llm_mod
 from ..intelligence.classifier import classify
 from . import assets, learn, shadow
 from .labeler import READY_AFTER_S, CandleStore, window
@@ -217,8 +221,10 @@ async def _poll(spec, session, clock, src_state: dict):
 async def collect(data_dir, cfg: dict, env, *, clock=None, sources=None, telegram=None,
                   candle_urls: dict | None = None, limits: dict | None = None,
                   session: aiohttp.ClientSession | None = None, send_gap_s: float = 1.1,
-                  paper: dict | None = None, paper_urls: dict | None = None) -> dict:
-    """Una pasada. `paper` = {"capital": USDT, "rearm": bool} activa el operador paper (None = solo datos)."""
+                  paper: dict | None = None, paper_urls: dict | None = None,
+                  llm: "llm_mod.LlmClassifier | None" = None) -> dict:
+    """Una pasada. `paper` = {"capital": USDT, "rearm": bool} activa el operador paper (None = solo datos);
+    `llm` consulta a Claude las noticias dudosas (None = solo la capa rápida)."""
     from ..app import build_sources  # import tardío: evita el ciclo app ↔ research
     clock = clock or SystemClock()
     limits = limits if limits is not None else limits_mod.load()
@@ -288,6 +294,25 @@ async def collect(data_dir, cfg: dict, env, *, clock=None, sources=None, telegra
             e["nlp"], signals[e["id"]] = sig.as_dict(), sig
             if e["dedup"] == "new" and not e["is_noise"]:
                 counts[f"nlp_{sig.category}"] += 1
+        llm_out = {"consultas": 0, "usadas": 0, "usd": 0.0, "errores": Counter()}
+        if llm is not None and llm.enabled:
+            llm.budget = llm_mod.Budget.from_dict(state.get("llm"))
+            originals = [e for e in new_events if e["dedup"] == "new" and not e["is_noise"]]
+            results = await llm_mod.refine(llm, [(e["title"], bodies[e["id"]][0], signals[e["id"]]) for e in originals])
+            for e, res in zip(originals, results, strict=True):
+                if res is None:
+                    continue
+                llm_out["consultas"] += 1
+                llm_out["usd"] += res.usd
+                if res.signal is None:
+                    llm_out["errores"][res.error] += 1
+                    e["nlp_llm"] = {"error": res.error}
+                    continue
+                llm_out["usadas"] += 1
+                e["nlp_llm"] = {**res.signal.as_dict(), "motivo": (res.raw or {}).get("reason", "")[:200],
+                                "latencia_ms": round(res.latency_ms)}
+                signals[e["id"]] = res.signal                         # la IA propone; el núcleo decide (C-3)
+            state["llm"] = llm.budget.as_dict()
 
         # -- etiquetado -----------------------------------------------------------------------
         pending = state.get("pending", []) + [
@@ -389,6 +414,8 @@ async def collect(data_dir, cfg: dict, env, *, clock=None, sources=None, telegra
             "categorias": {k.removeprefix("nlp_"): v for k, v in sorted(counts.items()) if k.startswith("nlp_")},
             "velas": {"pedidos": store.requests, **Counter(store.source.values()), "error": len(store.errors)},
             "telegram": tg.sent}
+    if llm_out["consultas"]:
+        out["llm"] = {**llm_out, "usd": round(llm_out["usd"], 6), "errores": dict(llm_out["errores"])}
     if paper_out is not None:
         out["paper"] = paper_out
     return out

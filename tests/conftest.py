@@ -15,7 +15,8 @@ def clock():
 def _home(tmp_path, monkeypatch):
     """Cada test con su TRADING_HOME aislado: nunca toca la carpeta real del usuario."""
     monkeypatch.setenv("TRADING_HOME", str(tmp_path / "home"))
-    for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "SEC_USER_AGENT", "WEBHOOK_SECRET"):
+    for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "SEC_USER_AGENT", "WEBHOOK_SECRET", "ANTHROPIC_API_KEY",
+              "CLAUDE_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "MEXC_ACCESS_KEY", "MEXC_SECRET_KEY"):
         monkeypatch.delenv(k, raising=False)
 
 

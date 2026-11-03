@@ -148,14 +148,23 @@ def cmd_collect(args) -> int:
               file=sys.stderr)
 
     paper = {"capital": args.capital, "rearm": args.rearm} if args.paper else None
+    from . import limits as limits_mod
+    from .intelligence.llm import LlmClassifier, api_key
+    key = api_key(os.environ)
+    if not key:
+        print("IA apagada: falta ANTHROPIC_API_KEY (decide solo el clasificador local).", file=sys.stderr)
 
     async def main():
         t = TelegramTransport(token, chat, base_url=api_base(os.environ)) if use_tg else None
+        llm = LlmClassifier(key, limit_usd=float(limits_mod.load()["ai"]["max_llm_usd_per_day"])) if key else None
         try:
-            return await collect(args.data or paths.home() / "datos", cfg, os.environ, telegram=t, paper=paper)
+            return await collect(args.data or paths.home() / "datos", cfg, os.environ, telegram=t, paper=paper,
+                                 llm=llm)
         finally:
             if t is not None:
                 await t.close()
+            if llm is not None:
+                await llm.close()
 
     print(json.dumps(asyncio.run(main()), ensure_ascii=False, sort_keys=True))
     return 0
