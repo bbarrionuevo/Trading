@@ -67,12 +67,24 @@ def test_a2_esta_version_solo_opera_en_paper():
 
 def test_a3_sin_codigo_de_ordenes_reales_retiros_ni_firmas_de_exchange():
     banned = [r"/api/v3/order\b", r"/fapi/v\d/order", r"\bnewOrder\b", r"\bplaceOrder\b", r"capital/withdraw",
-              r"\bwithdraw(al)?s?\s*\(", r"X-MBX-APIKEY", r"X-MEXC-APIKEY", r"\bccxt\b"]
+              r"\bwithdraw(al)?s?\s*\(", r"X-MBX-APIKEY", r"X-MEXC-APIKEY", r"\bccxt\b",
+              # MEXC futuros: órdenes, órdenes condicionales, apalancamiento y margen (los retiros ya están arriba)
+              r"/private/(plan|stop)?order", r"change_leverage", r"change_margin", r"change_position_mode",
+              r"/private/position/(?!open_positions)"]
     hits = []
     for f in code_files():
         text = f.read_text(encoding="utf-8")
         hits += [f"{f.relative_to(ROOT)}: {b}" for b in banned if re.search(b, text)]
     assert hits == []
+
+
+def test_a3_el_cliente_firmado_de_mexc_solo_lee():
+    from tradingagent.marketdata import mexc
+    assert mexc.READ_ONLY_PATHS == {"/api/v1/private/account/assets", "/api/v1/private/account/tiered_fee_rate"}
+    public = [n for n in dir(mexc.ReadOnlyClient) if not n.startswith("_")]
+    assert sorted(public) == ["account_ok", "fee_rates", "get"]                 # ni post, ni put, ni delete
+    src = (SRC / "marketdata" / "mexc.py").read_text(encoding="utf-8")
+    assert not re.search(r"session\.(post|put|delete|patch)\(", src)
 
 
 # -- B / D / E. Núcleo de seguridad ---------------------------------------------------------------
@@ -129,9 +141,11 @@ def test_g5_trading_nunca_usa_las_carpetas_de_nexus(tmp_path, monkeypatch):
 
 def test_g5_el_codigo_no_referencia_nada_de_nexus():
     patterns = [r"NEXUS_HOME", r"(?i)localappdata\W{0,6}nexus", r"(?i)\.nexus\b", r"(?i)['\"]nexus-",
-                r"(?im)^\s*(import|from)\s+nexus\b", r"(?i)userprofile\W{0,6}nexus"]
+                r"(?im)^\s*(import|from)\s+nexus\b", r"(?i)userprofile\W{0,6}nexus", r"(?i)\\nexus\b"]
     hits = []
-    for f in code_files():
+    deploy = [p for p in repo_files() if "deploy" in p.relative_to(ROOT).parts]
+    assert deploy, "faltan los scripts de despliegue en la PC"
+    for f in code_files() + deploy:
         if f.name == "paths.py" and f.parent == SRC:
             continue                                    # la guarda: nombra a nexus para negarse a usarlo
         text = f.read_text(encoding="utf-8")
@@ -147,15 +161,18 @@ def test_g2_autoprueba_de_rutas_protegidas():
 
 # -- G-1 / G-4 / G-6. Workflows de GitHub Actions ---------------------------------------------------
 WORKFLOWS = sorted((ROOT / ".github" / "workflows").glob("*.y*ml"))
-# Solo credenciales sin poder sobre el dinero: el bot de Telegram, el chat, el User-Agent de la SEC y el
-# token propio del workflow. Nunca claves de exchange (ni de solo lectura) mientras no hagan falta.
-ALLOWED_SECRETS = {"CHARBIS_BOT_TOKEN", "TELEGRAM_CHAT_ID", "SEC_USER_AGENT", "GITHUB_TOKEN"}
+# Solo credenciales sin poder sobre el dinero (REGLAS G-1): el bot de Telegram, el chat, el User-Agent de
+# la SEC, el token propio del workflow, la clave de Claude (gasto con tope del sobre) y las claves de SOLO
+# LECTURA de MEXC (sin trading ni retiros; el cliente solo hace GET a una lista cerrada). Nunca claves de
+# trading ni de retiro. GitHub no distingue mayúsculas en los nombres de los secretos: acá tampoco.
+ALLOWED_SECRETS = {"CHARBIS_BOT_TOKEN", "TELEGRAM_CHAT_ID", "SEC_USER_AGENT", "GITHUB_TOKEN", "CLAUDE_API_KEY",
+                   "ACCESS_KEY_MEXC", "SECRET_KEY_MEXC"}
 
 
 def test_g1_los_workflows_solo_usan_secretos_sin_poder_sobre_el_dinero():
     assert WORKFLOWS
     text = "\n".join(f.read_text(encoding="utf-8") for f in WORKFLOWS)
-    used = set(re.findall(r"secrets\.([A-Za-z0-9_]+)", text))
+    used = {u.upper() for u in re.findall(r"secrets\.([A-Za-z0-9_]+)", text)}
     assert used <= ALLOWED_SECRETS, sorted(used - ALLOWED_SECRETS)
     assert not re.search(r"secrets\s*\[|toJSON\(\s*secrets", text)       # nada de volcar todos los secretos
     assert not re.search(r"(?i)echo[^\n]*secrets\.", text)                # ni imprimirlos
@@ -184,3 +201,10 @@ def test_g6_trabajos_cortos_y_solo_en_este_repo():
         if isinstance(trigger, dict) and "schedule" in trigger:
             assert all(job.get("if") == "github.repository == 'bbarrionuevo/Trading'" for job in wf["jobs"].values())
             assert wf.get("concurrency", {}).get("cancel-in-progress") is False    # una corrida a la vez, sin cortes
+            assert all(job.get("timeout-minutes", 0) <= 10 for job in wf["jobs"].values())
+
+
+def test_g6_en_actions_solo_paper():
+    wf = (ROOT / ".github" / "workflows" / "recoleccion.yml").read_text(encoding="utf-8")
+    assert "--paper" in wf and not re.search(r"(?i)--(live|real)\b|mode:\s*live", wf)
+    assert config.DEFAULTS["mode"] == "paper"

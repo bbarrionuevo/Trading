@@ -141,12 +141,24 @@ sigue midiendo. GitHub a veces demora el cron (el 2-nov tardó horas en dar la p
 programada). En cada corrida:
 
 1. Lee las fuentes y guarda las noticias nuevas de hasta 3 horas en la rama `data`. Las copias de otras
-   fuentes y lo que parece ruido también quedan, marcados.
+   fuentes y lo que parece ruido también quedan, marcados. Cada noticia lleva su clasificación (`nlp`), y
+   las dudosas la opinión de Claude (`nlp_llm`).
 2. Una hora después de cada noticia, mide la reacción del precio con velas públicas de 1 minuto
-   (Binance; si no responde, Coinbase) a 1, 5, 15 y 60 minutos desde la publicación.
-3. Por Telegram: un aviso al activarse, las noticias de la Fed y la SEC, y un resumen por día.
+   (Binance; si no responde, Coinbase) a 1, 5, 15 y 60 minutos desde la publicación, y la triple barrera
+   desde la llegada. Con eso aprende: apaga lo que pierde y ajusta el meta-modelo (solo reduce riesgo).
+3. Opera en **paper**, cada 5 minutos, en dos cuentas simuladas de 120 USDT: Binance spot (solo largos)
+   y futuros de MEXC (largos y cortos a 1x). Todo queda en `paper/<mercado>/` de la rama `data`. Con el
+   cron, la noticia llega minutos tarde: casi siempre el alfa ya se fue y no entra. Es lo esperable: la
+   evidencia en serio sale de la PC.
+4. Por Telegram:
+   - un aviso al activarse;
+   - las noticias de la Fed y la SEC;
+   - cada operación paper con su SL, TP y p, y cada salida con su motivo y su retorno neto;
+   - cada freno;
+   - un resumen por día con una línea por cuenta paper.
 
-No opera, ni en paper (REGLAS G-6).
+Nunca hay órdenes reales (REGLAS G-6): el código no las tiene. Para frenar solo las entradas del paper,
+subí un archivo vacío `KILL` a la rama `data`.
 
 **Secretos** (en GitHub: Settings → Secrets and variables → Actions):
 
@@ -155,9 +167,12 @@ No opera, ni en paper (REGLAS G-6).
 | `CHARBIS_BOT_TOKEN` | El bot que manda los avisos | ✅ cargado |
 | `TELEGRAM_CHAT_ID` | A qué chat los manda | Falta: ver los pasos de abajo |
 | `SEC_USER_AGENT` | Habilita las dos fuentes de la SEC. Formato: `Nombre Apellido tu-mail@dominio` (norma de la SEC) | Opcional |
+| `CLAUDE_API_KEY` | Claude Haiku 5.5 para las noticias dudosas (tope diario del sobre: 5 USD) | Opcional |
+| `ACCESS_KEY_MEXC`, `SECRET_KEY_MEXC` | Leer las comisiones reales de tu cuenta de MEXC (REGLAS D-5). **Solo lectura**: sin permiso de trading ni de retiro | Opcional |
 
-Las claves de exchange **no se usan**: las velas públicas no las necesitan (REGLAS G-1). El CI rechaza un
-workflow que use cualquier secreto fuera de esa tabla.
+GitHub guarda los nombres de los secretos en mayúsculas: `CLAUDE_api_key` y `CLAUDE_API_KEY` son el
+mismo. Las claves de MEXC solo leen: el programa no tiene código de órdenes ni de retiros (REGLAS A-3).
+El CI rechaza un workflow que use cualquier secreto fuera de esta tabla.
 
 **Averiguar `TELEGRAM_CHAT_ID`** (una vez):
 
