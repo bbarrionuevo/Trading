@@ -14,6 +14,7 @@
   python -m tradingagent armar-real          arma el DINERO REAL con todo el saldo (frase exacta; --desarmar)
   python -m tradingagent armar-real --simulacro --capital 100 --dias 2   lo mismo SIN plata (ninguna orden)
   python -m tradingagent cerrar-todo         emergencia: cancela, cierra todo lo real y desarma
+  python -m tradingagent estudio-listados    cómo movieron los listados de Binance el precio (últimos 180 días)
   python -m tradingagent llm-check           prueba la clave de Claude con una consulta mínima (centavos de centavo)
   python -m tradingagent sources [--check]   fuentes y su estado; --check lee cada una una vez
   python -m tradingagent journal-verify      verifica la cadena de hashes del diario
@@ -349,6 +350,33 @@ def cmd_armar_real(args) -> int:
     return 0
 
 
+def cmd_estudio_listados(args) -> int:
+    """Estudio histórico: cómo movieron los listados de Binance a la moneda en MEXC (research/history.py)."""
+    _setup("WARNING")
+    import aiohttp
+
+    from .research.history import listing_study
+
+    async def main():
+        async with aiohttp.ClientSession(trust_env=True) as session:          # respeta un proxy si lo hay
+            return await listing_study(session, days=args.dias)
+
+    try:
+        rep = asyncio.run(main())
+    except Exception as e:                                               # noqa: BLE001 (sin red, se avisa claro)
+        print(f"No pude hacer el estudio (¿hay internet?): {type(e).__name__}: {str(e)[:160]}")
+        return 1
+    out = paths.home() / "datos" / "estudios" / "listados.json"
+    paths.write_json_atomic(out, rep)
+    names = {"listado_spot": "Listados spot de Binance", "futuros": "Lanzamientos de futuros de Binance"}
+    for kind, stats in rep["resumen"].items():
+        cells = " · ".join(f"{k[1:]} min {v['mediana'] * 100:+.1f} % ({v['positivos']}/{v['n']} suben)"
+                           for k, v in stats.items() if k.startswith("r"))
+        print(f"{names.get(kind, kind)}: {cells}")
+    print("Detalle en", out)
+    return 0
+
+
 def cmd_cerrar_todo(args) -> int:
     """Emergencia: cancela todas las órdenes y cierra todas las posiciones reales (con tope de precio), y desarma."""
     _setup("WARNING")
@@ -531,6 +559,8 @@ def main(argv=None) -> int:
     ar.add_argument("--desarmar", action="store_true")
     ar.add_argument("--simulacro", action="store_true", help="probar el modo real SIN plata: mismo programa, "
                     "precios reales de MEXC, ninguna orden (capital hasta el tope del sobre, hasta 30 días)")
+    es = sub.add_parser("estudio-listados")
+    es.add_argument("--dias", type=int, default=180)
     ct = sub.add_parser("cerrar-todo")
     ct.add_argument("--simbolos", default="BTC_USDT,ETH_USDT,SOL_USDT")
     sub.add_parser("llm-check")
@@ -546,7 +576,8 @@ def main(argv=None) -> int:
                 "sources": cmd_sources, "journal-verify": cmd_journal_verify, "paper-sim": cmd_paper_sim,
                 "collect": cmd_collect, "mexc-check": cmd_mexc_check, "llm-check": cmd_llm_check,
                 "supervisar": cmd_supervisar, "tablero": cmd_tablero, "mexc-real-check": cmd_mexc_real_check,
-                "armar-real": cmd_armar_real, "cerrar-todo": cmd_cerrar_todo}
+                "armar-real": cmd_armar_real, "cerrar-todo": cmd_cerrar_todo,
+                "estudio-listados": cmd_estudio_listados}
     if args.cmd not in handlers:
         ap.print_help()
         return 2

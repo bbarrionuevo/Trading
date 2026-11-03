@@ -60,6 +60,8 @@ def register(entries) -> int:
     extra = [e for e in entries if e.key not in ASSETS]
     _EXTRA.clear()
     _EXTRA.update(e.key for e in extra)
+    _LIQUID.clear()
+    _LIQUID.update(e.key for e in extra if getattr(e, "liquid", True))
     _EXTRA_NAME_RE.clear()
     for e in extra:
         if e.names:
@@ -79,8 +81,16 @@ def known(asset: str) -> bool:
     return asset in ASSETS or asset in _EXTRA
 
 
+_LIQUID: set[str] = set()
+
+
 def all_keys() -> list[str]:
     return sorted(set(ASSETS) | _EXTRA)
+
+
+def liquid_keys() -> list[str]:
+    """Los de siempre más los líquidos del universo (los que van en la lista que ve la IA)."""
+    return sorted(set(ASSETS) | _LIQUID)
 
 
 def detect(text: str, limit: int = 3) -> list[str]:

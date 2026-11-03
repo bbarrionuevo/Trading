@@ -176,3 +176,11 @@ def test_validacion_de_mercado_b4_y_microestructura(lim):
     assert market_blocks(book(), D("48"), lim, cfg, fair=98.5) == ["base_vs_marca:1.50%"]   # despegado: espera
     empty = OrderBook.from_levels("t", "SOLUSDT", [], [("100", "1")], T0)
     assert market_blocks(empty, D("48"), lim, cfg) == ["libro_vacio"]
+
+
+def test_no_correr_detras_salvo_en_listados_que_siguen_de_largo():
+    from tradingagent.decision.policy import chase_blocks
+    assert chase_blocks(0.03, 0.01, 0.02, "hack") == ["ya_recorrio_el_objetivo:+3.00%"]
+    assert chase_blocks(0.03, 0.01, 0.02, "listado") == []                 # estudio: el listado sigue de largo
+    assert chase_blocks(-0.02, 0.01, 0.02, "listado") == ["el_mercado_va_en_contra:-2.00%"]
+    assert chase_blocks(None, 0.01, 0.02) == [] and chase_blocks(0.005, 0.01, 0.02) == []

@@ -25,7 +25,11 @@ from .. import paths
 from . import mexc
 
 log = logging.getLogger("tradingagent.universe")
-MIN_ADV_USDT = 1_000_000          # los listados suelen ser monedas chicas; el libro se revisa contra la orden
+MIN_ADV_USDT = 1_000_000          # líquidos: se reconocen por nombre o ticker
+# Monedas chicas (≥ 0,1 M USDT por día): entran al universo, pero su ticker solo cuenta escrito como ticker
+# ("(MARSCOIN)", "$FOO"). Estudio del 3-nov (docs/ESTUDIO-LISTADOS.md): las que más subieron con un listado de
+# Binance movían 0,1 a 0,9 M por día en MEXC. Antes de cada orden se revisan spread y profundidad igual.
+MIN_ADV_SMALL_USDT = 100_000
 TTL_S = 6 * 3600
 CRYPTO, STOCK, INDEX, COMMODITY = "cripto", "accion", "indice", "materia_prima"
 _TICKER = re.compile(r"^[A-Z0-9]{1,12}$")
@@ -58,6 +62,7 @@ class Entry:
     kind: str                # cripto | accion | indice | materia_prima
     adv: float               # volumen de 24 h en USDT
     names: tuple = ()        # nombres que lo identifican en un texto
+    liquid: bool = True      # volumen ≥ MIN_ADV_USDT (las chicas solo se reconocen por su ticker escrito)
 
 
 def _key(c: dict) -> str:
@@ -83,20 +88,22 @@ def _kind(c: dict, key: str) -> str:
     return CRYPTO
 
 
-def build(details: list[dict], tickers: list[dict], min_adv: float = MIN_ADV_USDT) -> "Universe":
-    """Del catálogo y los tickers públicos de MEXC al universo operable (activo, por API, líquido)."""
+def build(details: list[dict], tickers: list[dict], min_adv: float = MIN_ADV_USDT,
+          min_small: float = MIN_ADV_SMALL_USDT) -> "Universe":
+    """Del catálogo y los tickers públicos de MEXC al universo operable (activo, por API, con volumen)."""
     adv = {t.get("symbol"): float(t.get("amount24") or 0) for t in tickers}
     entries: dict[str, Entry] = {}
     for c in details:
         sym = c.get("symbol", "")
         if c.get("quoteCoin") != "USDT" or c.get("state") != 0 or not c.get("apiAllowed") or c.get("isHidden"):
             continue
-        if adv.get(sym, 0) < min_adv:
+        if adv.get(sym, 0) < min(min_adv, min_small):
             continue
         key = _key(c)
         if not key:
             continue
-        e = Entry(key, sym, _kind(c, key), round(adv.get(sym, 0)), NAMES.get(key, ()))
+        liquid = adv.get(sym, 0) >= min_adv
+        e = Entry(key, sym, _kind(c, key), round(adv.get(sym, 0)), NAMES.get(key, ()) if liquid else (), liquid)
         if key not in entries or e.adv > entries[key].adv:          # dos contratos del mismo activo: el líquido
             entries[key] = e
     return Universe(entries.values())
@@ -125,6 +132,9 @@ class Universe:
     def keys(self) -> set[str]:
         return set(self.by_key)
 
+    def liquid_keys(self) -> set[str]:
+        return {k for k, e in self.by_key.items() if e.liquid}
+
     def as_dict(self) -> dict:
         return {"entradas": [asdict(e) for e in self.by_key.values()]}
 
@@ -133,7 +143,8 @@ class Universe:
         out = []
         for x in (d or {}).get("entradas", []):
             try:
-                out.append(Entry(x["key"], x["symbol"], x["kind"], float(x["adv"]), tuple(x.get("names") or ())))
+                out.append(Entry(x["key"], x["symbol"], x["kind"], float(x["adv"]), tuple(x.get("names") or ()),
+                                 bool(x.get("liquid", True))))
             except (KeyError, TypeError, ValueError):
                 continue
         return cls(out)
