@@ -103,7 +103,7 @@ class MexcFutures:
         while meta.get("funding_next") and meta["funding_next"] <= until_ms:
             m = meta["funding_next"] // MIN * MIN
             c = (run.store.candles.get(sym) or {}).get(m)
-            price = D(str(c[0])) if c else D(meta["avg_price"])
+            price = D(str(c[0])) if c else run.mark(sym)              # en vivo: el precio del libro
             qty = abs(run.pf.qty(sym))
             pay = round(qty * price * D(str(meta["funding_rate"])) * side, 8)    # + = la posición paga
             run.pf.cash -= pay

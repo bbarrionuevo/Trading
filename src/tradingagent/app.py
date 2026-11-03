@@ -1,5 +1,6 @@
-"""Ensamblado del agente: ingesta → (inteligencia, etapa 2) → (riesgo, etapa 3) → ejecución paper,
-con diario, latido y alertas. Cada pieza corre en su propia tarea; las alertas y el diario en hilos.
+"""Ensamblado del agente: ingesta → inteligencia (clasificador + Claude si duda) → decisión y riesgo →
+ejecución paper (live.py: futuros de MEXC por defecto), con diario, latido y alertas. Cada pieza corre en
+su propia tarea; las alertas y el diario en hilos. En segundo plano, el recolector aprende cada 15 min.
 
 Arranque: carga TRADING_HOME/.env y config.yaml, abre el diario, lanza el despachador de alertas (que
 hace su prueba de inicio y manda el mensaje "Agente iniciado" por Telegram sin que el motor lo espere),
@@ -72,9 +73,11 @@ def alert_transport_factory(cfg: dict, env, base_url: str | None = None):
 
 class Agent:
     def __init__(self, cfg: dict, env, *, clock=None, sources: list[SourceSpec] | None = None, book_provider=None,
-                 telegram_base_url: str | None = None, printer=print):
+                 telegram_base_url: str | None = None, printer=print, trader_market=None, llm_base_url=None):
         self.cfg, self.env, self.clock = cfg, env, clock or SystemClock()
         self._sources_override, self._book_provider = sources, book_provider
+        self._trader_market, self._llm_base_url = trader_market, llm_base_url
+        self.trader = None
         self.telegram_base_url, self.printer = telegram_base_url, printer
         self.stop_event = asyncio.Event()
         self.started = time.time()
@@ -96,15 +99,47 @@ class Agent:
                 "dedup": self.ingestion.dedup.stats(), "loop_lag": self.lag.stats(),
                 "portfolio": self.venue.portfolio.snapshot(self.venue.marks), "paper": self.venue.summary()
                 | {"portfolio": None}, "execution": self.execution.counts, "alerts": self.alerts.snapshot(),
-                "journal": self.journal.snapshot(), "bus": self.bus.stats()}
+                "journal": self.journal.snapshot(), "bus": self.bus.stats(),
+                "trader": self.trader.snapshot() if self.trader is not None else None}
 
     async def _print_accepted(self) -> None:
-        """Hasta que exista la etapa 2, las noticias aceptadas se muestran en consola."""
+        """Cada noticia aceptada se muestra en consola y, si el operador en vivo está prendido, se evalúa ya."""
         sub = self.bus.subscribe(TOPIC_ACCEPTED, "consola", maxsize=200)
+        pending: set[asyncio.Task] = set()
         async for ev in sub:
             it = ev.item
             age = f"{ev.age_s:.0f}s" if ev.age_s is not None else "s/h"
             self.printer(f"📰 [{it.source} n{it.tier} {age}] {it.title[:140]}")
+            if self.trader is not None:                          # no frena la lectura: cada noticia en su tarea
+                t = asyncio.create_task(self._trade(ev), name=f"noticia-{it.id[:8]}")
+                pending.add(t)
+                t.add_done_callback(pending.discard)
+
+    async def _trade(self, ev) -> None:
+        try:
+            await self.trader.on_news(ev)
+        except Exception:                                    # una noticia mal procesada no tira el agente
+            log.exception("falló la evaluación de %s", ev.item.id)
+
+    def _build_trader(self, session, lim):
+        from .intelligence.llm import LlmClassifier, api_key
+        from .live import LiveTrader
+        from .marketdata import mexc
+        from .research.futures import MexcFutures
+        from .research.shadow import BinanceSpot
+        t = self.cfg["trader"]
+        market = self._trader_market
+        if market is None:
+            if t["mercado"] == "binance-spot":
+                market = BinanceSpot()
+            else:
+                keys = (self.env.get("MEXC_ACCESS_KEY"), self.env.get("MEXC_SECRET_KEY"))
+                market = MexcFutures(readonly=mexc.ReadOnlyClient(session, *keys) if all(keys) else None)
+        key = api_key(self.env) if t.get("llm", True) else None
+        llm = LlmClassifier(key, limit_usd=float(lim["ai"]["max_llm_usd_per_day"]),
+                            base_url=self._llm_base_url) if key else None
+        return LiveTrader(market, session, self.clock, lim, alerts=self.alerts, journal=self.journal,
+                          capital=float(t["capital_usdt"]), llm=llm)
 
     async def run(self) -> None:
         cfg, env = self.cfg, self.env
@@ -157,6 +192,13 @@ class Agent:
                     webhook = WebhookSource(env.get("WEBHOOK_SECRET", ""), self.ingestion.handle, self.clock,
                                             host=wh["host"], port=wh["port"], senders=wh.get("senders") or {})
                     await webhook.start()
+                if cfg["trader"].get("enabled", True):
+                    self.trader = self._build_trader(session, lim)
+                    try:
+                        await self.trader.start()
+                    except Exception:                        # sin mercado, el agente igual lee y registra
+                        log.exception("no arrancó el operador en vivo")
+                        self.trader = None
                 hb = Heartbeat(self.collect, interval_s=cfg["heartbeat_s"], printer=self.printer)
                 tasks += [asyncio.create_task(p.run(self.stop_event), name=f"fuente-{p.spec.id}") for p in self.pollers]
                 tasks += [asyncio.create_task(self.execution.run(self.stop_event), name="ejecucion"),
@@ -164,6 +206,12 @@ class Agent:
                           asyncio.create_task(self.lag.run(), name="lag"),
                           asyncio.create_task(hb.run(self.stop_event), name="latido"),
                           asyncio.create_task(self._print_accepted(), name="consola")]
+                if self.trader is not None:
+                    from .live import learn_loop
+                    tasks.append(asyncio.create_task(self.trader.watch(self.stop_event), name="vigilancia"))
+                    if cfg["trader"].get("aprender", True):
+                        tasks.append(asyncio.create_task(learn_loop(self.stop_event, cfg, env, lim, home / "datos"),
+                                                         name="aprendizaje"))
                 log.info("agente %s en modo %s: %d fuentes activas, %d apagadas", __version__, cfg["mode"], len(enabled),
                          len(self.sources_off))
                 for sid, why in self.sources_off.items():
@@ -173,11 +221,13 @@ class Agent:
                 finally:
                     self.stop_event.set()                 # si fue una cancelación, avisa a todas las tareas
                     for t in tasks:
-                        if t.get_name() in ("lag", "consola") or t.get_name().startswith("fuente-"):
+                        if t.get_name() in ("lag", "consola", "aprendizaje") or t.get_name().startswith("fuente-"):
                             t.cancel()
                     await asyncio.wait(tasks, timeout=15)
                     if webhook:
                         await webhook.stop()
+                    if self.trader is not None and self.trader.llm is not None:
+                        await self.trader.llm.close()
         finally:                                      # también con Ctrl+C en Windows (cancelación)
             self.journal.record("stop", uptime_s=round(time.time() - self.started, 1))
             await asyncio.to_thread(self.alerts.stop, 5)

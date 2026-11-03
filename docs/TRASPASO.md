@@ -1,98 +1,55 @@
-# Traspaso (2-nov-2026): dónde quedó el trabajo
+# Traspaso (3-nov-2026): dónde quedó el trabajo
 
-## Ya funciona (en `main`)
-- Etapa 1 completa: ingesta, paper venue riguroso, Telegram fail-safe, diario, reglas v2 (`docs/REGLAS.md`).
-- Recolector en GitHub Actions (`.github/workflows/recoleccion.yml`, cada 15 min, rama `data`):
-  - fuentes 6/6 OK desde GitHub;
-  - Telegram OK (bot @StarkLedger_bot, secretos `CHARBIS_BOT_TOKEN` + `TELEGRAM_CHAT_ID`).
-- **Sin verificar todavía:** las primeras etiquetas de velas (Binance `data-api.binance.vision`, respaldo
-  Coinbase). Leer el log de una corrida de `recoleccion.yml` y `reacciones/` en la rama `data`.
+## Hecho en esta sesión (rama `claude/nice-sagan-inp0u8`)
 
-## A medio hacer (rama `claude/nice-sagan-inp0u8`, commit "WIP")
-Pasan lint y los 99 tests existentes, pero **no tienen tests propios ni están conectados**.
-
-| Archivo | Qué es | Estado |
+| Paso | Qué | Dónde |
 |---|---|---|
-| `src/tradingagent/intelligence/classifier.py` | Clasificador determinista: `Signal` (categoría, polaridad, confianza, activos, horizonte, reglas) | Hecho; probado a mano con titulares |
-| `src/tradingagent/decision/risk.py` | `RiskState`: breakers diario, semanal, DD y enfriamiento; avisos de una sola vez; rearme | Hecho, sin tests |
-| `src/tradingagent/decision/policy.py` | `news_blocks`, `atr_5m`, `market_blocks`, `plan_entry` (tamaño por riesgo/ATR) | Hecho, sin tests |
-| `src/tradingagent/execution/service.py` | `execute()`: camino directo con los mismos controles (D-0) | Hecho; tests viejos verdes |
-| `src/tradingagent/research/shadow.py` | Operador paper por corridas (detalle abajo) | Escrito, **nunca ejecutado** |
+| 1 | Tests del clasificador, frenos, política y operador paper (servidores falsos de Binance, MEXC, Telegram, RSS y Anthropic) | `tests/` |
+| 2 | El recolector clasifica cada noticia (`nlp`); `collect --paper` opera en paper; línea de paper en el resumen diario | `research/collector.py` |
+| 3 | Aprendizaje que solo reduce riesgo: apaga "categoría:lado" con n ≥ 30 e IC95 < 0; ajusta κ ≤ 1 del meta-modelo | `research/learn.py` |
+| 4 | Informe "Trading Sistemático por Eventos": vector C/P/I/M/D, alfa con t½ = 120 s (obsoleta a 360 s), meta-modelo p ≥ 0,60, triple barrera 1,5σ/3σ, ¼-Kelly con b neto, paridad de volatilidad, exposición neta ≤ 30 %, spread z ≤ 2,5, L3, divergencia ≤ 1 %, Kyle, raíz cuadrada y Almgren-Chriss, PSR/DSR, freno diario y halt que cierran todo | `intelligence/`, `decision/`, `execution/costs.py`, `marketdata/liquidity.py`, `research/evaluation.py` |
+| 5 | Claude Haiku 5.5 para noticias dudosas (SDK `anthropic` 2.4.0, esquema, grounding, presupuesto, sin reintentos) | `intelligence/llm.py` |
+| 6 | Paper de futuros de MEXC: cortos, comisiones D-5, funding, liquidación; cliente privado de solo lectura con lista cerrada | `marketdata/mexc.py`, `research/futures.py` |
+| PC | Operador en vivo para la PC 24/7 (mismo núcleo, barreras cada segundo, estado persistente) + tarea `trading-agente` | `live.py`, `deploy/windows/` |
 
-`research/shadow.py`, el operador paper por corridas:
-- OCO con velas de 1 min;
-- salidas por horizonte o por noticia negativa;
-- entradas contra el libro real de Binance;
-- filtros de exchangeInfo;
-- registros en `paper/` de la rama `data`.
+**Verificado en GitHub Actions:**
 
-Pendientes conocidos en `shadow.py`:
-- envolver la E/S en `asyncio.to_thread`, por la regla ASYNC240 de ruff;
-- redondear al tick el precio del stop;
-- falta `send_alert(alert)` en `_Telegram` (`research/collector.py`).
+- El recolector lee las 6 fuentes y etiqueta con velas de Binance (`data-api.binance.vision`) desde
+  GitHub: corrida programada del 3-nov a las 00:53 UTC.
+- El código nuevo corre en Actions: corrida manual desde la rama a las 01:22 UTC.
+- El cron de 15 minutos tardó horas en dar su primera corrida (scheduler de GitHub): no es un error del repo.
+
+## Pendiente de la aprobación del dueño (rutas protegidas, PR aparte)
+
+Paso 7 y reglas v3:
+
+- workflow cada 5 min con `--paper` y los secretos `CLAUDE_API_KEY`, `ACCESS_KEY_MEXC` y `SECRET_KEY_MEXC`;
+- G-1 y G-6 enmendadas, F-3 con DSR, tabla de aprobaciones;
+- `ALLOWED_SECRETS` y `test_a3` endurecido (endpoints de órdenes de MEXC prohibidos);
+- `max_net_exposure_pct` en el sobre.
+
+**Sin verificar todavía (necesita el PR de reglas, que pasa los secretos al workflow):**
+
+- la llamada real a Claude con `CLAUDE_API_KEY`;
+- la API de MEXC desde los servidores de GitHub (EE. UU.);
+- las claves de solo lectura de MEXC.
+
+Se prueban con una corrida manual del workflow desde la rama del PR.
 
 ## Pasos siguientes (en orden)
-1. **Tests de lo nuevo** (con servidores falsos, como `tests/test_research.py`):
-   - clasificador;
-   - `RiskState`;
-   - política;
-   - `shadow.run_paper`, con klines, depth y exchangeInfo falsos.
-2. **Conectarlo:**
-   - el recolector clasifica cada evento y guarda `nlp`;
-   - `collect --paper --capital 120 [--rearm]` llama a `run_paper` con los eventos originales;
-   - el resumen diario suma una línea de paper.
-3. **Aprendizaje** (`research/learn.py`):
-   - estadística por categoría con `r_recv_15m/60m` menos el 0,2 % de comisión;
-   - apagar las categorías con evidencia negativa (n ≥ 30 y límite superior del IC95 < 0);
-   - solo reduce riesgo (C-5).
-4. **Aplicar el informe "Trading Sistemático por Eventos"** (PDF del dueño):
-   - **Triple barrera:** TP = 3σ, SL = 1,5σ, más la expiración temporal. Hoy hay stop por ATR, TP = 2R y horizonte: ajustar a σ.
-   - **Decaimiento del alfa:** vida media de 120 s; obsoleta si Δt > 360 s. Más estricto que el `news.max_age_s` de 600 s (permitido, A-1).
-   - **Vector de evento:** C (relevancia de la entidad, 0-10), P, I (importancia), M (magnitud) y D (duración). α_E = P·(C/10)(I/10)(M/10), con corte |α_E| ≥ α_min y C ≥ 7.
-   - **Meta-modelo:** p = P(TP antes que SL); operar si p ≥ 0,60.
-   - **¼-Kelly:** f = 0,25·(p·b − (1 − p))/b con b = 2, acotado por el sobre de riesgo.
-   - **Microestructura:**
-     - spread_rel con z-score ≤ 2,5 contra su media reciente;
-     - L3 (suma de los 3 primeros niveles) ≥ k × la orden;
-     - divergencia entre el último precio y el mid > 1 % ⇒ no operar.
-   - **Costos:** Almgren-Chriss y raíz cuadrada (Y·σ·√(Q/V), Y ≈ 0,6) para estimar el impacto.
-   - **Evaluación:** PSR/DSR (Bailey y López de Prado); DSR ≥ 0,95 para promover y < 0,80 para descartar. Agregar a F-3.
-   - **Breaker diario del informe:** 2,5 %. El sobre ya tiene 2 %, que es más estricto: se queda.
-5. **LLM** (secreto `CLAUDE_api_key`):
-   - modelo `claude-haiku-5-5` (Haiku 5.5) para consultas sobre noticias ambiguas;
-   - salida JSON validada con esquema; el texto de la noticia nunca es una instrucción (C-1, C-2);
-   - presupuesto `ai.max_llm_usd_per_day` = 5 y respaldo determinista (C-4);
-   - la IA propone y el motor de riesgo decide (C-3).
-
-   Agregarlo a `ALLOWED_SECRETS` en `tests/test_rules.py` y a G-1.
-6. **Futuros MEXC en paper** (secretos `Access_Key_MEXC`, `SECRET_KEY_MEXC`; la cuenta no tiene fondos):
-   - simular comisiones de futuros (maker 0,02 % y taker 0,05 % aprox.; verificar con la API), funding y liquidación;
-   - apalancamiento ≤ `per_trade.max_leverage` (1 en el sobre; subirlo solo con el dueño);
-   - permite cortos.
-
-   **No enviar órdenes reales:** A-2 exige el armado local del dueño, y `test_a3` prohíbe endpoints de órdenes en el código. Las claves solo sirven para lectura (comisiones reales, cuenta) y deben entrar a `ALLOWED_SECRETS` y a G-1.
-7. Workflow:
-   - cron cada 5 min con `--paper` (el dueño ya aprobó: "estás aprobado para hacer todos los cambios necesarios", 2-nov);
-   - enmendar G-6 (hoy prohíbe el paper en Actions) y registrar la aprobación en la tabla de REGLAS.
+1. Que el dueño revise y fusione el PR de reglas v3; disparar el workflow y leer el log (Claude, MEXC).
+2. Instalar el agente en la PC (`deploy/windows/instalar-agente.ps1`) con el `.env` (Telegram, Claude,
+   claves de solo lectura de MEXC) y mirar el primer día de `paper-vivo`.
+3. Juntar evidencia: F-3 pide 60 operaciones cerradas en 21 días con DSR ≥ 0,95. Con el cron casi no
+   habrá operaciones (el alfa decae antes): la evidencia sale de la PC.
+4. Calibración: cuando haya ≥ 30 etiquetas de triple barrera por categoría, revisar κ, M por categoría y
+   los motivos de descarte (`decisiones/`). Fuentes más rápidas (webhook) si el RSS llega tarde.
+5. Etapa 4 (conector real con armado local) recién con F-3 cumplido y el armado del dueño (A-2).
 
 ## Reglas que no cambian
 - Nunca tocar el repo ni las carpetas de nexus.
-- Nada de dinero real.
+- Nada de dinero real (solo paper; no hay código de órdenes reales: `test_a3`).
 - No aflojar `config/limits.yaml`.
 - No imprimir secretos (el repo y los logs son públicos).
 - Acciones fijadas por SHA.
 - Rutas protegidas: solo con aprobación del dueño.
-
-## Notas del dueño sobre futuros (texto que mandó, 2-nov)
-- La vida media del alfa en futuros es de **30 a 300 s**. Con el cron de Actions (5 a 15 min) no se captura: sirve para aprender y medir. Operar en tiempo real requiere un proceso continuo (la PC del dueño o un VPS). Proponerlo y que decida el dueño: es un despliegue y tiene costo.
-- **Antes de cada entrada, revisar la liquidez del libro:** spread por z-score, L3 y divergencia contra el mid. Cuando sale una noticia, los creadores de mercado retiran órdenes: no mandar órdenes a mercado sin tope en ese instante.
-- **Triple barrera obligatoria** en futuros: TP, SL y expiración, adaptados a la volatilidad.
-- **¼-Kelly** para el tamaño y el apalancamiento, siempre dentro de `per_trade.max_leverage` (hoy 1x; subirlo solo con aprobación explícita del dueño en un PR de `limits.yaml`).
-- **El PaperTradingEngine simula futuros:**
-  - comisiones de Binance Futures (0,02 % maker y 0,05 % taker) y de MEXC (verificar con su API);
-  - funding cada 8 h;
-  - precio de liquidación;
-  - cortos.
-
-  Ya existe la base: `Instrument(kind="perp")` y margen 1x en `execution/paper.py`.
-- **Meta de promoción:** DSR ≥ 0,95 en paper (agregar a F-3).
