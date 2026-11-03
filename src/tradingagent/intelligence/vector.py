@@ -27,9 +27,11 @@ from ..research import assets as asset_mod
 from .classifier import MARKET_WIDE, Signal
 
 IMPORTANCE = {"quiebra": 9, "hack": 8, "deslistado": 8, "etf": 8, "listado": 7, "macro": 7, "regulatorio": 7,
-              "caida_red": 6, "desbloqueo": 5, "tesoreria": 5, "adopcion": 4, "quema": 4, "mejora_red": 4}
-MAGNITUDE = {"quiebra": 9, "hack": 8, "deslistado": 8, "listado": 8, "etf": 7, "macro": 6, "regulatorio": 6,
-             "caida_red": 5, "desbloqueo": 4, "tesoreria": 4, "adopcion": 3, "quema": 3, "mejora_red": 3}
+              "fusion": 8, "resultados": 7, "caida_red": 6, "desbloqueo": 5, "tesoreria": 5, "adopcion": 4,
+              "quema": 4, "mejora_red": 4}
+MAGNITUDE = {"quiebra": 9, "hack": 8, "deslistado": 8, "listado": 8, "fusion": 8, "etf": 7, "resultados": 7,
+             "macro": 6, "regulatorio": 6, "caida_red": 5, "desbloqueo": 4, "tesoreria": 4, "adopcion": 3,
+             "quema": 3, "mejora_red": 3}
 DURATION = ((30, 3), (60, 5), (120, 7), (240, 9))           # horizonte (min) → D
 HALF_LIFE_S = 120.0
 STALE_HALF_LIVES = 3

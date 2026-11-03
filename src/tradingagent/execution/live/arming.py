@@ -27,7 +27,8 @@ VERIFY_MAX_AGE_S = 30 * 86400
 MAX_DAYS = 30                                     # A-2
 ALL = "todo_el_saldo"                             # capital del armado real: todo el saldo de la cuenta
 VENUES = ("mexc-futuros",)
-DEFAULT_ASSETS = ("BTC", "ETH", "SOL")
+ALL_ASSETS = "TODOS"                              # cualquier activo del universo operable (lo que mueva la noticia)
+DEFAULT_ASSETS = (ALL_ASSETS,)
 
 
 def fingerprint(access_key: str) -> str:
@@ -104,5 +105,7 @@ def status(home: Path, access_key: str | None, now: float | None = None) -> tupl
     return True, "", data
 
 
-def asset_allowed(data: dict, symbol: str) -> bool:
-    return symbol.split("_")[0].upper() in set(data.get("activos", []))
+def asset_allowed(data: dict, symbol: str, key: str | None = None) -> bool:
+    """¿El armado permite este contrato? "TODOS" (lo normal): cualquiera del universo operable."""
+    allowed = {str(a).upper() for a in data.get("activos", [])}
+    return ALL_ASSETS in allowed or symbol.split("_")[0].upper() in allowed or (key or "").upper() in allowed

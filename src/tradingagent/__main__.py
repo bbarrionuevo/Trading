@@ -526,7 +526,8 @@ def main(argv=None) -> int:
     ar.add_argument("--capital", type=float, help="solo para el simulacro: USDT de mentira (100 si no se dice). "
                     "Con dinero real no hay tope: opera con todo el saldo de la cuenta")
     ar.add_argument("--dias", type=int, default=30, help="vencimiento del armado (hasta 30 días)")
-    ar.add_argument("--activos", default="BTC,ETH,SOL")
+    ar.add_argument("--activos", default="todos", help="todos (lo que mueva la noticia: criptos, acciones, índices, "
+                    "oro, petróleo) o una lista, por ejemplo BTC,ETH,TSLA")
     ar.add_argument("--desarmar", action="store_true")
     ar.add_argument("--simulacro", action="store_true", help="probar el modo real SIN plata: mismo programa, "
                     "precios reales de MEXC, ninguna orden (capital hasta el tope del sobre, hasta 30 días)")

@@ -82,7 +82,17 @@ RULES = (
     Rule("desbloqueo", "desbloqueo", -0.3, 0.4, 240, _r(r"\btoken unlocks?\b|\bunlock(s|ing)? .{0,30}tokens?\b")),
     Rule("caida_red", "caida_red", -0.4, 0.45, 120, _r(
         r"\b(outage|network halt(s|ed)?|chain halt(s|ed)?|halts? block production|downtime)\b")),
+    Rule("resultados_malos", "resultados", -0.6, 0.45, 60, _r(
+        r"\b(miss(es|ed)?|falls? short of|fell short of|below|trails?)\b.{0,40}\b(estimates|expectations|"
+        r"forecasts?|consensus)\b|\b(cuts?|lowers?|slash(es|ed)?|withdraws?) (its |full[- ]year |annual )?"
+        r"(guidance|outlook|forecast)\b|\bprofit warning\b")),
     # -- positivas -------------------------------------------------------------------------------
+    Rule("resultados_buenos", "resultados", 0.6, 0.45, 60, _r(
+        r"\b(beats?|tops?|topped|exceeds?|exceeded|surpass(es|ed)?|crushe[sd])\b.{0,40}\b(estimates|expectations|"
+        r"forecasts?|consensus)\b|\braises? (its |full[- ]year |annual )?(guidance|outlook|forecast)\b")),
+    Rule("fusion", "fusion", 0.4, 0.35, 120, _r(
+        r"\b(to acquire|agree(s|d)? to (buy|acquire)|acquisition of|merger (with|agreement)|to merge|"
+        r"takeover (bid|offer)|buyout)\b")),
     Rule("listado", "listado", 0.6, 0.55, 60, _r(
         r"\b(will list|lists|to list|listing of|adds? (trading|support) for|launch(es|ed)? (spot )?trading (for|of))\b")),
     Rule("etf_positivo", "etf", 0.6, 0.55, 120, _r(
@@ -111,6 +121,9 @@ UNCERTAIN = re.compile(r"\b(?i:reportedly|rumou?rs?|rumou?red|sources say|consid
 DENIAL = _r(r"\b(denies|denied|false|fake|not true|no plans|rejects? (reports|rumou?rs)|debunk(s|ed)?)\b")
 EXCHANGES = _r(r"\b(binance|coinbase|kraken|upbit|okx|bybit|robinhood|bithumb)\b")
 MARKET_WIDE = {"macro", "regulatorio", "etf", "tesoreria", "quiebra"}
+# Categorías donde las reglas no saben la dirección (en una fusión la comprada sube y la que compra suele bajar):
+# la certeza baja para que siempre decida la lectura de la IA.
+AMBIGUOUS = {"fusion"}
 NOT_TRADABLE = {"precio", "otro"}
 
 
@@ -139,6 +152,8 @@ def classify(title: str, body: str = "", *, tier: int = 2, cluster_sources: int 
         polarity, certainty = polarity * -0.5, certainty * 0.6
     if PRICE_MOVE.search(title):
         certainty *= 0.5                                  # ya se movió: lo que queda es menos
+    if primary.category in AMBIGUOUS:
+        certainty *= 0.7
     confidence *= certainty
     if tier == 1:
         confidence *= 1.25

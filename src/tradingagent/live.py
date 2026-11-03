@@ -61,6 +61,7 @@ class LiveTrader:
         self.simulated = simulated                                   # simulacro del real: nunca manda órdenes
         self.kill_file = home / "KILL"
         self.learned_path = learned_path or home / "datos" / "aprendizaje" / "estado.json"
+        self.universe_cache = home / "datos" / "universo-mexc.json"
         self.paper_config = paper_config
         self.lock = asyncio.Lock()
         self.counts: dict[str, int] = {}
@@ -74,6 +75,7 @@ class LiveTrader:
         if self.llm is not None and not self.real:     # el tope diario de la IA sobrevive a reinicios (C-4); lo
             self.llm.budget = llm_mod.Budget.from_dict(self.st.get("llm"))   # lleva la cuenta de práctica
         self.pf = shadow._portfolio(self.st, self.market)
+        await self.refresh_universe()
         symbols = sorted(set(self.st["positions"]) | {self.market.symbol(a) for a in shadow.CORE})
         self.registry = await self.market.instruments(self.session, symbols, self.st["instruments"], now)
         self.books = self.market.books(self.session, self.clock)
@@ -101,6 +103,16 @@ class LiveTrader:
                 f"🧪 Empecé la cuenta de práctica en {shadow.MARKET_ES.get(self.market.name, self.market.name)} con "
                 f"{self.capital:.0f} USDT simulados (precios reales, plata no). Cuando llegue una noticia que valga "
                 "la pena, opero en segundos y te aviso.", silent=False))
+
+    async def refresh_universe(self) -> None:
+        """Futuros de MEXC: todo lo operable (criptos, acciones, índices, metales y petróleo), renovado cada 6 h."""
+        if not hasattr(self.market, "load_universe"):
+            return
+        try:
+            n = await self.market.load_universe(self.session, self.universe_cache)
+            log.info("universo de %s: %d activos operables", self.market.name, n)
+        except Exception:                                              # sin universo, los de siempre
+            log.exception("no pude cargar el universo de MEXC")
 
     def learned(self) -> dict:
         return paths.read_json(self.learned_path, None) or {}
@@ -316,6 +328,7 @@ class LiveTrader:
 
     async def housekeeping(self) -> None:
         """Saldo real, spreads (z-score), frenos con el equity marcado, funding y estado guardado."""
+        await self.refresh_universe()                                  # de la caché salvo cada 6 h
         async with self.lock:
             await self.reconcile()
             await self.sync_capital()

@@ -13,7 +13,9 @@ SPECS = {   # contractSize, priceUnit, taker, maker, mmr
     "BTC_USDT": ("0.0001", "0.1", 0.0002, 0.0, 0.004),
     "ETH_USDT": ("0.01", "0.01", 0.0002, 0.0, 0.004),
     "SOL_USDT": ("1", "0.01", 0.0002, 0.0, 0.005),
+    "TESLA_USDT": ("0.01", "0.01", 0.0002, 0.0, 0.01),          # una acción: Tesla (TSLA), como en MEXC
 }
+TRADFI = {"TESLA_USDT": ("TESLA", "TSLA")}                      # baseCoin, baseCoinName (el ticker de la acción)
 
 
 def ok(data):
@@ -33,16 +35,25 @@ class FakeMexc:
     def now_m(self) -> int:
         return int(self.clock.time() * 1000) // MIN * MIN
 
-    async def detail(self, request):
-        sym = request.query["symbol"]
-        self.requests.append(("detail", sym))
-        if "detail" in self.down or sym not in SPECS:
-            return web.json_response({"success": False, "code": 1001, "message": "contract not exists"})
+    def _detail(self, sym: str) -> dict:
         size, unit, taker, maker, mmr = SPECS[sym]
-        return ok({"symbol": sym, "baseCoin": sym.split("_")[0], "quoteCoin": "USDT", "settleCoin": "USDT",
-                   "contractSize": float(size), "priceUnit": float(unit), "volUnit": 1, "minVol": 1, "maxVol": 1e6,
-                   "takerFeeRate": taker, "makerFeeRate": maker, "maintenanceMarginRate": mmr, "maxLeverage": 200,
-                   "state": 0})
+        base, name = TRADFI.get(sym, (sym.split("_")[0], sym.split("_")[0]))
+        return {"symbol": sym, "baseCoin": base, "baseCoinName": name, "quoteCoin": "USDT", "settleCoin": "USDT",
+                "contractSize": float(size), "priceUnit": float(unit), "volUnit": 1, "minVol": 1, "maxVol": 1e6,
+                "takerFeeRate": taker, "makerFeeRate": maker, "maintenanceMarginRate": mmr, "maxLeverage": 200,
+                "state": 0, "apiAllowed": True, "type": 2 if sym in TRADFI else 1,
+                "conceptPlate": ["mc-trade-zone-Stock"] if sym in TRADFI else []}
+
+    async def detail(self, request):
+        sym = request.query.get("symbol")
+        self.requests.append(("detail", sym or "todos"))
+        if "detail" in self.down:
+            return web.json_response({"success": False, "code": 1001, "message": "contract not exists"})
+        if sym is None:                                         # el catálogo entero (universo operable)
+            return ok([self._detail(s) for s in SPECS])
+        if sym not in SPECS:
+            return web.json_response({"success": False, "code": 1001, "message": "contract not exists"})
+        return ok(self._detail(sym))
 
     async def depth(self, request):
         sym = request.match_info["symbol"]
@@ -77,11 +88,22 @@ class FakeMexc:
             m += MIN
         return ok(out)
 
-    async def ticker(self, request):
-        sym = request.query["symbol"]
-        self.requests.append(("ticker", sym))
+    def _ticker(self, sym: str) -> dict:
         p = self.price(sym, self.now_m())
-        return ok({"symbol": sym, "lastPrice": p, "fairPrice": p, "amount24": 2e9, "fundingRate": self.funding["rate"]})
+        return {"symbol": sym, "lastPrice": p, "fairPrice": p, "amount24": 2e9, "fundingRate": self.funding["rate"]}
+
+    async def ticker(self, request):
+        sym = request.query.get("symbol")
+        self.requests.append(("ticker", sym or "todos"))
+        if sym is None:                                         # todos los tickers (los que tienen precio en el test)
+            out = []
+            for s in SPECS:
+                try:
+                    out.append(self._ticker(s))
+                except KeyError:
+                    continue
+            return ok(out)
+        return ok(self._ticker(sym))
 
     async def funding_rate(self, request):
         sym = request.match_info["symbol"]

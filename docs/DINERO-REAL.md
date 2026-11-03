@@ -97,6 +97,21 @@ pérdida para los frenos.
   nada: la saca de su cuenta con precio estimado, avisa, y la conciliación vuelve a coincidir.
 - Nunca se cierra más de lo que MEXC tiene abierto.
 
+## Qué opera: lo que mueva la noticia (3-nov)
+
+Pedido del dueño: "operar con distintas monedas, cripto, acciones o lo que sea necesario según la noticia".
+
+- **Universo:** todo lo operable por API en MEXC futuros con volumen de 24 h ≥ 2 M USDT. Hoy son unos 120
+  activos: 74 criptos, 25 acciones (Tesla, Nvidia, Apple, MicroStrategy, Circle, Intel, Micron...), índices
+  (S&P 500, Nasdaq 100, SPY), oro, plata y petróleo (WTI y Brent). Se renueva solo cada 6 h.
+- **Cómo lo elige:** la noticia nombra el activo ("Tesla supera lo esperado" → TSLA, "el oro marca récord" →
+  XAU) y la IA lo confirma antes de entrar. Un ticker raro solo cuenta escrito como ticker (`$FOO`, `(FOO)`).
+- **Noticias de bolsa:** CNBC (titulares y resultados de empresas), Seeking Alpha e Investing.com, además de
+  las de cripto y la Reserva Federal.
+- **Futuros a 1x antes que spot:** en MEXC, el futuro cobra 0 a 0,02 % por operación y el spot 0,05 %. A 1x
+  es lo mismo que comprar, permite vender en corto y no se liquida. Spot sirve para las monedas que no tienen
+  futuro (siguiente paso: primero en práctica).
+
 ## Apalancamiento
 
 El sobre sigue en 1x (sin apalancamiento). Con 100 USDT ya entran los lotes mínimos de BTC, SOL y ETH (tabla

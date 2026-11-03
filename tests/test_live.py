@@ -190,3 +190,30 @@ async def test_resumen_diario_de_la_cuenta_de_la_pc(tmp_path):
     assert len(texts) == 1
     assert "1 operación cerrada (1 ganada): +0,50 USDT." in texts[0] and "Cuenta: 120,00 USDT" in texts[0]
     assert "Para pasar a dinero real hacen falta 60 operaciones" in texts[0]
+
+
+async def test_opera_la_accion_que_mueve_la_noticia_con_el_universo_de_mexc(tmp_path):
+    """El dueño: operar "cripto, acciones o lo que sea necesario según la noticia". El universo sale del catálogo
+    público de MEXC (Tesla es TESLA_USDT); las reglas reconocen "Tesla", la IA lo confirma y se opera la acción."""
+    from tradingagent.research import assets
+
+    clock = ManualClock(T0 + 600)
+    prices = {"BTC_USDT": 100_000.0, "ETH_USDT": 4_000.0, "SOL_USDT": 150.0, "TESLA_USDT": 400.0}
+    mk = FakeMexc(lambda sym, m: prices[sym], clock)
+    fake = FakeClaude()
+    fake.reply = {**fake.reply, "category": "resultados", "assets": ["TSLA"], "polarity": 0.8, "certainty": 0.9,
+                  "horizon_min": 60, "relevance": 10, "importance": 7, "impact": 7}
+    home, alerts = tmp_path / "home", Alerts()
+    async with serve(mk.app()) as url, serve(fake.app()) as aurl, aiohttp.ClientSession() as session:
+        llm = LlmClassifier(KEY, base_url=aurl, clock=clock)
+        try:
+            t = await make(session, url, clock, home, alerts, llm=llm)
+            assert t.market.symbol("TSLA") == "TESLA_USDT" and assets.known("TSLA")      # del catálogo de MEXC
+            assert (home / "datos" / "universo-mexc.json").exists()                     # en caché para reinicios
+            await t.on_news(news("t1", "Tesla beats Q3 estimates as deliveries jump", clock.time()))
+            assert len(fake.requests) == 1 and "TSLA" in fake.requests[0]["system"]      # la IA sabe qué se opera
+            pos = t.st["positions"]["TESLA_USDT"]
+            assert pos["side"] == "largo" and pos["category"] == "resultados"
+            assert "Compré TESLA" in alerts.texts()[-1]
+        finally:
+            await llm.close()
