@@ -183,7 +183,7 @@ def risk_alert(kind: str, symbol, side, qty, price, pnl=None, *, mode: str = "PA
 
 def entry_alert(symbol, side: int, qty, price, notional, *, stop, tp, p: float, alpha: float = 0.0, why: str = "",
                 source: str = "", order_id: str = "", mode: str = "PAPER", expiry_min: int | None = None,
-                category: str = "", title: str = "") -> Alert:
+                category: str = "", title: str = "", trail: float = 0.0) -> Alert:
     """Aviso de entrada: qué hizo, con cuánto, cuándo sale (pierde poco o gana más) y por qué."""
     asset = esc(asset_es(symbol))
     price_d, notional_d = D(str(price)), D(str(notional))
@@ -197,6 +197,11 @@ def entry_alert(symbol, side: int, qty, price, notional, *, stop, tp, p: float, 
         head, bet = f"🔴 <b>Vendí en corto {asset}</b>", "Gano si baja."
         exits = (f"Si sube a {esc(num_es(stop))} cierro y pierdo ≈ {esc(usdt_es(loss, False))}; si baja a "
                  f"{esc(num_es(tp))} cierro y gano ≈ {esc(usdt_es(gain, False))}.")
+    if trail:                                       # sin techo: el stop acompaña al precio
+        way = "sube" if side > 0 else "baja"
+        exits = (f"Si va en contra hasta {esc(num_es(stop))} salgo y pierdo ≈ {esc(usdt_es(loss, False))}. Si "
+                 f"{way}, el límite lo acompaña ({esc(pct_es(D(str(trail)) * 100, False))} del mejor precio) y salgo "
+                 "cuando retroceda: no hay techo para la ganancia.")
     lines = [f"{head} · {esc(mode_es(mode))}",
              f"Puse {esc(usdt_es(notional_d, False))} con {asset} a {esc(num_es(price))} USDT. {bet}",
              exits + (f" Como mucho lo tengo {esc(minutes_es(expiry_min))}." if expiry_min else ""),
@@ -214,6 +219,7 @@ EXIT_REASON_ES = {
     "noticia_en_contra": "Salió una noticia en contra y preferí salir.",
     "freno": "Lo cerró el freno de seguridad (la cuenta perdió demasiado en el día).",
     "liquidacion": "El precio saltó de golpe más allá del límite y la posición se liquidó.",
+    "stop_movil": "El precio retrocedió desde su mejor nivel y salí con la ganancia asegurada{level}.",
     "cerrada_en_el_exchange": "MEXC ya la había cerrado sola (el stop de emergencia) o la cerraste a mano. La saqué "
                               "de la cuenta del programa con un precio estimado: el resultado exacto está en MEXC.",
 }
@@ -238,7 +244,8 @@ def exit_alert(symbol, side: int, reason: str, qty, price, *, pnl, ret, slippage
     lines = [f"{head} · {esc(mode_es(mode))}", explain]
     if why:
         lines.append(f"📰 {esc(why[:200])}")
-    prio = (Priority.RISK if reason in ("stop_loss", "take_profit", "liquidacion", "freno", "cerrada_en_el_exchange")
+    prio = (Priority.RISK if reason in ("stop_loss", "take_profit", "liquidacion", "freno", "cerrada_en_el_exchange",
+                                        "stop_movil")
             else Priority.TRADE)
     return Alert(prio, reason, clip("\n".join(lines)), meta={"symbol": symbol})
 

@@ -250,3 +250,31 @@ async def test_no_corre_detras_del_precio_si_la_noticia_ya_se_movio(tmp_path):
     assert rows["y1"]["motivos"][0].startswith("ya_recorrio_el_objetivo:+2.50")
     assert rows["y2"]["motivos"][0].startswith("el_mercado_va_en_contra:-1.00")
     assert rows["y3"]["analisis"]["movido_desde_la_noticia"] == 0.001
+
+
+async def test_listado_sale_con_stop_que_sigue_al_precio_y_cobra_la_suba(tmp_path):
+    """Estudio del 3-nov: en los listados el stop acompaña al precio (5 % del mejor) en vez de un objetivo fijo."""
+    clock = ManualClock(T0 + 600)
+    prices = {"BTC_USDT": 100_000.0, "ETH_USDT": 4_000.0, "SOL_USDT": 150.0}
+    mk = FakeMexc(lambda sym, m: prices[sym], clock)
+    home, alerts = tmp_path / "home", Alerts()
+    async with serve(mk.app()) as url, aiohttp.ClientSession() as session:
+        t = await make(session, url, clock, home, alerts)
+        await t.on_news(news("l1", "Kraken adds trading for Bitcoin (BTC) options", clock.time()))
+        pos = t.st["positions"]["BTC_USDT"]
+        entry = D(pos["avg_price"])
+        assert pos["trail"] == 0.05 and D(pos["stop"]) < entry * D("0.951")          # stop inicial 5 %
+        assert D(pos["tp"]) > entry * 10                                               # sin techo
+        assert "no hay techo para la ganancia" in alerts.texts()[-1]
+        for px in (106_000.0, 112_000.0, 118_000.0):                                  # sube: el stop lo acompaña
+            prices["BTC_USDT"] = px
+            clock.advance(2)
+            await t.watch_once()
+        assert D(t.st["positions"]["BTC_USDT"]["stop"]) > entry * D("1.10")           # ya asegura ganancia
+        assert json.loads((home / "paper-vivo" / "mexc-futuros" / "estado.json").read_text(encoding="utf-8"))[
+            "positions"]["BTC_USDT"]["stop"] == t.st["positions"]["BTC_USDT"]["stop"]   # guardado: sobrevive reinicio
+        prices["BTC_USDT"] = 111_000.0                                                # retrocede más del 5 %
+        clock.advance(2)
+        await t.watch_once()
+        assert t.st["positions"] == {} and t.counts.get("stop_movil") == 1
+        assert "salí con la ganancia asegurada" in alerts.texts()[-1] and "Gané" in alerts.texts()[-1]

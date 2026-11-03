@@ -144,18 +144,17 @@ def test_cuarto_de_kelly():
 
 def test_plan_triple_barrera_costos_kelly_y_topes(lim):
     cfg = PolicyConfig()
-    s = classify("Coinbase will list PEPE")
-    a = assess(ev("Coinbase will list PEPE"), s, "PEPE", T0, cfg)
+    s = classify("SEC approves spot PEPE ETF")
+    a = assess(ev("SEC approves spot PEPE ETF"), s, "PEPE", T0, cfg)
     kw = dict(equity=1000.0, cash=1000.0, gross=0.0, net=0.0, n_positions=0, price=1.0, sigma_1m=0.002,
               adv=5e7, fee_taker=0.001, spread=0.0005, kind="spot", max_leverage=1.0, min_notional=5.0,
               limits=lim, cfg=cfg)
     p, why = plan(a, s, "PEPEUSDT", **kw)
     assert why == [] and p.side == 1 and p.tp_frac == pytest.approx(2 * p.sl_frac)
-    assert p.sl_frac == pytest.approx(1.5 * 0.002 * math.sqrt(60))
+    assert p.sl_frac == pytest.approx(1.5 * 0.002 * math.sqrt(120)) and p.trail == 0     # ETF: 120 min
     assert p.b_net < 2 and p.cost > 2 * 0.001                               # comisiones, spread e impacto
     risk = p.sl_frac + p.cost                                               # Kelly dice cuánto ARRIESGAR:
     assert float(p.notional) == pytest.approx(min(1000 * p.kelly / risk, 10 / risk, 400, 300), abs=0.01)
-    assert float(p.notional) == pytest.approx(300.0)                        # acá manda la neta (30 %)
     assert p.risk_usd <= 1000 * lim["per_trade"]["max_risk_pct"] / 100 + 1e-9
     assert p.slices == 1                                                    # Almgren-Chriss: un solo tramo
     capped, _ = plan(a, s, "PEPEUSDT", **{**kw, "net": 250.0})              # exposición neta ≤ 30 %
@@ -166,17 +165,34 @@ def test_plan_triple_barrera_costos_kelly_y_topes(lim):
                  **{**kw, "net": 250.0, "kind": "perp"})                     # un corto achica la neta: entra entero
     assert p2.side == -1 and float(p2.notional) > 50
     funded, _ = plan(a, s, "PEPEUSDT", **{**kw, "funding": 0.001})          # funding en contra: un costo más
-    assert funded.cost == pytest.approx(p.cost + 0.001, abs=1e-6) and funded.b_net < p.b_net
+    assert funded.cost == pytest.approx(p.cost + 0.001, abs=1e-5) and funded.b_net < p.b_net   # (el impacto se mueve con el tamaño)
     assert plan(a, s, "PEPEUSDT", **{**kw, "funding": -0.01})[0].cost == pytest.approx(p.cost)   # a favor: no suma
     no_edge, why = plan(a, s, "PEPEUSDT", **{**kw, "fee_taker": 0.02})       # b neto > 0 pero sin ventaja
     assert no_edge is None and why[0].startswith("sin_ventaja_neta")
-    expensive, why = plan(a, s, "PEPEUSDT", **{**kw, "fee_taker": 0.03})     # el costo supera al take-profit
+    expensive, why = plan(a, s, "PEPEUSDT", **{**kw, "fee_taker": 0.04})     # el costo supera al take-profit
     assert expensive is None and why[0].startswith("costos_mayores_que_el_objetivo")
     assert plan(a, s, "PEPEUSDT", **{**kw, "n_positions": 3})[1] == ["maximo_de_posiciones"]
     assert plan(a, s, "PEPEUSDT", **{**kw, "sigma_1m": None})[1] == ["sin_volatilidad_medible"]
     assert plan(a, s, "PEPEUSDT", **{**kw, "cash": 3.0})[1][0].startswith("nominal_menor_al_minimo")
     risky, _ = plan(a, s, "PEPEUSDT", **{**kw, "sigma_1m": 0.02})            # mucha volatilidad: stop lejos
     assert risky.risk_usd <= 10.0 + 1e-9 and risky.sl_frac == 0.05
+
+
+def test_los_listados_salen_con_stop_que_sigue_al_precio_y_solo_si_llegan_a_tiempo(lim):
+    """Estudio del 3-nov (docs/ESTUDIO-LISTADOS.md): stop de 5 % que sigue al precio (+12,7 % por operación
+    contra +4,9 % con objetivo fijo) y solo si se llega en los primeros 2 minutos."""
+    cfg = PolicyConfig()
+    s = classify("Coinbase will list PEPE")
+    a = assess(ev("Coinbase will list PEPE"), s, "PEPE", T0, cfg)
+    kw = dict(equity=1000.0, cash=1000.0, gross=0.0, net=0.0, n_positions=0, price=1.0, sigma_1m=0.002,
+              adv=5e7, fee_taker=0.001, spread=0.0005, kind="perp", max_leverage=1.0, min_notional=5.0,
+              limits=lim, cfg=cfg)
+    p, why = plan(a, s, "PEPE_USDT", **kw)
+    assert why == [] and p.trail == 0.05 and p.sl_frac == 0.05            # la moneda quieta no achica el stop
+    assert p.tp_frac == pytest.approx(0.125)                               # b = 2,5 solo para dimensionar
+    assert float(p.notional) == pytest.approx(10 / (p.sl_frac + p.cost), abs=0.01)   # manda el 1 % de riesgo
+    late = assess(ev("Coinbase will list PEPE", published_at=T0 - 150, received_at=T0 - 140), s, "PEPE", T0, cfg)
+    assert any(r.startswith("listado_tarde") for r in late.reasons)       # a los 2,5 min el salto ya pasó
 
 
 def test_liquidacion_lejos_del_stop():

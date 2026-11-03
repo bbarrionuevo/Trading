@@ -53,10 +53,16 @@ def prices(entry: float, side: int, sl: float, tp: float) -> tuple[float, float]
 
 
 def walk(candles: dict, *, side: int, stop: float, tp: float, start_ms: int, end_ms: int, entry_ms: int | None = None,
-         until_ms: int | None = None, slip: float = 0.0) -> tuple[str, float, int] | None:
+         until_ms: int | None = None, slip: float = 0.0, trail: float = 0.0,
+         state: dict | None = None) -> tuple[str, float, int] | None:
     """Primera barrera tocada entre las velas [start_ms, end_ms]: ("sl" | "tp" | "exp", precio, minuto) o None.
 
-    `slip` empeora el precio del stop y de la expiración (salen como órdenes que toman liquidez)."""
+    `slip` empeora el precio del stop y de la expiración (salen como órdenes que toman liquidez).
+    `trail` > 0: el stop sigue al mejor precio a esa distancia (nunca vuelve atrás); `state` lleva y devuelve
+    {"stop", "best"} entre llamadas. Dentro de una vela primero cuenta lo malo (conservador)."""
+    if trail and state is not None:
+        stop = float(state.get("stop", stop))
+    best = float(state.get("best", 0) or 0) if state else 0.0
     entry_m = None if entry_ms is None else entry_ms // MIN * MIN
     for m in range(start_ms // MIN * MIN, end_ms // MIN * MIN + MIN, MIN):
         k = candles.get(m)
@@ -74,4 +80,10 @@ def walk(candles: dict, *, side: int, stop: float, tp: float, start_ms: int, end
             return "sl", fill * (1 - side * slip), m
         if (favorable > tp) if side > 0 else (favorable < tp):
             return "tp", tp, m
+        if trail:
+            best = max(best, favorable) if side > 0 else (min(best, favorable) if best else favorable)
+            moved = best * (1 - trail) if side > 0 else best * (1 + trail)
+            stop = max(stop, moved) if side > 0 else min(stop, moved)
+            if state is not None:
+                state.update(stop=stop, best=best)
     return None

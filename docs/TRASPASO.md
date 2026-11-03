@@ -98,6 +98,15 @@ Binance) y la PC del dueño (instalador completo, Telegram, tarea `trading-agent
   recorrió el objetivo"; lanzamientos de futuros saltan y se devuelven (≈ 0 % a 60 min, n = 9) → no se operan.
   Universo con monedas chicas (≥ 0,1 M USDT/día) reconocidas solo por su ticker escrito.
 
+- **Salida de los listados** (`policy.EXITS`, configurable en `PolicyConfig.exits`): stop de 5 % que sigue al
+  mejor precio (`trail` en la posición; `barriers.walk` y `LiveTrader.watch_once` lo mueven y lo guardan), sin
+  objetivo fijo, solo si la noticia tiene < 2 min (`listado_tarde`) y con tope de precio de 50 bps (el del
+  sobre). Simulado con las 7 monedas reales: +12,7 % por operación contra +4,9 % con objetivo fijo; a los 5 min
+  todo pierde. El stop de emergencia del exchange queda en su lugar inicial (protege si se apaga la PC).
+- **Fuentes de listados:** Binance cada 10 s; OKX y Bitget apagados (sin efecto medido en MEXC).
+- **Spread y profundidad** no son un límite para las monedas chicas: 0,4 a 6 bps y 3.700 a 166.000 USDT a 0,5 %
+  (medido el 3-nov) contra órdenes de ~20 a 30 USDT.
+
 ## Próximo: aprender de la historia y reaccionar más rápido (pedido del dueño, 3-nov)
 
 > "Quizás sea bueno también buscar en historial para que pueda entender más rápido cómo repercute las noticias
