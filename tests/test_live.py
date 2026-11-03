@@ -115,6 +115,11 @@ async def test_consulta_a_claude_solo_lo_dudoso_y_usa_su_opinion(tmp_path):
             assert fake.requests == []
             await t.on_news(news("r1", "Bitcoin custodian reportedly hacked, users may lose funds", clock.time()))
             assert len(fake.requests) == 1
+            assert state(home)["llm"]["calls"] == 1 and t.snapshot()["llm"]["calls"] == 1
+            again = LlmClassifier(KEY, base_url=aurl, clock=clock)                # reinicio: el gasto del día sigue
+            t2 = await make(session, url, clock, home, Alerts(), llm=again)
+            assert t2.llm.budget.calls == 1 and t2.llm.budget.usd == llm.budget.usd > 0
+            await again.close()
         finally:
             await llm.close()
     rows = [json.loads(x) for x in (home / "paper-vivo" / "mexc-futuros" / "decisiones" / "2026-11.jsonl")

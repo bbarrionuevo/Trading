@@ -4,7 +4,8 @@ su propia tarea; las alertas y el diario en hilos. En segundo plano, el recolect
 
 Arranque: carga TRADING_HOME/.env y config.yaml, abre el diario, lanza el despachador de alertas (que
 hace su prueba de inicio y manda el mensaje "Agente iniciado" por Telegram sin que el motor lo espere),
-y empieza a leer fuentes. Ctrl+C (o `stop`) cierra todo en orden y deja el diario escrito.
+y empieza a leer fuentes. Ctrl+C (o `stop`) cierra todo en orden y deja el diario escrito. El supervisor
+(supervisor.py) pide la misma parada con calma creando `TRADING_HOME/state/parar` (para actualizarse).
 """
 import asyncio
 import logging
@@ -38,6 +39,7 @@ from .telemetry.heartbeat import Heartbeat
 from .telemetry.journal import Journal
 
 log = logging.getLogger("tradingagent")
+STOP_FILE, STOP_POLL_S = "parar", 1.0
 
 
 def build_sources(cfg: dict, env, limits: dict | None = None) -> tuple[list[SourceSpec], dict[str, str]]:
@@ -84,6 +86,18 @@ class Agent:
 
     def stop(self) -> None:
         self.stop_event.set()
+
+    async def _watch_stop_file(self, path) -> None:
+        """Parada con calma pedida por el supervisor (archivo `state/parar`): cierra igual que Ctrl+C."""
+        while not self.stop_event.is_set():
+            if await asyncio.to_thread(path.exists):
+                log.info("parada pedida por el supervisor: cierro en orden")
+                self.stop()
+                return
+            try:
+                await asyncio.wait_for(self.stop_event.wait(), timeout=STOP_POLL_S)
+            except TimeoutError:
+                pass
 
     def collect(self) -> dict:
         """Estado para el latido (sin E/S)."""
@@ -145,6 +159,8 @@ class Agent:
         cfg, env = self.cfg, self.env
         lim = limits_mod.load()                       # sobre inválido o más laxo que la línea base: no arranca
         home = paths.home()
+        stop_file = home / "state" / STOP_FILE
+        stop_file.unlink(missing_ok=True)             # un pedido viejo (de antes de arrancar) ya no vale
         self.journal = Journal(home / "journal", self.clock).start()
         self.bus = EventBus()
         enabled, self.sources_off = build_sources(cfg, env, lim)
@@ -205,7 +221,8 @@ class Agent:
                           asyncio.create_task(self.venue.run_monitor(self.stop_event), name="monitor-ordenes"),
                           asyncio.create_task(self.lag.run(), name="lag"),
                           asyncio.create_task(hb.run(self.stop_event), name="latido"),
-                          asyncio.create_task(self._print_accepted(), name="consola")]
+                          asyncio.create_task(self._print_accepted(), name="consola"),
+                          asyncio.create_task(self._watch_stop_file(stop_file), name="parada")]
                 if self.trader is not None:
                     from .live import learn_loop
                     tasks.append(asyncio.create_task(self.trader.watch(self.stop_event), name="vigilancia"))

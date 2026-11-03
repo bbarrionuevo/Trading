@@ -20,8 +20,36 @@ gh api repos/bbarrionuevo/Trading/contents/deploy/windows/instalar.ps1 -H "Accep
 ```
 
 Instala Python y Git si faltan, descarga el repo en `%USERPROFILE%\TRADING`, crea el entorno, te pide las
-claves (las guarda en `%LOCALAPPDATA%\TRADING\.env`), prueba Telegram, Claude y MEXC, y deja la tarea
-`trading-agente` corriendo 24/7. Para actualizar, se vuelve a correr el mismo comando.
+claves que falten (las guarda en `%LOCALAPPDATA%\TRADING\.env`), prueba Telegram, Claude y MEXC, deja la
+tarea `trading-agente` corriendo 24/7 con el supervisor, crea el acceso directo **TRADING tablero** en el
+escritorio y abre el tablero. **Se corre una sola vez:** desde ahí el programa se actualiza solo. Volver a
+correrlo no rompe nada (sirve para cargar una clave nueva).
+
+## Qué hace solo, sin que toques nada
+
+- **Siempre listo:** el supervisor (`python -m tradingagent supervisar`) corre al agente y lo relanza al
+  instante si se cae. Si se cae 3 veces en 10 minutos, te avisa por Telegram. Arranca con Windows, al
+  iniciar sesión y, por las dudas, la tarea lo revisa cada minuto (nunca corren dos a la vez).
+- **Se actualiza solo (REGLAS G-7):** cada 15 minutos mira si hay una versión nueva en `main`. Solo la toma
+  si los tests de GitHub dieron verde, y espera a que no haya posiciones abiertas (como mucho 6 h). Para al
+  agente con calma (posiciones y caja quedan guardadas), actualiza, prueba que arranque y lo vuelve a
+  prender en segundos. Si la versión nueva no arranca, vuelve a la anterior y te avisa. Cada actualización
+  te llega por Telegram ("✅ TRADING actualizado a …").
+- **Se prueba en tu PC:** después de cada actualización corre todos los tests en segundo plano (prioridad
+  baja, sin tus claves y en una carpeta aparte). El resultado se ve en el tablero.
+- **Claude ve cómo va (REGLAS G-8):** cada 15 minutos publica en la rama `pc` del repo el estado de la PC
+  (solo paper y salud: nunca claves, el `.env` ni saldos reales). Así se evalúan las operaciones y se
+  mejora el programa sin pedirte capturas. Usa `GITHUB_TOKEN_PC`, que el instalador toma de `gh`.
+
+## Tablero
+
+**http://127.0.0.1:8765** (acceso directo **TRADING tablero** en el escritorio). Se actualiza cada 5
+segundos y muestra: si el agente está listo para operar, la cuenta paper (equity, PnL, operaciones,
+acierto, evidencia para dinero real), la curva de equity, las posiciones abiertas con su stop y
+take-profit, las últimas operaciones y decisiones (y **por qué no entra**), la salud (fuentes, noticias,
+velocidad, Telegram, IA y su gasto del día), las actualizaciones, los tests en tu PC y los últimos errores.
+Es de solo lectura y solo se puede abrir desde tu PC. Sin el supervisor: `python -m tradingagent tablero
+--abrir`.
 
 ## Instalación a mano (una vez, en PowerShell)
 
@@ -110,15 +138,17 @@ El paper también se puede ejercitar con el harness:
 ## 24/7 en la PC (recomendado: es lo que captura el alfa)
 
 Con el cron de GitHub la noticia llega minutos tarde y el alfa ya se fue. En la PC, prendida y conectada,
-el agente reacciona en segundos. Para que arranque solo con Windows y se reinicie si se cae:
+el agente reacciona en segundos. El instalador ya deja la tarea; para reinstalar solo la tarea:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\TRADING\deploy\windows\instalar-agente.ps1"
 ```
 
-Correlo una vez, en PowerShell **como administrador**. Instala la tarea programada `trading-agente`
-(nunca `nexus-*`), que arranca con Windows y al iniciar sesión y se reinicia al minuto si se cae. Para
-quitarla: `deploy\windows\quitar-agente.ps1`.
+Correlo en PowerShell **como administrador**. Instala la tarea programada `trading-agente` (nunca
+`nexus-*`), que corre el supervisor al arrancar Windows, al iniciar sesión y cada minuto si no está
+corriendo. Para quitarla: `deploy\windows\quitar-agente.ps1`. Logs en `%LOCALAPPDATA%\TRADING\logs`:
+`agent.log` (el agente), `supervisor.log` (reinicios y actualizaciones), `agente-salida.log` (su consola)
+y `tests.txt` (los tests en tu PC).
 
 **Claves en `%LOCALAPPDATA%\TRADING\.env`** (plantilla en `.env.example`):
 
@@ -127,6 +157,8 @@ quitarla: `deploy\windows\quitar-agente.ps1`.
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Avisos | Sí, para enterarte |
 | `ANTHROPIC_API_KEY` | Claude para las noticias dudosas | No (sin ella decide el clasificador local) |
 | `MEXC_ACCESS_KEY`, `MEXC_SECRET_KEY` | Leer las comisiones reales de tu cuenta (D-5) | No (sin ellas usa las públicas) |
+| `SEC_USER_AGENT` | Prende 2 fuentes oficiales de la SEC (comunicados y 8-K): tu nombre y un email | No |
+| `GITHUB_TOKEN_PC` | Publicar el estado de la PC para Claude (rama `pc`); el instalador lo toma de `gh` | No |
 
 Las claves de MEXC tienen que ser **de solo lectura**: en MEXC, al crear la API, sin permiso de trading
 ni de retiro. El programa no tiene código para mandar órdenes ni retirar: el test `test_a3` lo verifica
@@ -143,7 +175,8 @@ comisiones públicas y funding, y si las claves leen la cuenta. Nunca muestra sa
 - **Pausa (KILL):** creá un archivo vacío `%LOCALAPPDATA%\TRADING\KILL`. Con ese archivo no se abren
   posiciones. Para reanudar, borralo.
 - **Diario:** `.\.venv\Scripts\python -m tradingagent journal-verify` dice si alguien lo alteró.
-- **Estado:** `%LOCALAPPDATA%\TRADING\state\heartbeat.json`. Logs en `%LOCALAPPDATA%\TRADING\logs\agent.log`.
+- **Estado:** el tablero (http://127.0.0.1:8765) o `%LOCALAPPDATA%\TRADING\state\heartbeat.json`. Logs en
+  `%LOCALAPPDATA%\TRADING\logs`.
 
 ## Entrenamiento en la nube (GitHub Actions, sin la PC)
 
