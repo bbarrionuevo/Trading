@@ -127,8 +127,9 @@ Ctrl+C cierra en orden.
    respuesta puede cambiar lo que se hace**: la noticia es dudosa (rumor, desmentido) o describe un hecho
    concreto que las reglas no reconocen, está fresca, no hay un freno que impida entrar y queda lugar para
    operar (o hay una posición abierta de ese activo). Preguntas, opiniones y análisis no se consultan, y el
-   mismo titular no se paga dos veces. Tope: 0,30 USD por día (`trader.llm_usd_dia`); en la práctica son
-   centavos por mes. El tablero muestra cuántas consultas se hicieron y cuántas se evitaron.
+   mismo titular no se paga dos veces. No hay un tope que la frene cuando hace falta: solo un techo de
+   seguridad (el del sobre, 5 USD por día) contra un error que se dispare. En la práctica son centavos por
+   mes. El tablero muestra cuántas consultas se hicieron y cuántas se evitaron.
 2. Calcula el vector de evento y el alfa, que vale la mitad cada 120 s, y el meta-modelo (p ≥ 0,60).
 3. Calcula la triple barrera por volatilidad y los costos, y el tamaño por ¼-Kelly.
 4. Revisa el libro real: spread y su z-score, profundidad, L3, divergencia y lambda de Kyle.

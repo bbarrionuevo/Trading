@@ -7,7 +7,7 @@ Cuándo se consulta (cada consulta cuesta plata: el dueño pidió usarla solo cu
   y análisis no se consultan;
 - y el operador en vivo además exige que la respuesta pueda cambiar algo: noticia fresca, sin un freno
   que impida entrar y con lugar para operar (o con una posición abierta de ese activo) — `live.py`;
-- el mismo titular no se consulta dos veces (caché), y hay un tope diario chico (`trader.llm_usd_dia`).
+- el mismo titular no se consulta dos veces (caché). No hay tope de uso: solo el techo de seguridad del sobre.
 Lo inequívoco lo resuelve la capa rápida en microsegundos (informe: los modelos generativos son lentos
 para el camino crítico; el alfa decae con vida media de 120 s).
 

@@ -153,7 +153,9 @@ class Agent:
                 keys = (self.env.get("MEXC_ACCESS_KEY"), self.env.get("MEXC_SECRET_KEY"))
                 market = MexcFutures(readonly=mexc.ReadOnlyClient(session, *keys) if all(keys) else None)
         key = api_key(self.env) if t.get("llm", True) else None
-        cap = min(float(lim["ai"]["max_llm_usd_per_day"]), float(t.get("llm_usd_dia", 0.30)))   # el menor manda
+        cap = float(lim["ai"]["max_llm_usd_per_day"])                  # techo del sobre: frena un error, no el uso
+        if t.get("llm_usd_dia") is not None:
+            cap = min(cap, float(t["llm_usd_dia"]))                     # el dueño puede bajarlo, nunca subirlo
         llm = LlmClassifier(key, limit_usd=cap, base_url=self._llm_base_url) if key else None
         return LiveTrader(market, session, self.clock, lim, alerts=self.alerts, journal=self.journal,
                           capital=float(t["capital_usdt"]), llm=llm)
