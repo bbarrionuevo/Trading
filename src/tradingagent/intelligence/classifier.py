@@ -94,7 +94,8 @@ RULES = (
         r"\b(to acquire|agree(s|d)? to (buy|acquire)|acquisition of|merger (with|agreement)|to merge|"
         r"takeover (bid|offer)|buyout)\b")),
     Rule("listado", "listado", 0.6, 0.55, 60, _r(
-        r"\b(will list|lists|to list|listing of|adds? (trading|support) for|launch(es|ed)? (spot )?trading (for|of))\b")),
+        r"\b(will list|lists|to list|listing of|adds? (trading|support) for|launch(es|ed)? (spot )?trading (for|of))\b|"
+        r"\bwill (launch|open) \S+/USDT? (for )?(spot|margin) trading\b")),
     Rule("etf_positivo", "etf", 0.6, 0.55, 120, _r(
         r"\bETFs?\b.{0,60}\b(approv(es|ed|al)|greenlight(s|ed)?|launch(es|ed)?|record inflows|inflows)\b|"
         r"\b(approv(es|ed)|greenlight(s|ed)?)\b.{0,40}\bETFs?\b")),

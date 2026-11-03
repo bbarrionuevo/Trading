@@ -217,3 +217,36 @@ async def test_opera_la_accion_que_mueve_la_noticia_con_el_universo_de_mexc(tmp_
             assert "Compré TESLA" in alerts.texts()[-1]
         finally:
             await llm.close()
+
+
+async def test_no_corre_detras_del_precio_si_la_noticia_ya_se_movio(tmp_path):
+    """Si desde la publicación el precio ya recorrió el objetivo, la ganancia ya la tomaron otros; si fue en
+    contra más que el stop, el mercado no le cree a la noticia. En los dos casos no se entra."""
+    clock = ManualClock(T0 + 600)
+    now_m = int(clock.time() * 1000) // 60_000 * 60_000
+    level = {"after": 100_000.0}
+
+    def price(sym, m):
+        base = {"BTC_USDT": 100_000.0, "ETH_USDT": 4_000.0, "SOL_USDT": 150.0}[sym]
+        return level["after"] if sym == "BTC_USDT" and m >= now_m else base
+
+    mk = FakeMexc(price, clock)
+    home = tmp_path / "home"
+    async with serve(mk.app()) as url, aiohttp.ClientSession() as session:
+        t = await make(session, url, clock, home, Alerts())
+        level["after"] = 97_500.0                                     # el hackeo ya lo bajó 2,5 %: objetivo hecho
+        await t.on_news(news("y1", HACK, clock.time(), lag=70))
+        assert t.st["positions"] == {}
+        level["after"] = 101_000.0                                    # subió 1 % pese al hackeo: el mercado no le cree
+        clock.advance(2)                                              # libro nuevo (el anterior quedó en caché)
+        await t.on_news(news("y2", "Bybit hacked: $90M in BTC stolen", clock.time(), lag=70))
+        assert t.st["positions"] == {}
+        level["after"] = 99_900.0                                     # se movió poco a favor: todavía hay recorrido
+        clock.advance(2)
+        await t.on_news(news("y3", "OKX hacked: $70M in BTC stolen", clock.time(), lag=70))
+        assert t.st["positions"]["BTC_USDT"]["side"] == "corto"
+    rows = {r["event_id"]: r for r in map(json.loads, (home / "paper-vivo" / "mexc-futuros" / "decisiones" /
+                                                        "2026-11.jsonl").read_text(encoding="utf-8").splitlines())}
+    assert rows["y1"]["motivos"][0].startswith("ya_recorrio_el_objetivo:+2.50")
+    assert rows["y2"]["motivos"][0].startswith("el_mercado_va_en_contra:-1.00")
+    assert rows["y3"]["analisis"]["movido_desde_la_noticia"] == 0.001

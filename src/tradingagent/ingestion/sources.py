@@ -44,6 +44,7 @@ class SourceSpec:
     open_after: int = 5
     cooldown_s: float = 600.0
     note: str = ""
+    format: str = "rss"                  # rss (RSS/Atom) o el lector JSON de ingestion/announcements.py
 
 
 @dataclass
@@ -85,6 +86,9 @@ def _retry_after(value: str | None) -> float | None:
 class PollingSource:
     def __init__(self, spec: SourceSpec, session: aiohttp.ClientSession, clock, on_items, *,
                  parse=parse_feed, rng: random.Random | None = None, seen_max: int = 5000):
+        if parse is parse_feed and spec.format != "rss":               # anuncios oficiales en JSON
+            from .announcements import PARSERS
+            parse = PARSERS[spec.format]
         self.spec, self.session, self.clock, self.on_items, self.parse = spec, session, clock, on_items, parse
         self.rng = rng or random.Random()
         self.health = SourceHealth()
@@ -147,7 +151,8 @@ class PollingSource:
         url = canonical_url(e.link)
         key = e.guid or url or e.title
         assets = self.spec.assets
-        return NewsItem(id=stable_id(self.spec.id, key), source=self.spec.id, tier=self.spec.tier, kind="rss",
+        return NewsItem(id=stable_id(self.spec.id, key), source=self.spec.id, tier=self.spec.tier,
+                        kind="rss" if self.spec.format == "rss" else "api",
                         title=clean_text(e.title, 500), body=clean_text(e.summary), url=url,
                         published_at=parse_datetime(e.published), received_at=received_at,
                         categories=tuple(e.categories), assets_hint=assets, category_hint=self.spec.category,
