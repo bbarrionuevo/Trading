@@ -279,3 +279,16 @@ def test_etiqueta_de_triple_barrera_desde_la_llegada():
     full = reaction(path, T0, T0 + 120)
     assert full["tb_largo"] == 1 and "r_recv_15m" in full
     assert triple_barrier({m0: (1, 1, 1, 1)}, m0, m0) == {"sigma_1m": None}   # sin historia: sin etiqueta
+
+
+def test_macro_solo_si_llega_en_el_primer_minuto_y_medio():
+    """Estudio de las decisiones de la Fed (docs/ESTUDIO-MACRO.md): el movimiento es casi inmediato y después va
+    para cualquier lado; tarde no hay ventaja medible."""
+    cfg = PolicyConfig()
+    title = "Fed cuts interest rates by 25 basis points"
+    s = classify(title)
+    assert s.category == "macro"
+    fresh = assess(ev(title, published_at=T0 - 30, received_at=T0 - 25), s, "BTC", T0, cfg)
+    late = assess(ev(title, published_at=T0 - 120, received_at=T0 - 110), s, "BTC", T0, cfg)
+    assert not any(r.startswith("macro_tarde") for r in fresh.reasons)
+    assert any(r.startswith("macro_tarde") for r in late.reasons)

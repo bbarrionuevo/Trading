@@ -161,7 +161,8 @@ def plan(a: Assessment, sig: Signal, symbol: str, *, equity: float, cash: float,
     prof = cfg.exits.get(sig.category)
     if prof is not None:                                    # salida medida para esta categoría
         sl = max(sl, prof.min_stop)
-        tp = sl * prof.b_kelly
+        if prof.b_kelly:
+            tp = sl * prof.b_kelly
     sigma_daily = sigma_1m * math.sqrt(1440)
     risk_target = equity * pt["max_risk_pct"] / 100
     lev = min(float(max_leverage), float(pt["max_leverage"]))
@@ -212,18 +213,22 @@ DRIFT = {"listado"}
 
 @dataclass(frozen=True)
 class ExitProfile:
-    """Salida propia de una categoría, medida con datos reales (docs/ESTUDIO-LISTADOS.md)."""
-    min_stop: float                         # el stop nunca más cerca que esto (la moneda estaba quieta antes)
-    trail: float                            # stop que sigue al mejor precio a esta distancia, sin objetivo fijo
-    b_kelly: float                          # ganancia/pérdida esperada que usa Kelly (no hay objetivo fijo)
+    """Entrada y salida propias de una categoría, medidas con datos reales (docs/ESTUDIO-LISTADOS.md y
+    docs/ESTUDIO-MACRO.md). Lo que queda en 0 / None usa la regla general."""
     max_age_s: float                        # pasado esto la noticia ya no se opera: el salto ya pasó
+    min_stop: float = 0.0                   # el stop nunca más cerca que esto (la moneda estaba quieta antes)
+    trail: float = 0.0                      # stop que sigue al mejor precio a esta distancia, sin objetivo fijo
+    b_kelly: float | None = None            # ganancia/pérdida esperada que usa Kelly (sin objetivo fijo)
     max_slippage_bps: float = 30            # tope de precio de la entrada (nunca más que el del sobre)
 
 
 # Listados spot: 7 casos reales, entrando al minuto: con stop fijo y objetivo 10 % la media fue +4,9 % por
 # operación; con stop que sigue al precio a 5 %, +12,7 % (5 de 7 ganan). Entrando a los 5 minutos, todo pierde:
 # solo vale llegar primero.
-EXITS = {"listado": ExitProfile(min_stop=0.05, trail=0.05, b_kelly=2.5, max_age_s=120, max_slippage_bps=50)}
+# Macro (decisiones de la Fed, 4 casos en MEXC): casi todo el movimiento pasa en los primeros 5 minutos y después
+# en BTC y los índices sigue o se da vuelta como una moneda al aire. Más tarde que eso no hay ventaja medible.
+EXITS = {"listado": ExitProfile(max_age_s=120, min_stop=0.05, trail=0.05, b_kelly=2.5, max_slippage_bps=50),
+         "macro": ExitProfile(max_age_s=90)}
 
 
 def chase_blocks(move: float | None, sl_frac: float, tp_frac: float, category: str = "") -> list[str]:

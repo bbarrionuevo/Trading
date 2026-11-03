@@ -97,7 +97,8 @@ async def test_prueba_de_red_informa_que_fuentes_se_leen_desde_la_pc():
     app.router.add_get("/no", blocked)
     async with serve(app) as url, aiohttp.ClientSession() as s:
         rep = await probe(s, {"bien": f"{url}/ok", "bloqueada": f"{url}/no", "caida": "http://127.0.0.1:9/x"},
-                          timeout_s=3)
+                          timeout_s=3, os_trust={"bien.windows": f"{url}/ok"})     # nunca sale a internet
     f = rep["fuentes"]
+    assert f["bien.windows"]["codigo"] == 200                               # el intento con el almacén de Windows
     assert f["bien"]["codigo"] == 200 and "Upbit lists FOO" in f["bien"]["muestra"]
     assert f["bloqueada"]["codigo"] == 403 and f["caida"]["codigo"] is None and f["caida"]["error"]

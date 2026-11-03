@@ -128,6 +128,13 @@ Binance) y la PC del dueño (instalador completo, Telegram, tarea `trading-agent
   arrancar se descarta (`state/telegram-offset.json`). `/cerrar SI` usa `LiveTrader.close_all` (salida
   `pedido_del_dueno`, órdenes con tope de precio por el venue real) y desarma.
 
+- **Prueba de red desde la PC (resultado del 3-nov):** desde Argentina andan Binance (API y anuncios), los avisos
+  de Bybit, Coinbase, Kraken y los mercados de Upbit. Bithumb y la BLS dan 403. Los avisos de Upbit fallan con
+  `SSLCertVerificationError` (la cadena del servidor está incompleta y Python no la completa): la prueba ahora
+  también intenta con el almacén de Windows (`truststore`). Si anda, sumar la fuente de Upbit con ese contexto.
+- **Estudio macro** (`docs/ESTUDIO-MACRO.md`): el FOMC mueve en los primeros minutos y después va para cualquier
+  lado en BTC y los índices → macro solo con < 90 s (`policy.EXITS["macro"]`, `macro_tarde`).
+
 ## Próximo: aprender de la historia y reaccionar más rápido (pedido del dueño, 3-nov)
 
 > "Quizás sea bueno también buscar en historial para que pueda entender más rápido cómo repercute las noticias
