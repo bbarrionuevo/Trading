@@ -457,7 +457,7 @@ class Supervisor:
 
     def snapshot_files(self, dest: Path) -> None:
         """Lo que se publica: solo paper y salud. Nada del .env, del diario completo ni saldos reales."""
-        board = dashboard.gather(self.home, repo=self.repo)
+        board = dashboard.gather(self.home, repo=self.repo, include_real=False)   # G-8: nunca saldos reales
         self._put(dest / "tablero.json", json.dumps(board, ensure_ascii=False, indent=1, default=str))
         read = dashboard.read_text                                 # sin trabar al agente (Windows)
         for name in ("heartbeat.json", "supervisor.json"):

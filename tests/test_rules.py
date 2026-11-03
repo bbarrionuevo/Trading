@@ -57,25 +57,44 @@ def test_a1_ajustar_a_la_baja_siempre_se_permite():
     assert limits.problems(lim) == []
 
 
-def test_a2_esta_version_solo_opera_en_paper():
-    assert config.DEFAULTS["mode"] == "paper"
+def test_a2_dinero_real_solo_con_el_armado_del_dueno(tmp_path):
+    assert config.DEFAULTS["mode"] == "paper"                     # la configuración nunca pasa a real sola
     cfg = copy.deepcopy(config.DEFAULTS)
     cfg["mode"] = "live"
     assert any("solo opera en paper" in e for e in config.validate(cfg))
-    assert not (SRC / "execution" / "live").exists()
+    from tradingagent.execution.live import arming
+    lim = limits.load()
+    home = tmp_path / "h"
+    assert arming.CALIBRATION_MAX_USDT == 20 and arming.CALIBRATION_MAX_DAYS == 7 and arming.MAX_DAYS == 30
+    for capital, days, typed, calib in ((20, 7, "si", True), (21, 7, None, True), (20, 8, None, True),
+                                        (20, 31, None, False)):
+        with pytest.raises(ValueError):                          # frase exacta, F-4 (20 USDT, 7 días), A-2 (30)
+            arming.arm(home, capital, days, "k", lim, typed or arming.phrase(capital, days), calibration=calib)
+    assert arming.status(home, "k", lim)[1] == "no_armado"
+    callers = sorted(f.name for f in code_files() if "arming.arm(" in f.read_text(encoding="utf-8"))
+    assert callers == ["__main__.py"]                             # solo el comando del dueño arma
 
 
-def test_a3_sin_codigo_de_ordenes_reales_retiros_ni_firmas_de_exchange():
-    banned = [r"/api/v3/order\b", r"/fapi/v\d/order", r"\bnewOrder\b", r"\bplaceOrder\b", r"capital/withdraw",
-              r"\bwithdraw(al)?s?\s*\(", r"X-MBX-APIKEY", r"X-MEXC-APIKEY", r"\bccxt\b",
-              # MEXC futuros: órdenes, órdenes condicionales, apalancamiento y margen (los retiros ya están arriba)
-              r"/private/(plan|stop)?order", r"change_leverage", r"change_margin", r"change_position_mode",
-              r"/private/position/(?!open_positions)"]
+def test_a3_ordenes_solo_en_el_modulo_real_y_nunca_retiros_ni_transferencias():
+    everywhere = [r"capital/withdraw", r"\bwithdraw(al)?s?\s*\(", r"/withdraw", r"/transfer", r"X-MBX-APIKEY",
+                  r"X-MEXC-APIKEY", r"\bccxt\b", r"/api/v3/order\b", r"/fapi/v\d/order", r"\bnewOrder\b",
+                  r"\bplaceOrder\b", r"change_margin", r"change_position_mode", r"/private/(plan|stop)order"]
+    only_live = [r"/private/order", r"change_leverage", r"/private/position/(?!open_positions)"]
+    live = SRC / "execution" / "live" / "mexc_futures.py"
     hits = []
     for f in code_files():
         text = f.read_text(encoding="utf-8")
-        hits += [f"{f.relative_to(ROOT)}: {b}" for b in banned if re.search(b, text)]
+        hits += [f"{f.relative_to(ROOT)}: {b}" for b in everywhere if re.search(b, text)]
+        if f != live:
+            hits += [f"{f.relative_to(ROOT)}: {b}" for b in only_live if re.search(b, text)]
     assert hits == []
+    from tradingagent.execution.live import mexc_futures as mf
+    assert mf.GET_PATHS == ("/api/v1/private/account/assets", "/api/v1/private/position/open_positions",
+                            "/api/v1/private/order/get/{}", "/api/v1/private/order/deal_details/{}",
+                            "/api/v1/private/order/list/open_orders/{}")
+    assert mf.POST_PATHS == ("/api/v1/private/order/submit", "/api/v1/private/order/cancel",
+                             "/api/v1/private/order/cancel_all", "/api/v1/private/position/change_leverage")
+    assert mf.ISOLATED == 1 and not mf.allowed("POST", "/api/v1/private/account/transfer")
 
 
 def test_a3_el_cliente_firmado_de_mexc_solo_lee():

@@ -80,6 +80,7 @@ class Agent:
         self._sources_override, self._book_provider = sources, book_provider
         self._trader_market, self._llm_base_url = trader_market, llm_base_url
         self.trader = None
+        self.real_trader = None                       # dinero real: solo si el dueño armó en esta PC (A-2)
         self.telegram_base_url, self.printer = telegram_base_url, printer
         self.stop_event = asyncio.Event()
         self.started = time.time()
@@ -115,26 +116,28 @@ class Agent:
                 "portfolio": self.venue.portfolio.snapshot(self.venue.marks), "paper": self.venue.summary()
                 | {"portfolio": None}, "execution": self.execution.counts, "alerts": self.alerts.snapshot(),
                 "journal": self.journal.snapshot(), "bus": self.bus.stats(),
-                "trader": self.trader.snapshot() if self.trader is not None else None}
+                "trader": self.trader.snapshot() if self.trader is not None else None,
+                "real": self.real_trader.snapshot() if self.real_trader is not None else None}
 
     async def _print_accepted(self) -> None:
         """Cada noticia aceptada se muestra en consola y, si el operador en vivo está prendido, se evalúa ya."""
         sub = self.bus.subscribe(TOPIC_ACCEPTED, "consola", maxsize=200)
         async for ev in sub:
             it = ev.item
-            if self.trader is not None:                          # no frena la lectura: cada noticia en su tarea
-                t = asyncio.create_task(self._trade(ev), name=f"noticia-{it.id[:8]}")
-                self.news_tasks.add(t)
-                t.add_done_callback(self.news_tasks.discard)
+            for trader in (self.trader, self.real_trader):      # no frena la lectura: cada noticia en su tarea
+                if trader is not None:
+                    t = asyncio.create_task(self._trade(ev, trader), name=f"noticia-{it.id[:8]}")
+                    self.news_tasks.add(t)
+                    t.add_done_callback(self.news_tasks.discard)
             age = f"{ev.age_s:.0f}s" if ev.age_s is not None else "s/h"
             try:
                 self.printer(f"📰 [{it.source} n{it.tier} {age}] {it.title[:140]}")
             except Exception:                                    # la consola nunca frena una noticia
                 log.warning("no se pudo mostrar una noticia en la consola", exc_info=True)
 
-    async def _trade(self, ev) -> None:
+    async def _trade(self, ev, trader=None) -> None:
         try:
-            await self.trader.on_news(ev)
+            await (trader or self.trader).on_news(ev)
         except Exception:                                    # una noticia mal procesada no tira el agente
             log.exception("falló la evaluación de %s", ev.item.id)
 
@@ -159,6 +162,32 @@ class Agent:
         llm = LlmClassifier(key, limit_usd=cap, base_url=self._llm_base_url) if key else None
         return LiveTrader(market, session, self.clock, lim, alerts=self.alerts, journal=self.journal,
                           capital=float(t["capital_usdt"]), llm=llm)
+
+    def _build_real_trader(self, session, lim):
+        """El operador de DINERO REAL, en paralelo al de práctica: misma noticia, misma decisión. Existe solo si el
+        dueño armó en esta PC (aunque esté vencido: así las posiciones abiertas salen normal)."""
+        from .execution.live import arming
+        from .execution.live.mexc_futures import TradingClient
+        from .execution.live.venue import RealVenue
+        from .live import LiveTrader
+        from .research.futures import MexcFutures
+        home = paths.home()
+        data = paths.read_json(home / arming.ARM_FILE, None)
+        keys = (self.env.get("MEXC_ACCESS_KEY"), self.env.get("MEXC_SECRET_KEY"))
+        if not isinstance(data, dict) or not all(keys) or not self.cfg["trader"].get("real", True):
+            return None
+        lev = int(lim["per_trade"]["max_leverage"])
+        market = MexcFutures(max_leverage=lev)
+        market.label = "REAL futuros MEXC"
+        client = TradingClient(session, *keys)
+
+        def venue(registry, books, pf, clock):
+            return RealVenue(client, session, registry, books, pf, clock, home=home, access_key=keys[0], limits=lim,
+                             leverage=lev)
+
+        return LiveTrader(market, session, self.clock, lim, alerts=self.alerts, journal=self.journal,
+                          capital=float(data["capital_usdt"]), llm=self.trader.llm if self.trader else None,
+                          venue_factory=venue, base_dir=home / "real" / market.name, real=True)
 
     async def run(self) -> None:
         cfg, env = self.cfg, self.env
@@ -219,6 +248,13 @@ class Agent:
                     except Exception:                        # sin mercado, el agente igual lee y registra
                         log.exception("no arrancó el operador en vivo")
                         self.trader = None
+                    try:
+                        self.real_trader = self._build_real_trader(session, lim)
+                        if self.real_trader is not None:
+                            await self.real_trader.start()
+                    except Exception:                        # el de práctica sigue igual
+                        log.exception("no arrancó el operador de DINERO REAL")
+                        self.real_trader = None
                 hb = Heartbeat(self.collect, interval_s=cfg["heartbeat_s"], printer=self.printer)
                 tasks += [asyncio.create_task(p.run(self.stop_event), name=f"fuente-{p.spec.id}") for p in self.pollers]
                 tasks += [asyncio.create_task(self.execution.run(self.stop_event), name="ejecucion"),
@@ -230,6 +266,8 @@ class Agent:
                 if self.trader is not None:
                     from .live import learn_loop
                     tasks.append(asyncio.create_task(self.trader.watch(self.stop_event), name="vigilancia"))
+                    if self.real_trader is not None:
+                        tasks.append(asyncio.create_task(self.real_trader.watch(self.stop_event), name="vigilancia-real"))
                     if cfg["trader"].get("aprender", True):
                         tasks.append(asyncio.create_task(learn_loop(self.stop_event, cfg, env, lim, home / "datos"),
                                                          name="aprendizaje"))

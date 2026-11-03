@@ -186,6 +186,24 @@ en cada cambio.
 **Diagnóstico de MEXC:** `.\.venv\Scripts\python -m tradingagent mexc-check` muestra contratos,
 comisiones públicas y funding, y si las claves leen la cuenta. Nunca muestra saldos.
 
+## Dinero real (futuros de MEXC)
+
+El plan completo y lo que tiene que hacer el dueño está en `docs/DINERO-REAL.md`. En resumen, en la PC:
+
+```powershell
+cd $env:USERPROFILE\TRADING; .\.venv\Scripts\python -m tradingagent mexc-real-check
+```
+
+Es una prueba sin riesgo: pone órdenes que no se pueden ejecutar, verifica cómo las entiende MEXC y las
+cancela. Si da todo OK:
+
+```powershell
+cd $env:USERPROFILE\TRADING; .\.venv\Scripts\python -m tradingagent armar-real --capital 20 --dias 7
+```
+
+Pide escribir una frase exacta. Para frenar: `armar-real --desarmar` (no abre nada nuevo) o
+`python -m tradingagent cerrar-todo` (cancela, cierra todo lo real y desarma).
+
 ## Parada de emergencia y verificación
 
 - **Pausa (KILL):** creá un archivo vacío `%LOCALAPPDATA%\TRADING\KILL`. Con ese archivo no se abren

@@ -19,6 +19,42 @@
 **Verificado:** logs reales de GitHub Actions (MEXC público y claves de solo lectura, Claude Haiku, velas de
 Binance) y la PC del dueño (instalador completo, Telegram, tarea `trading-agente` corriendo).
 
+## Dinero real (pedido del dueño, 3-nov): `docs/DINERO-REAL.md`
+
+- R1 construido en `execution/live/` (ruta protegida):
+  - cliente de trading con lista cerrada y sin retiros;
+  - prueba sin riesgo `mexc-real-check`;
+  - armado `armar-real` (frase exacta, F-4: 20 USDT y 7 días);
+  - venue real (IOC con tope, margen aislado, stop de emergencia en el exchange, conciliación);
+  - operador real en paralelo al de práctica (cuenta en `TRADING_HOME/real/`, nunca se publica).
+- Pendiente del dueño:
+  - fusionar el PR protegido;
+  - borrar los secretos de MEXC de GitHub (la clave puede operar);
+  - correr `mexc-real-check`;
+  - **decidir el sobre** para la cuenta chica: con el actual, 20 USDT no alcanzan para el contrato mínimo
+    de BTC. Claude no lo puede aflojar solo.
+- Corregido: ¼-Kelly ahora dimensiona el riesgo (antes, el nominal: posiciones 50 a 100 veces más chicas).
+
+## Próximo: aprender de la historia y reaccionar más rápido (pedido del dueño, 3-nov)
+
+> "Quizás sea bueno también buscar en historial para que pueda entender más rápido cómo repercute las noticias
+> en el mercado. La idea es que pueda reaccionar lo más rápido posible a las noticias."
+
+1. **Estudio histórico (`research/history.py`).**
+   - Eventos con hora exacta:
+     - anuncios de listado y deslistado de Binance (API pública de anuncios) y de Upbit (API pública de
+       avisos), con años de historia;
+     - decisiones de la Fed (14:00 hora de Nueva York) y datos de inflación (CPI, 08:30), con calendario fijo;
+     - lo que ya junta la rama `data`.
+   - Precio: velas de 1 minuto de Binance (`data-api.binance.vision`) y de MEXC.
+   - Para cada categoría: reacción a 1, 5, 15 y 60 min, y resultado de la triple barrera con los costos
+     reales.
+   - Sirve para calibrar el meta-modelo y la tabla de magnitudes (solo reduce riesgo, C-5) y alimenta la
+     revisión diaria.
+   - Correrlo en la PC (internet completo); el resultado va a la rama `pc`.
+2. **Fuentes más rápidas.** Sondear cada pocos segundos los avisos de Binance y Upbit: un listado nuevo
+   mueve el precio en segundos y MEXC suele listar el futuro enseguida. Hoy el RSS se lee cada 30 a 60 s.
+
 ## Mensajes y uso de la IA (pedido del dueño, 3-nov)
 
 - Telegram en castellano simple: sin siglas, montos a la argentina, qué hizo, cuánto puede perder o ganar

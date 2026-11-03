@@ -56,7 +56,8 @@ STOP_SLIPPAGE_BPS = 20                              # stops y expiraciones entre
 EXIT_SLIPPAGE_BPS = 50                              # tope de las salidas a mercado del agente (≤ sobre)
 INFO_TTL_S = 86_400
 MAX_GAP_MIN = 48 * 60                               # velas hacia atrás como máximo si las corridas se cortaron
-CORE = ("BTC", "ETH", "SOL")                        # se mide su spread en cada corrida (historia del z-score)
+CORE = ("BTC", "ETH", "SOL")
+EMERGENCY_STOP_MULT = 1.5      # stop de emergencia en el exchange (dinero real): 1,5 × la distancia del stop del plan                        # se mide su spread en cada corrida (historia del z-score)
 
 
 def _month(ts: float) -> str:
@@ -392,10 +393,13 @@ class _Run:
             self.record(ev, sig, sym, "no_entrar", why, analisis=analysis)
             return
         entry_side = Side.BUY if p.side > 0 else Side.SELL
+        ref_px = book.best_ask if p.side > 0 else book.best_bid
+        emergency = inst.round_price(ref_px * (1 - D(str(EMERGENCY_STOP_MULT * p.sl_frac)) * p.side), up=p.side < 0)
         order, block = await self.service.execute(OrderIntent(
             client_id=f"pp-{ev['id']}-{sym}", symbol=sym, side=entry_side, type=OrderType.MARKET, notional=p.notional,
-            max_slippage_bps=D(str(self.cfg.max_slippage_bps)), ref_price=book.best_ask if p.side > 0 else book.best_bid,
-            tags={"decision_id": ev["id"], "role": "entry", "strategy_tag": STRATEGY_TAG}))
+            max_slippage_bps=D(str(self.cfg.max_slippage_bps)), ref_price=ref_px,
+            tags={"decision_id": ev["id"], "role": "entry", "strategy_tag": STRATEGY_TAG,
+                  "emergency_stop": str(emergency)}))
         if order is None or not order.filled_qty:
             self.counts["entrada_fallida"] += 1
             self.record(ev, sig, sym, "rechazada", [block or (order.reason if order else "sin_orden")], analisis=analysis)

@@ -173,12 +173,18 @@ def llm_limit(repo: Path = REPO) -> float | None:
     return float(m.group(1)) if m else None
 
 
-def gather(home: Path, now: float | None = None, repo: Path = REPO) -> dict:
-    """Todo lo que muestra el tablero (y lo que el supervisor publica para Claude), sin E/S de red."""
+def gather(home: Path, now: float | None = None, repo: Path = REPO, include_real: bool = True) -> dict:
+    """Todo lo que muestra el tablero, sin E/S de red. Lo que se publica para Claude va sin la cuenta de dinero
+    real (`include_real=False`, REGLAS G-8: nunca saldos reales)."""
     now = time.time() if now is None else now
     hb = read_json(home / "state" / "heartbeat.json", None)
     sup = read_json(home / "state" / "supervisor.json", None) or {}
     accounts = [a for a in (account(d, now) for d in sorted((home / "paper-vivo").glob("*")) if d.is_dir()) if a]
+    if include_real:
+        for d in sorted((home / "real").glob("*")):
+            a = account(d, now) if d.is_dir() else None
+            if a:
+                accounts.insert(0, {**a, "real": True})
     age = None if not isinstance(hb, dict) else round(now - float(hb.get("ts", 0)))
     kill = (home / "KILL").exists()
     halted = [a["mercado"] for a in accounts if a["halt"]]
@@ -314,7 +320,8 @@ def fragment(s: dict) -> str:
                  f"{_n(llm.get('evitadas', 0), 'evitada')} (no cambiaban nada) · {_n(llm.get('failures', 0), 'falla')}"
                  + (f" · tope {fmt_num(llm['tope_usd'], 2)} USD por día" if llm.get("tope_usd") else "")),
         ]
-        parts.append(f'<h2>Cuenta paper · {e(a["mercado"])}</h2><div class="tiles">{"".join(tiles)}</div>')
+        title = "💵 Cuenta de DINERO REAL" if a.get("real") else "Cuenta de práctica"
+        parts.append(f'<h2>{title} · {e(a["mercado"])}</h2><div class="tiles">{"".join(tiles)}</div>')
         parts.append(f'<figure class="card"><figcaption>Equity de la cuenta (USDT): cierres y marca actual'
                      f'</figcaption>{chart(a["curva"], a["inicial"])}</figure>')
         rows = [[e(p["symbol"]), e(str(p["lado"])), e(p["qty"]), e(str(p["entrada"])), e(str(p["marca"] or "—")),
