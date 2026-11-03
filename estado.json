@@ -136,7 +136,7 @@
   },
   "cointelegraph": {
    "etag": null,
-   "last_modified": "Tue, 03 Nov 2026 00:48:58 GMT",
+   "last_modified": "Tue, 03 Nov 2026 01:18:36 GMT",
    "seen": [
     "0f51768fe66a6a58",
     "967cf016c49850c7",
@@ -181,7 +181,7 @@
   },
   "decrypt": {
    "etag": null,
-   "last_modified": "Tue, 03 Nov 2026 00:53:49 GMT",
+   "last_modified": "Tue, 03 Nov 2026 01:22:07 GMT",
    "seen": [
     "42336da52963f891",
     "9a334bafcb613a57",
@@ -268,38 +268,38 @@
   "fed.press": {
    "ok": true,
    "items": 0,
-   "ts": 1793667230,
-   "latency_ms": 52.5
+   "ts": 1793668937,
+   "latency_ms": 117.4
   },
   "fed.monetary": {
    "ok": true,
    "items": 0,
-   "ts": 1793667230,
-   "latency_ms": 51.0
+   "ts": 1793668937,
+   "latency_ms": 111.3
   },
   "coindesk": {
    "ok": true,
    "items": 0,
-   "ts": 1793667230,
-   "latency_ms": 92.3
+   "ts": 1793668937,
+   "latency_ms": 322.0
   },
   "cointelegraph": {
    "ok": true,
-   "items": 3,
-   "ts": 1793667230,
-   "latency_ms": 42.1
+   "items": 0,
+   "ts": 1793668937,
+   "latency_ms": 154.4
   },
   "decrypt": {
    "ok": true,
-   "items": 2,
-   "ts": 1793667230,
-   "latency_ms": 37.1
+   "items": 0,
+   "ts": 1793668937,
+   "latency_ms": 74.2
   },
   "theblock": {
    "ok": true,
-   "items": 1,
-   "ts": 1793667230,
-   "latency_ms": 33.1
+   "items": 0,
+   "ts": 1793668937,
+   "latency_ms": 75.6
   }
  },
  "counts": {
@@ -313,7 +313,7 @@
    "etiquetadas": 11
   }
  },
- "updated_at": 1793667230,
+ "updated_at": 1793668937,
  "version": "0.1.0",
  "schema": 1,
  "aviso_inicio": 1793642808
