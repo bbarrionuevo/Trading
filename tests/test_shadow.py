@@ -95,15 +95,15 @@ async def test_entrada_con_el_nucleo_y_take_profit_entre_corridas(tmp_path):
         # α_E = 0,6·1·0,7·0,8 = 0,336, 10 s después 0,317 ⇒ p = 0,668; precio quieto ⇒ SL 0,6 % (piso), TP 1,2 %
         assert plan["p"] == pytest.approx(0.6683, abs=1e-3) and plan["alfa"] == pytest.approx(0.3171, abs=1e-3)
         assert (plan["sl"], plan["tp"], plan["tramos"]) == (0.006, 0.012, 1)
-        # ¼-Kelly con b neto de comisiones y spread: 9,7 % de 120 = 11,6 USDT (riesgo al stop ≈ 0,1 USDT)
-        assert plan["kelly"] == pytest.approx(0.0966, abs=1e-3) and plan["notional"] == "11.6"
+        # ¼-Kelly (9,7 % a arriesgar) y el 1 % de riesgo dan más: manda la exposición neta, 30 % de 120 = 36 USDT
+        assert plan["kelly"] == pytest.approx(0.0966, abs=1e-3) and plan["notional"] == "36.0"
         assert plan["riesgo_usd"] < 120 * 0.01
         st = p.state()
         pos = st["positions"]["SOLUSDT"]
-        assert D(pos["qty"]) == D("0.077") and D(pos["avg_price"]) == D("150.02") and pos["side"] == "largo"
+        assert D(pos["qty"]) == D("0.239") and D(pos["avg_price"]) == D("150.02") and pos["side"] == "largo"
         assert D(pos["stop"]) == D("149.11") and D(pos["tp"]) == D("151.83")         # al tick, del lado prudente
         assert pos["until"] == round(t1) + 3600 and pos["category"] == "listado"
-        assert D(st["cash"]) == D("120") - D("0.077") * D("150.02") * D("1.001")
+        assert D(st["cash"]) == D("120") - D("0.239") * D("150.02") * D("1.001")
         assert entry["tipo"] == "entrada" and entry["modo"] == "paper" and entry["order_id"].startswith("P")
         decision = p.rows("decisiones")[0]
         assert decision["decision"] == "entrar" and decision["analisis"]["vector"]["C"] == 10
@@ -116,17 +116,19 @@ async def test_entrada_con_el_nucleo_y_take_profit_entre_corridas(tmp_path):
         assert s2["take_profit"] == 1 and s2["abiertas"] == [] and s2["operaciones"] == 1
         out = p.rows("operaciones")[-1]
         assert (out["motivo"], D(out["price"]), out["deslizamiento_bps"]) == ("take_profit", D("151.83"), 0.0)
-        gross = D("0.077") * (D("151.83") - D("150.02"))
-        fees = D("0.077") * (D("151.83") + D("150.02")) * D("0.001")
+        gross = D("0.239") * (D("151.83") - D("150.02"))
+        fees = D("0.239") * (D("151.83") + D("150.02")) * D("0.001")
         assert D(out["pnl_neto"]) == pytest.approx(gross - fees, abs=D("0.000001"))
-        assert D(out["retorno_neto"]) == pytest.approx((gross - fees) / (D("0.077") * D("150.02")), abs=D("0.000001"))
+        assert D(out["retorno_neto"]) == pytest.approx((gross - fees) / (D("0.239") * D("150.02")), abs=D("0.000001"))
         assert D(p.state()["cash"]) == pytest.approx(D("120") + gross - fees, abs=D("0.000001"))
         assert "Gané +" in p.texts()[-1] and "cobré la ganancia" in p.texts()[-1]
 
 
 async def test_stop_con_salto_noticia_en_contra_y_expiracion(tmp_path):
     t1 = T0 + 10 * 60 + 30
-    async with Paper(tmp_path, {"SOLUSDT": [(T0 + 13 * 60, 0.97)]}) as p:               # -3 % a las 12:13...
+    lim = copy.deepcopy(limits_mod.load())
+    lim["per_trade"]["max_position_pct"] = 15                                     # más estricto: entran las dos
+    async with Paper(tmp_path, {"SOLUSDT": [(T0 + 13 * 60, 0.97)]}, limits=lim) as p:   # -3 % a las 12:13...
         p.mk.overrides[("SOLUSDT", (T0 + 12 * 60) * 1000)] = (150.0, 150.1, 149.9, 150.0)   # ...de un salto
         p.clock.set(t1)
         await p.run([ev("e1", LISTING, t1), ev("e2", "Coinbase will list Ethereum (ETH) futures", t1)])
@@ -160,6 +162,7 @@ async def test_stop_con_salto_noticia_en_contra_y_expiracion(tmp_path):
 async def test_freno_diario_cierra_todo_y_no_abre_hasta_el_otro_dia(tmp_path):
     lim = copy.deepcopy(limits_mod.load())
     lim["loss"]["daily_pct"] = 0.05                                             # más estricto, para probarlo
+    lim["per_trade"]["max_position_pct"] = 15                                   # más estricto: entran las dos
     t1 = T0 + 10 * 60 + 30
     async with Paper(tmp_path, {"SOLUSDT": [(T0 + 13 * 60, 0.97)]}, limits=lim) as p:
         p.clock.set(t1)

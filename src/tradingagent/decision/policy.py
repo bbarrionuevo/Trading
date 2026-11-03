@@ -164,7 +164,9 @@ def plan(a: Assessment, sig: Signal, symbol: str, *, equity: float, cash: float,
         cost = round_trip(fee_taker, spread, impact)
         b_net = (tp - cost) / (sl + cost)
         f = kelly(a.p, b_net, cfg.kelly_fraction)
-        notional = min(equity * f, risk_target / (sl + cost), *caps)
+        # Kelly dice qué fracción del capital ARRIESGAR (lo que se pierde si salta el stop), no el nominal: el
+        # nominal es ese riesgo dividido la distancia al stop. Manda el más chico entre Kelly, el 1 % y los topes.
+        notional = min(equity * f / (sl + cost), risk_target / (sl + cost), *caps)
     if b_net <= 0:
         return None, [f"costos_mayores_que_el_objetivo:{cost:.4f}"]
     if f <= 0:

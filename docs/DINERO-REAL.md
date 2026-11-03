@@ -12,7 +12,7 @@ aprueba el dueño (fusionando el PR protegido de cada etapa, REGLAS G-2).
 | Etapa | Qué | Cuándo pasa a la siguiente |
 |---|---|---|
 | R0 · Práctica (hecho) | La PC opera 24/7 en práctica con precios reales: avisos, tablero, revisión diaria | Ya |
-| R1 · Conector real y prueba sin riesgo | Ver abajo. PR protegido: lo fusiona el dueño | Cuando `mexc-real-check` da todo OK en la PC |
+| R1 · Conector real y prueba sin riesgo | **Construido** (PR protegido: lo fusiona el dueño). Probado de punta a punta contra un MEXC falso con órdenes | Cuando `mexc-real-check` da todo OK en la PC y el dueño decide el sobre (abajo) |
 | R2 · Calibración con dinero real (F-4) | Hasta 20 USDT de capital, 3x como máximo, riesgo 1 % por operación, stop de emergencia en el exchange. Se mide lo real contra la práctica: precio de entrada, deslizamiento y comisiones | ~20 operaciones reales sin sorpresas de ejecución |
 | R3 · Escalar | Con evidencia (F-3: 60 operaciones con DSR ≥ 0,95 entre práctica y real), el capital sube por escalones (×2), nunca por encima del sobre | Cada escalón con su evidencia |
 
@@ -54,15 +54,31 @@ aprueba el dueño (fusionando el PR protegido de cada etapa, REGLAS G-2).
   a operar hasta revisarlo).
 - Cada aviso de Telegram dice "💵 DINERO REAL" o "práctica (sin plata real)".
 
-## Sobre el apalancamiento (cuentas chicas)
+## El sobre para una cuenta chica (decisión del dueño, pendiente)
 
-Con poco capital, el tamaño mínimo de los contratos obliga a usar margen. Un contrato de BTC son 0,0001
-BTC (~10 USDT); con 20 USDT eso es la mitad de la cuenta. Con 3x se usa un tercio de margen, y el riesgo
-por operación sigue siendo 1 % gracias al stop.
+Con el sobre actual (40 % por posición, 30 % de exposición neta, 1x), una cuenta de 20 USDT abre como mucho
+~6 USDT por posición. El contrato mínimo de BTC (0,0001 BTC, ~10 USDT) **no entra**, así que con 20 USDT
+reales el programa no va a poder operar BTC.
 
-El apalancamiento **no** aumenta la ganancia esperada por unidad de riesgo. Sirve para que entren los
-lotes mínimos y para no inmovilizar toda la cuenta. Para eso, el sobre tiene que permitir un nocional mayor
-al capital (`max_position_pct` ~150 % y `max_leverage` 3), y eso lo aprueba el dueño.
+Propuesta (la decide el dueño):
+
+- `max_leverage` 3;
+- `max_position_pct` 150;
+- `max_gross_exposure_pct` 200;
+- `max_net_exposure_pct` 150, en `config/limits.yaml` y en la línea base de `src/tradingagent/limits.py`.
+
+El riesgo no sube: 1 % por operación con el stop, freno diario 2 %, semanal 4 % y drawdown 8 %. El
+apalancamiento no aumenta la ganancia esperada por unidad de riesgo. Sirve para que entren los lotes
+mínimos y para no inmovilizar toda la cuenta.
+
+Como afloja el sobre, Claude no lo puede cambiar solo: el sistema de permisos lo frenó, y está bien que sea
+así. Lo hace el dueño o se lo pide a Claude explícitamente.
+
+## Cómo dimensiona (corregido el 3-nov)
+
+¼-Kelly dice qué fracción del capital **arriesgar** (lo que se pierde si salta el stop). El nominal es ese
+riesgo dividido la distancia al stop. Antes se aplicaba al nominal, y las posiciones salían de 50 a 100
+veces más chicas. Ahora manda el más estricto entre Kelly, el 1 % de riesgo y los topes del sobre.
 
 ## Lo que tiene que hacer el dueño
 

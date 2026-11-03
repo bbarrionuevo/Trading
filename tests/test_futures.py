@@ -95,19 +95,19 @@ async def test_corto_con_noticia_negativa_comisiones_d5_y_take_profit(tmp_path):
         inst = st["instruments"]["BTC_USDT"]
         assert (inst["taker_cuenta"], inst["maker_cuenta"]) == ("0.0006", "0.0002")   # leído con la clave de lectura
         pos = st["positions"]["BTC_USDT"]
-        assert pos["side"] == "corto" and D(pos["qty"]) == D("-0.0002") and D(pos["avg_price"]) == D("99990.0")
+        assert pos["side"] == "corto" and D(pos["qty"]) == D("-0.0003") and D(pos["avg_price"]) == D("99990.0")
         assert D(pos["stop"]) == D("100590.0") and D(pos["tp"]) == D("98790.1")      # stop arriba, TP abajo
         assert float(pos["liq"]) == pytest.approx(99990 * 1.996)                     # a 1x, lejísimos
         entry = f.rows("operaciones")[0]
-        assert D(entry["fee"]) == D("0.0002") * D("99990.0") * D("0.0006")          # D-5: la comisión mayor (cuenta)
+        assert D(entry["fee"]) == D("0.0003") * D("99990.0") * D("0.0006")          # D-5: la comisión mayor (cuenta)
         assert "Vendí en corto" in f.tg.messages[-1]["text"] and "futuros MEXC" in f.tg.messages[-1]["text"]
 
         f.clock.set(t1 + 5 * 60)
         s2 = await f.run()
         out = f.rows("operaciones")[-1]
         assert s2["take_profit"] == 1 and out["lado"] == "corto" and D(out["price"]) == D("98790.1")
-        gross = D("0.0002") * (D("99990.0") - D("98790.1"))
-        fees = D("0.0002") * D("99990.0") * D("0.0006") + D("0.0002") * D("98790.1") * D("0.0002")
+        gross = D("0.0003") * (D("99990.0") - D("98790.1"))
+        fees = D("0.0003") * D("99990.0") * D("0.0006") + D("0.0003") * D("98790.1") * D("0.0002")
         assert D(out["pnl_neto"]) == pytest.approx(gross - fees, abs=D("1e-8")) and D(out["pnl_neto"]) > 0
         assert s2.get("funding", 0) == 0                                              # cerró antes del cobro de las 16
 

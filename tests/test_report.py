@@ -153,7 +153,9 @@ def test_plan_triple_barrera_costos_kelly_y_topes(lim):
     assert why == [] and p.side == 1 and p.tp_frac == pytest.approx(2 * p.sl_frac)
     assert p.sl_frac == pytest.approx(1.5 * 0.002 * math.sqrt(60))
     assert p.b_net < 2 and p.cost > 2 * 0.001                               # comisiones, spread e impacto
-    assert float(p.notional) == pytest.approx(1000 * p.kelly, abs=0.01)     # manda el ¼-Kelly
+    risk = p.sl_frac + p.cost                                               # Kelly dice cuánto ARRIESGAR:
+    assert float(p.notional) == pytest.approx(min(1000 * p.kelly / risk, 10 / risk, 400, 300), abs=0.01)
+    assert float(p.notional) == pytest.approx(300.0)                        # acá manda la neta (30 %)
     assert p.risk_usd <= 1000 * lim["per_trade"]["max_risk_pct"] / 100 + 1e-9
     assert p.slices == 1                                                    # Almgren-Chriss: un solo tramo
     capped, _ = plan(a, s, "PEPEUSDT", **{**kw, "net": 250.0})              # exposición neta ≤ 30 %

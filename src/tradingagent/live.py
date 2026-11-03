@@ -50,12 +50,14 @@ class _LiveRun(shadow._Run):
 class LiveTrader:
     def __init__(self, market, session, clock, limits: dict, *, alerts=None, journal=None, home: Path | None = None,
                  capital: float = 120.0, llm: "llm_mod.LlmClassifier | None" = None, cfg: PolicyConfig | None = None,
-                 paper_config: PaperConfig | None = None, learned_path: Path | None = None):
+                 paper_config: PaperConfig | None = None, learned_path: Path | None = None, venue_factory=None,
+                 base_dir: Path | None = None, real: bool = False):
         self.market, self.session, self.clock, self.limits = market, session, clock, limits
         self.alerts, self.journal, self.llm, self.capital = alerts, journal, llm, capital
         self.cfg = cfg or PolicyConfig()
         home = home or paths.home()
-        self.base = home / "paper-vivo" / market.name
+        self.base = base_dir or home / "paper-vivo" / market.name
+        self.venue_factory, self.real = venue_factory, real          # real: el venue de dinero real (A-2)
         self.kill_file = home / "KILL"
         self.learned_path = learned_path or home / "datos" / "aprendizaje" / "estado.json"
         self.paper_config = paper_config
@@ -74,12 +76,19 @@ class LiveTrader:
         symbols = sorted(set(self.st["positions"]) | {self.market.symbol(a) for a in shadow.CORE})
         self.registry = await self.market.instruments(self.session, symbols, self.st["instruments"], now)
         self.books = self.market.books(self.session, self.clock)
-        self.venue = PaperVenue(self.registry, self.books, self.pf, self.clock, self.paper_config or PaperConfig(
-            max_book_age_s=float(self.limits["market"]["max_book_age_s"]),
-            stop_slippage_bps=shadow.D(shadow.STOP_SLIPPAGE_BPS)))
+        if self.venue_factory is not None:
+            self.venue = self.venue_factory(self.registry, self.books, self.pf, self.clock)
+        else:
+            self.venue = PaperVenue(self.registry, self.books, self.pf, self.clock, self.paper_config or PaperConfig(
+                max_book_age_s=float(self.limits["market"]["max_book_age_s"]),
+                stop_slippage_bps=shadow.D(shadow.STOP_SLIPPAGE_BPS)))
         self.service = ExecutionService(self.venue, EventBus(), self.clock, kill_file=self.kill_file, mode="PAPER",
                                         journal=self.journal, limits=self.limits)
-        if self.first:
+        if self.first and self.real:
+            await self.send_alert(system_alert(
+                f"💵 Empecé a operar con DINERO REAL en futuros MEXC, con hasta {self.capital:g} USDT. Cada operación "
+                "te llega marcada como DINERO REAL. Para frenar todo: python -m tradingagent cerrar-todo", silent=False))
+        elif self.first:
             await self.send_alert(system_alert(
                 f"🧪 Empecé la cuenta de práctica en {shadow.MARKET_ES.get(self.market.name, self.market.name)} con "
                 f"{self.capital:.0f} USDT simulados (precios reales, plata no). Cuando llegue una noticia que valga "
@@ -253,8 +262,22 @@ class LiveTrader:
             for sym, meta in list(self.st["positions"].items()):
                 await self.market.settle(run, sym, meta, int(run.now * 1000))
             await self.after_exits(run)
+            await self.reconcile()
             await self.daily_summary(run)
             await self.save(run)
+
+    async def reconcile(self) -> None:
+        """Dinero real: si las posiciones de MEXC no coinciden con las del programa, no se abre nada nuevo."""
+        if not hasattr(self.venue, "reconcile"):
+            return
+        before = self.venue.blocked
+        now = await self.venue.reconcile()
+        if now and now != before:
+            await self.send_alert(system_alert(
+                "⚠️ Las posiciones de DINERO REAL en MEXC no coinciden con las del programa: no abro nada nuevo hasta "
+                "que coincidan. ¿Abriste o cerraste algo a mano en MEXC?", silent=False))
+        elif before and not now:
+            await self.send_alert(system_alert("✅ Las posiciones de dinero real volvieron a coincidir."))
 
     async def daily_summary(self, run: _LiveRun) -> None:
         """Una vez por día, al pasar las 00:00 UTC (21:00 en Argentina): cómo le fue ayer a la cuenta."""

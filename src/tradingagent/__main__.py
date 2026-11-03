@@ -10,6 +10,9 @@
   python -m tradingagent collect --paper [--capital 120] [--rearm] [--mercados binance-spot,mexc-futuros] [--ia]
                                              ...y del operador paper (rearme tras un halt)
   python -m tradingagent mexc-check          prueba la API de futuros de MEXC (y las claves de lectura, si hay)
+  python -m tradingagent mexc-real-check     prueba SIN RIESGO del modo real (órdenes que no se pueden ejecutar)
+  python -m tradingagent armar-real --capital 20 --dias 7   arma el DINERO REAL (frase exacta; --desarmar)
+  python -m tradingagent cerrar-todo         emergencia: cancela, cierra todo lo real y desarma
   python -m tradingagent llm-check           prueba la clave de Claude con una consulta mínima (centavos de centavo)
   python -m tradingagent sources [--check]   fuentes y su estado; --check lee cada una una vez
   python -m tradingagent journal-verify      verifica la cadena de hashes del diario
@@ -253,6 +256,97 @@ def cmd_collect(args) -> int:
     return 0
 
 
+def _trading_keys() -> tuple[str | None, str | None]:
+    return os.environ.get("MEXC_ACCESS_KEY"), os.environ.get("MEXC_SECRET_KEY")
+
+
+def cmd_mexc_real_check(args) -> int:
+    """Prueba sin riesgo del modo real (execution/live/check.py). Nunca muestra saldos."""
+    _setup("WARNING")
+    import aiohttp
+
+    from .execution.live import arming
+    from .execution.live.check import real_check
+    from .execution.live.mexc_futures import TradingClient
+    access, secret = _trading_keys()
+    if not (access and secret):
+        print("Faltan MEXC_ACCESS_KEY y MEXC_SECRET_KEY en", paths.home() / ".env")
+        return 2
+
+    async def main():
+        async with aiohttp.ClientSession() as session:
+            return await real_check(TradingClient(session, access, secret), session, args.simbolo)
+
+    report = asyncio.run(main())
+    arming.save_verification(paths.home(), report, access)
+    for st in report["pasos"]:
+        print(f"{'OK ' if st['ok'] else 'MAL'}  {st['paso']}" + (f": {st['detalle']}" if st["detalle"] else ""))
+    if report["ok"]:
+        print("Listo: MEXC entiende las órdenes como el programa las pide. Ya se puede armar el modo real.")
+        return 0
+    print("La prueba NO pasó: el modo real no se puede armar. No se dejó ninguna orden ni posición abierta.")
+    return 1
+
+
+def cmd_armar_real(args) -> int:
+    """Armado local del dueño (REGLAS A-2, F-4): frase exacta, tope, activos y vencimiento."""
+    _setup("WARNING")
+    from . import limits as limits_mod
+    from .execution.live import arming
+    home = paths.home()
+    if args.desarmar:
+        print("Desarmado: el modo real no abre nada nuevo (lo abierto sale normal)." if arming.disarm(home)
+              else "No estaba armado.")
+        return 0
+    access, _ = _trading_keys()
+    if not access:
+        print("Faltan MEXC_ACCESS_KEY y MEXC_SECRET_KEY en", home / ".env")
+        return 2
+    lim = limits_mod.load()
+    assets = tuple(a.strip().upper() for a in args.activos.split(",") if a.strip())
+    want = arming.phrase(args.capital, args.dias)
+    print(f"Vas a armar DINERO REAL: hasta {args.capital:g} USDT, activos {', '.join(assets)}, por {args.dias} "
+          f"días.\nPara confirmar, escribí exactamente:  {want}")
+    typed = input("> ")
+    try:
+        data = arming.arm(home, args.capital, args.dias, access, lim, typed, assets=assets)
+    except ValueError as e:
+        print(f"No se armó: {e}")
+        return 1
+    ok, why, _ = arming.status(home, access, lim)
+    (home / "state" / "parar").write_text("armado real", encoding="utf-8")   # el supervisor lo relanza ya armado
+    print(f"Armado hasta {data['capital_usdt']:g} USDT.", "El agente se reinicia solo en segundos y empieza." if ok
+          else f"Todavía no opera: {why} (corré python -m tradingagent mexc-real-check).")
+    return 0
+
+
+def cmd_cerrar_todo(args) -> int:
+    """Emergencia: cancela todas las órdenes y cierra todas las posiciones reales (con tope de precio), y desarma."""
+    _setup("WARNING")
+    import aiohttp
+
+    from .execution.live import arming
+    from .execution.live.check import _clean_up
+    from .execution.live.mexc_futures import TradingClient
+    access, secret = _trading_keys()
+    if not (access and secret):
+        print("Faltan MEXC_ACCESS_KEY y MEXC_SECRET_KEY")
+        return 2
+    arming.disarm(paths.home())
+
+    async def main():
+        async with aiohttp.ClientSession() as session:
+            client = TradingClient(session, access, secret)
+            symbols = sorted({p.get("symbol") for p in await client.positions()} | set(args.simbolos.split(",")))
+            for sym in (x for x in symbols if x):
+                await _clean_up(client, session, sym, client.base)
+            return [p for p in await client.positions() if float(p.get("holdVol", 0) or 0) > 0]
+
+    left = asyncio.run(main())
+    print("Desarmado. " + ("Todo cerrado." if not left else f"Quedan {len(left)} posiciones: cerralas desde MEXC."))
+    return 0 if not left else 1
+
+
 def cmd_mexc_check(args) -> int:
     """Diagnóstico de MEXC futuros. Imprime solo datos públicos y si las claves leen la cuenta (nunca saldos)."""
     _setup("WARNING")
@@ -397,6 +491,15 @@ def main(argv=None) -> int:
     c.add_argument("--ia", action="store_true", help="consultar a Claude las noticias dudosas (cuesta plata; en "
                    "GitHub está apagado porque la noticia llega tarde)")
     sub.add_parser("mexc-check")
+    rc = sub.add_parser("mexc-real-check")
+    rc.add_argument("--simbolo", default="BTC_USDT")
+    ar = sub.add_parser("armar-real")
+    ar.add_argument("--capital", type=float, default=20.0, help="USDT máximos para el modo real (F-4: hasta 20)")
+    ar.add_argument("--dias", type=int, default=7, help="vencimiento (F-4: hasta 7 días)")
+    ar.add_argument("--activos", default="BTC,ETH,SOL")
+    ar.add_argument("--desarmar", action="store_true")
+    ct = sub.add_parser("cerrar-todo")
+    ct.add_argument("--simbolos", default="BTC_USDT,ETH_USDT,SOL_USDT")
     sub.add_parser("llm-check")
     s = sub.add_parser("sources")
     s.add_argument("--check", action="store_true")
@@ -409,7 +512,8 @@ def main(argv=None) -> int:
     handlers = {"run": cmd_run, "telegram-test": cmd_telegram_test, "telegram-chats": cmd_telegram_chats,
                 "sources": cmd_sources, "journal-verify": cmd_journal_verify, "paper-sim": cmd_paper_sim,
                 "collect": cmd_collect, "mexc-check": cmd_mexc_check, "llm-check": cmd_llm_check,
-                "supervisar": cmd_supervisar, "tablero": cmd_tablero}
+                "supervisar": cmd_supervisar, "tablero": cmd_tablero, "mexc-real-check": cmd_mexc_real_check,
+                "armar-real": cmd_armar_real, "cerrar-todo": cmd_cerrar_todo}
     if args.cmd not in handlers:
         ap.print_help()
         return 2

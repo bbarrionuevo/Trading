@@ -97,7 +97,7 @@ def test_html_escapa_lo_de_afuera_y_muestra_las_secciones(tmp_path):
     page = dashboard.page(dashboard.gather(home, NOW))
     assert "<script>alert" not in page and "&lt;script&gt;alert(&quot;x&quot;)" in page
     assert "Merge &lt;b&gt;PR&lt;/b&gt;" in page and "<b>PR</b>" not in page
-    for text in ("Funcionando", "Cuenta paper · mexc-futuros", "Posiciones abiertas", "Últimas decisiones",
+    for text in ("Funcionando", "Cuenta de práctica · mexc-futuros", "Posiciones abiertas", "Últimas decisiones",
                  "Por qué no entra", "Salud del agente", "Supervisor y actualizaciones", "1 failed, 164 passed",
                  "Claude no respondió", "listado:largo", "data-curve="):
         assert text in page, text

@@ -156,3 +156,45 @@ async def test_la_conciliacion_frena_entradas_si_el_exchange_no_coincide(tmp_pat
         doge = await v.submit(OrderIntent(client_id="d", symbol="DOGE_USDT", side=Side.BUY, notional=D("5"),
                                           ref_price=D("0.2")))
         assert doge.reason in ("activo_no_armado", "conciliacion:diferencias:BTC_USDT")
+
+
+async def test_operador_real_misma_decision_entra_con_stop_de_emergencia_y_sale_por_su_stop(tmp_path):
+    from test_live import HACK, Alerts, news
+    from tradingagent.live import LiveTrader
+    from tradingagent.research.futures import MexcFutures
+
+    lim = limits_mod.load()
+    clock = ManualClock(T0 + 600)
+    prices = {**PRICES, "BTC_USDT": 20_000.0}         # contrato de 2 USDT: entra en una cuenta de 20 con el sobre
+    fake = FakeMexcTrade(lambda sym, m: prices[sym], clock)
+    home, alerts = tmp_path / "home", Alerts()
+    armed(home, lim, now=time.time())
+    async with serve(fake.app()) as url, aiohttp.ClientSession() as s:
+        client = TradingClient(s, ACCESS, SECRET, base=url, clock=clock)
+        lev = int(lim["per_trade"]["max_leverage"])
+        mk = MexcFutures(base=url, max_leverage=lev)
+        mk.label = "REAL futuros MEXC"
+
+        def venue(registry, books, pf, clk):
+            return RealVenue(client, s, registry, books, pf, clk, home=home, access_key=ACCESS, limits=lim,
+                             leverage=lev, base=url)
+
+        t = LiveTrader(mk, s, clock, lim, alerts=alerts, home=home, capital=20.0, venue_factory=venue,
+                       base_dir=home / "real" / mk.name, real=True)
+        await t.start()
+        assert "DINERO REAL" in alerts.texts()[0]
+        await t.on_news(news("h1", HACK, clock.time()))                          # hackeo: corto en BTC
+        pos = t.st["positions"]["BTC_USDT"]
+        sent = next(o for o in fake.orders.values() if o["side"] == 3)
+        assert pos["side"] == "corto" and sent["openType"] == 1 and sent["orderType"] == 3
+        assert sent["stopLossPrice"] > float(pos["stop"]) > float(pos["avg_price"])  # emergencia, más allá del stop
+        assert "💵 DINERO REAL" in alerts.texts()[-1] and "Vendí en corto BTC" in alerts.texts()[-1]
+        prices["BTC_USDT"] = 22_000.0                                             # salta en contra: sale por su stop
+        clock.advance(2)
+        await t.watch_once()
+        assert t.st["positions"] == {} and any(o["side"] == 2 for o in fake.orders.values())   # cerrar corto
+        assert any("Perdí" in x and "DINERO REAL" in x for x in alerts.texts())
+        assert "Freno del día" in alerts.texts()[-1]                              # perdió 3 % > 2 %: frena el día
+        assert await t.venue.reconcile() == ""                                    # el exchange coincide
+    assert (home / "real" / "mexc-futuros" / "estado.json").exists()
+    assert not (home / "paper-vivo" / "mexc-futuros").exists()                    # cuentas separadas

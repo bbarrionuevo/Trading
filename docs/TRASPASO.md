@@ -19,6 +19,22 @@
 **Verificado:** logs reales de GitHub Actions (MEXC público y claves de solo lectura, Claude Haiku, velas de
 Binance) y la PC del dueño (instalador completo, Telegram, tarea `trading-agente` corriendo).
 
+## Dinero real (pedido del dueño, 3-nov): `docs/DINERO-REAL.md`
+
+- R1 construido en `execution/live/` (ruta protegida):
+  - cliente de trading con lista cerrada y sin retiros;
+  - prueba sin riesgo `mexc-real-check`;
+  - armado `armar-real` (frase exacta, F-4: 20 USDT y 7 días);
+  - venue real (IOC con tope, margen aislado, stop de emergencia en el exchange, conciliación);
+  - operador real en paralelo al de práctica (cuenta en `TRADING_HOME/real/`, nunca se publica).
+- Pendiente del dueño:
+  - fusionar el PR protegido;
+  - borrar los secretos de MEXC de GitHub (la clave puede operar);
+  - correr `mexc-real-check`;
+  - **decidir el sobre** para la cuenta chica: con el actual, 20 USDT no alcanzan para el contrato mínimo
+    de BTC. Claude no lo puede aflojar solo.
+- Corregido: ¼-Kelly ahora dimensiona el riesgo (antes, el nominal: posiciones 50 a 100 veces más chicas).
+
 ## Mensajes y uso de la IA (pedido del dueño, 3-nov)
 
 - Telegram en castellano simple: sin siglas, montos a la argentina, qué hizo, cuánto puede perder o ganar
