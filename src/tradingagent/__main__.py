@@ -74,7 +74,14 @@ def cmd_supervisar(args) -> int:
     if not lock.acquire():
         print("Ya hay un supervisor corriendo con esta carpeta: no arranco otro.")
         return 0
+    import signal
+
     from .supervisor import Supervisor
+
+    def graceful(*_a):                             # `kill` o un apagado: cerrar en orden, como con Ctrl+C
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, graceful)
     try:
         return Supervisor(home=home, port=args.puerto or None).run()
     except KeyboardInterrupt:

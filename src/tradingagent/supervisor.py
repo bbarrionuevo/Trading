@@ -56,7 +56,8 @@ NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 LOW_PRIORITY = getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)
 GIT = shutil.which("git") or (r"C:\Program Files\Git\cmd\git.exe" if os.name == "nt" else "git")
 GIT_ENV = {"GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "never"}
-SCRUB = ("TELEGRAM_", "ANTHROPIC_", "CLAUDE_", "MEXC_", "GITHUB_", "SEC_USER_AGENT", "WEBHOOK_", "TRADING_HOME")
+SCRUB = ("TELEGRAM_", "ANTHROPIC_", "CLAUDE_", "MEXC_", "GITHUB_", "SEC_USER_AGENT", "WEBHOOK_", "TRADING_HOME",
+         "GIT_CONFIG")                     # la familia GIT_CONFIG_* va entera: a medias, git no arranca
 
 
 def _run(cmd: list, *, cwd=None, timeout: float = 300, env=None, flags: int = 0) -> subprocess.CompletedProcess:

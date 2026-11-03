@@ -322,7 +322,8 @@ def test_los_tests_de_la_pc_corren_sin_claves_y_con_carpeta_aparte(tmp_path, gh)
         spy.write_text(f"#!/bin/sh\nexec '{sys.executable}' '{code}' \"$@\"\n")
         spy.chmod(0o755)
     env = {**os.environ, "TELEGRAM_BOT_TOKEN": TOKEN, "TELEGRAM_CHAT_ID": "4242", "MEXC_SECRET_KEY": "x" * 20,
-           "GITHUB_TOKEN_PC": "gho_x", "ANTHROPIC_API_KEY": "sk-ant-x", "TRADING_HOME": "C:/real"}
+           "GITHUB_TOKEN_PC": "gho_x", "ANTHROPIC_API_KEY": "sk-ant-x", "TRADING_HOME": "C:/real",
+           "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "http.extraheader", "GIT_CONFIG_VALUE_0": "AUTH: x"}
     sup = Supervisor(repo=origin.pc, home=tmp_path / "home", python=str(spy), env=env, port=None)
     sup.run_tests()
     assert sup.tests.wait(timeout=20) == 0
@@ -332,6 +333,7 @@ def test_los_tests_de_la_pc_corren_sin_claves_y_con_carpeta_aparte(tmp_path, gh)
     assert got["env"]["TRADING_HOME"] == str(tmp_path / "home" / "pruebas")
     assert not {"TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "MEXC_SECRET_KEY", "GITHUB_TOKEN_PC",
                 "ANTHROPIC_API_KEY"} & set(got["env"])
+    assert not [k for k in got["env"] if k.startswith("GIT_CONFIG")]          # la familia entera, no a medias
     assert sup.state["tests_resultado"]["codigo"] == 0 and sup.tests is None
 
 
