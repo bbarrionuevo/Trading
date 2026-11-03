@@ -570,8 +570,8 @@ class _Server(ThreadingHTTPServer):
     allow_reuse_address = os.name != "nt"          # en Windows SO_REUSEADDR dejaría a otro usar el mismo puerto
 
     def server_bind(self) -> None:
-        if os.name == "nt":                         # el puerto en exclusiva: si otro programa lo usa (aunque sea
-            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)   # en 0.0.0.0), falla
+        if os.name == "nt":                         # en exclusiva: nadie se lo puede enganchar después (los que ya
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)   # estaban los ve in_use)
         super().server_bind()
 
 
@@ -590,10 +590,23 @@ def url(srv: ThreadingHTTPServer) -> str:
     return f"http://127.0.0.1:{srv.server_address[1]}"
 
 
+def in_use(port: int, host: str = "127.0.0.1", timeout: float = 0.3) -> bool:
+    """¿Ya atiende alguien en ese puerto? Windows deja enganchar 127.0.0.1:P aunque otro programa escuche en
+    0.0.0.0:P (y le robaría sus conexiones locales): por eso se pregunta antes de tomar el puerto."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
 def start_free(home: Path, base: int = PORT, tries: int = PORT_TRIES, host: str = "127.0.0.1") -> ThreadingHTTPServer:
     """El tablero en el primer puerto libre desde `base`. Nunca uno que use otro programa del dueño."""
     last = None
     for port in range(base, base + tries) if base else (0,):
+        if port and in_use(port, host):              # lo usa otro programa: ni se intenta
+            last = OSError(f"{port} en uso")
+            continue
         try:
             return start(home, port, host)
         except OSError as e:                         # ocupado: el siguiente
