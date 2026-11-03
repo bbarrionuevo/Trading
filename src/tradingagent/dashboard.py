@@ -1,7 +1,10 @@
-"""Tablero local: todo lo importante del agente de un vistazo, en http://127.0.0.1:8765 (solo en esta PC).
+"""Tablero local: todo lo importante del agente de un vistazo, en http://127.0.0.1:18765 (solo en esta PC).
 
 Lo sirve el supervisor, así sigue andando aunque el agente se reinicie o se esté actualizando. También:
-  python -m tradingagent tablero [--puerto 8765] [--abrir]
+  python -m tradingagent tablero [--puerto 18765] [--abrir]
+
+Si otro programa usa el puerto, toma el siguiente libre (nunca lo comparte) y deja la dirección real en
+`state/tablero.json` y en `tablero.html` (el acceso directo del escritorio abre ese archivo).
 
 - **Solo lectura:** lee los archivos de TRADING_HOME (latido, cuenta paper, operaciones, decisiones,
   aprendizaje, supervisor, tests y log) y no tiene ninguna acción que cambie algo.
@@ -13,6 +16,7 @@ import html
 import json
 import os
 import re
+import socket
 import threading
 import time
 from collections import Counter
@@ -20,11 +24,12 @@ from decimal import Decimal, InvalidOperation
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import __version__
+from . import __version__, paths
 from .core.redact import redact
 from .research import evaluation
 
-PORT = 8765
+PORT = 18765                        # lejos de los puertos comunes: el 8765 ya lo usa otro programa del dueño
+PORT_TRIES = 20
 HB_STALE_S = 60                     # el latido se escribe cada 15 s: un minuto sin latido es una caída
 F3_TRADES = 60                      # REGLAS F-3: operaciones cerradas para pasar a dinero real
 REFRESH_MS = 5000
@@ -564,6 +569,11 @@ class _Server(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = os.name != "nt"          # en Windows SO_REUSEADDR dejaría a otro usar el mismo puerto
 
+    def server_bind(self) -> None:
+        if os.name == "nt":                         # el puerto en exclusiva: si otro programa lo usa (aunque sea
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)   # en 0.0.0.0), falla
+        super().server_bind()
+
 
 def start(home: Path, port: int = PORT, host: str = "127.0.0.1") -> ThreadingHTTPServer:
     """Arranca el tablero en un hilo y devuelve el servidor (shutdown() para cerrarlo)."""
@@ -578,3 +588,35 @@ def start(home: Path, port: int = PORT, host: str = "127.0.0.1") -> ThreadingHTT
 
 def url(srv: ThreadingHTTPServer) -> str:
     return f"http://127.0.0.1:{srv.server_address[1]}"
+
+
+def start_free(home: Path, base: int = PORT, tries: int = PORT_TRIES, host: str = "127.0.0.1") -> ThreadingHTTPServer:
+    """El tablero en el primer puerto libre desde `base`. Nunca uno que use otro programa del dueño."""
+    last = None
+    for port in range(base, base + tries) if base else (0,):
+        try:
+            return start(home, port, host)
+        except OSError as e:                         # ocupado: el siguiente
+            last = e
+    raise OSError(f"sin puerto libre entre {base} y {base + tries - 1}: {last}")
+
+
+def announce(home: Path, srv: ThreadingHTTPServer) -> str:
+    """Deja escrita la dirección real: la lee el instalador, y el acceso directo abre `tablero.html`, que
+    redirige ahí (así sirve aunque el puerto cambie)."""
+    address = url(srv) + "/"
+    paths.write_json_atomic(Path(home) / "state" / "tablero.json", {"url": address, "ts": round(time.time())})
+    page = (f'<!doctype html><meta charset="utf-8"><title>TRADING · tablero</title><meta http-equiv="refresh" '
+            f'content="0; url={address}"><p>Abriendo el tablero: <a href="{address}">{address}</a></p>')
+    (Path(home) / "tablero.html").write_text(page, encoding="utf-8")
+    return address
+
+
+def is_ours(address: str, timeout: float = 2.0) -> bool:
+    """¿En esa dirección responde ESTE tablero (y no otro programa)?"""
+    import urllib.request
+    try:
+        with urllib.request.urlopen(address.rstrip("/") + "/api/estado", timeout=timeout) as r:
+            return "estado_texto" in json.load(r)
+    except (OSError, ValueError):
+        return False

@@ -15,7 +15,8 @@ $ErrorActionPreference = "Stop"
 $Repo = Join-Path $env:USERPROFILE "TRADING"
 $Home_ = Join-Path $env:LOCALAPPDATA "TRADING"
 $EnvFile = Join-Path $Home_ ".env"
-$Tablero = "http://127.0.0.1:8765/"
+$Pagina = Join-Path $Home_ "tablero.html"            # la escribe el supervisor: redirige al puerto real
+$Direccion = Join-Path $Home_ "state\tablero.json"   # la direccion real (si 18765 esta ocupado, otro puerto)
 
 function Paso($t) { Write-Host ""; Write-Host "== $t" -ForegroundColor Cyan }
 function RecargarPath {
@@ -102,20 +103,31 @@ Pop-Location
 
 Paso "6/7 Tarea programada trading-agente (24/7, se actualiza sola)"
 $tarea = Join-Path $Repo "deploy\windows\instalar-agente.ps1"
+$inicio = Get-Date
 Start-Process powershell -Verb RunAs -Wait -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$tarea`""
 Get-ScheduledTask -TaskName "trading-agente" | Select-Object TaskName, State | Format-Table
 
 Paso "7/7 Tablero"
 $Atajo = Join-Path ([Environment]::GetFolderPath("Desktop")) "TRADING tablero.url"
-[IO.File]::WriteAllText($Atajo, "[InternetShortcut]`r`nURL=$Tablero`r`n", (New-Object Text.ASCIIEncoding))
+$Destino = "file:///" + ($Pagina -replace '\\', '/')
+[IO.File]::WriteAllText($Atajo, "[InternetShortcut]`r`nURL=$Destino`r`n", (New-Object Text.ASCIIEncoding))
 Write-Host "Acceso directo creado: $Atajo"
-$listo = $false
-for ($i = 0; $i -lt 45 -and -not $listo; $i++) {
-  try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 $Tablero | Out-Null; $listo = $true } catch { Start-Sleep -Seconds 2 }
+$url = $null
+for ($i = 0; $i -lt 45 -and -not $url; $i++) {
+  # Solo la direccion que escribio el supervisor recien arrancado, y solo si responde ESTE tablero
+  # (en el 8765 de siempre hay otro programa tuyo).
+  if ((Test-Path $Direccion) -and (Get-Item $Direccion).LastWriteTime -gt $inicio) {
+    try {
+      $u = (Get-Content $Direccion -Raw | ConvertFrom-Json).url
+      $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 ($u + "api/estado")
+      if ($r.Content -match "estado_texto") { $url = $u }
+    } catch { }
+  }
+  if (-not $url) { Start-Sleep -Seconds 2 }
 }
-if ($listo) { Start-Process $Tablero } else {
+if ($url) { Start-Process $url; Write-Host "Tablero: $url" } else {
   Write-Host "El tablero todavia no responde: abri el acceso directo 'TRADING tablero' en un minuto." -ForegroundColor Yellow
 }
 Write-Host ""
 Write-Host "Listo. El supervisor mantiene al agente 24/7 y lo actualiza solo (solo versiones con CI verde)." -ForegroundColor Green
-Write-Host "Tablero: $Tablero   Logs: $Home_\logs   Pausa de emergencia: crear el archivo $Home_\KILL"
+Write-Host "Tablero: acceso directo 'TRADING tablero'   Logs: $Home_\logs   Pausa: crear el archivo $Home_\KILL"

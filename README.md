@@ -52,12 +52,12 @@ src/tradingagent/
   research/     recolector, etiquetas, paper por corridas (Binance spot, MEXC futuros), aprendizaje, DSR
   live.py       operador paper en vivo (PC 24/7)
   supervisor.py la PC sin intervención: reinicio, actualización con CI verde, tests y estado en la rama pc
-  dashboard.py  tablero local de solo lectura (http://127.0.0.1:8765)
+  dashboard.py  tablero local de solo lectura (http://127.0.0.1:18765 o el siguiente libre)
   limits.py     sobre de riesgo (protegido)      safety.py   núcleo de seguridad (protegido)
 config/limits.yaml   el sobre (protegido)        config/agent.example.yaml   ejemplo de configuración
 tools/               chequeos del CI (protegidos)
 deploy/windows/      instalador de un comando y tarea programada trading-agente (supervisor 24/7)
-tests/               187 tests, entre ellos los de las reglas (test_rules.py, protegido)
+tests/               188 tests, entre ellos los de las reglas (test_rules.py, protegido)
 ```
 
 ## Desarrollo

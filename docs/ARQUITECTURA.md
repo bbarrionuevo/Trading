@@ -29,7 +29,7 @@
 | `research/` | Recolector de datos de entrenamiento, operador paper por corridas, aprendizaje y evaluación | `assets`, `labeler` (reacciones y triple barrera), `collector`, `shadow` (paper por corridas, un adaptador por mercado), `futures` (MEXC), `learn` (solo reduce riesgo), `evaluation` (PSR/DSR) |
 | `live.py` | Operador paper en vivo para la PC 24/7: el mismo núcleo, reaccionando en segundos y vigilando barreras cada segundo | `LiveTrader`, `learn_loop` |
 | `supervisor.py` | La PC 24/7 sin intervención: relanza al agente, se actualiza solo con CI verde (vuelve atrás si no arranca), corre los tests en la PC y publica el estado en la rama `pc` (G-7, G-8) | `Supervisor`, `ci_green` |
-| `dashboard.py` | Tablero local de solo lectura en 127.0.0.1:8765 (biblioteca estándar, lo sirve el supervisor) | `gather`, `start` |
+| `dashboard.py` | Tablero local de solo lectura en 127.0.0.1:18765 o el siguiente puerto libre (nunca comparte un puerto con otro programa; biblioteca estándar, lo sirve el supervisor) | `gather`, `start_free`, `announce` |
 | `core/instance.py` | Un solo agente y un solo supervisor por carpeta (candado que el sistema suelta si el proceso muere) | `InstanceLock` |
 | `limits.py` · `safety.py` | **Sobre de riesgo y núcleo de seguridad** (rutas protegidas) | |
 | `config.py` · `paths.py` · `app.py` · `__main__.py` | Configuración, carpeta privada, ensamblado, CLI | |

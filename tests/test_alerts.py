@@ -151,7 +151,10 @@ async def test_telegram_colgado_no_frena_al_motor():
     p99_us, max_ms = percentile(times, 0.99) / 1000, max(times) / 1e6
     print(f"\nsubmit p99 {p99_us:.1f} µs · máx {max_ms:.2f} ms · lag del bucle {lag.stats()}")
     assert p99_us < 100, p99_us
-    assert lag.stats()["p99_ms"] < 15, lag.stats()
+    # El atraso se mide con el reloj de asyncio: en Windows salta de a ~15,6 ms, así que uno o dos saltos
+    # son el reloj y no el motor (en Linux la resolución es de nanosegundos y el tope queda en 15 ms).
+    tick_ms = time.get_clock_info("monotonic").resolution * 1000
+    assert lag.stats()["p99_ms"] < 15 + 2 * tick_ms, (lag.stats(), tick_ms)
     assert snap["queued"] <= 400                                   # acotada (las RISK pueden pasar el tope blando)
     assert snap["stats"]["descartadas_por_espacio"] > 0
     risks_dropped = 200 - sum(1 for t in range(0, 20_000, 100))    # 200 RISK enviadas al motor, ninguna perdida

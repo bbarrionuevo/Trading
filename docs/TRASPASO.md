@@ -14,19 +14,18 @@
 | PC | Operador en vivo 24/7 (mismo núcleo, barreras cada segundo, estado persistente) | `live.py` |
 | PC | Instalador de un comando (bbarrionuevo/Trading#8) | `deploy/windows/instalar.ps1` |
 | PC | **Supervisor:** relanza al agente, se actualiza solo con CI verde y sin posiciones abiertas (vuelve atrás si no arranca), corre los tests en la PC, un solo agente por carpeta (candado + job de Windows) y publica el estado en la rama `pc` | `supervisor.py`, `core/instance.py` |
-| PC | **Tablero** local de solo lectura en http://127.0.0.1:8765 | `dashboard.py` |
+| PC | **Tablero** local de solo lectura en http://127.0.0.1:18765 o el siguiente libre (el 8765 lo usa otro programa del dueño); acceso directo a `tablero.html` | `dashboard.py` |
 
 **Verificado:** logs reales de GitHub Actions (MEXC público y claves de solo lectura, Claude Haiku, velas de
 Binance) y la PC del dueño (instalador completo, Telegram, tarea `trading-agente` corriendo).
 
-## Pendiente de la aprobación del dueño (rutas protegidas, bbarrionuevo/Trading#10)
+## Rutas protegidas
 
-- `ci.yml`: ignorar la rama `pc` (si no, cada publicación dispararía el CI) y el job `windows` (tests,
-  sintaxis de los scripts en PowerShell 5.1 y registro real de la tarea). Hasta que se fusione, el
-  supervisor no publica.
-- `paths.py`: `write_json_atomic` reintenta en Windows si otro proceso tiene abierto el archivo (lo
-  encontró el primer CI en Windows real: 186 de 187; con el arreglo, todo verde).
-- REGLAS: G-7 (el supervisor y la actualización automática) y G-8 nueva (la rama `pc`: qué se publica).
+- Fusionado por el dueño (bbarrionuevo/Trading#10): el CI ignora la rama `pc` y prueba en Windows real
+  (tests, sintaxis de los scripts en PowerShell 5.1 y registro real de la tarea); `paths.py` reintenta el
+  guardado si Windows da "acceso denegado"; REGLAS v3.1 (G-7 y G-8).
+- **Para el próximo PR protegido:** G-8 nombra el tablero en `http://127.0.0.1:8765`, pero ese puerto lo usa
+  otro programa del dueño. Ahora es el 18765 o el siguiente libre, sin compartir nunca un puerto.
 
 ## Cómo ver la PC (para Claude)
 
