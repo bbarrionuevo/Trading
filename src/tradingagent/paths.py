@@ -6,6 +6,7 @@ misma PC). Si TRADING_HOME apunta a una carpeta de nexus, el agente se niega a a
 """
 import json
 import os
+import time
 from pathlib import Path
 
 SUBDIRS = ("state", "logs", "journal")
@@ -49,13 +50,27 @@ def kill_file() -> Path:
     return home() / "KILL"
 
 
+REPLACE_TRIES = 20                     # Windows: hasta ~2 s si otro proceso está leyendo justo ese archivo
+
+
 def write_json_atomic(path: Path, data) -> None:
-    """Escribe a un temporal y lo reemplaza: un corte de luz nunca deja el archivo a medias."""
+    """Escribe a un temporal y lo reemplaza: un corte de luz nunca deja el archivo a medias.
+
+    En Windows el reemplazo falla (acceso denegado) mientras otro proceso tiene el archivo abierto, por
+    ejemplo el tablero leyéndolo en ese mismo milisegundo: se reintenta un momento en vez de perder el
+    guardado (verificado en el CI de Windows)."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(data, indent=1, default=str, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, path)
+    for attempt in range(REPLACE_TRIES):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if attempt == REPLACE_TRIES - 1:
+                raise
+            time.sleep(0.01 * (attempt + 1))
 
 
 def read_json(path: Path, default):
