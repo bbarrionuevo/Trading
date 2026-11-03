@@ -339,7 +339,11 @@ class LiveTrader:
             return
         before = self.venue.blocked
         now = await self.venue.reconcile()
-        if now and now != before:
+        if now and now != before and now.startswith("exchange_sin_respuesta"):
+            await self.send_alert(system_alert(                         # un corte de red: se reintenta solo
+                "⚠️ MEXC no responde (o se cortó internet): no abro nada nuevo hasta que vuelva. Lo abierto tiene "
+                "su stop de emergencia en el exchange.", silent=True))
+        elif now and now != before:
             what = "del SIMULACRO" if self.simulated else "de DINERO REAL en MEXC"
             await self.send_alert(system_alert(
                 f"⚠️ Las posiciones {what} no coinciden con las del programa: no abro nada nuevo hasta que "

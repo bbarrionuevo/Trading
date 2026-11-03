@@ -439,3 +439,13 @@ async def test_sin_tope_opera_con_todo_el_saldo_y_un_retiro_no_es_una_perdida(tm
         fake.balance = D("10")
         await t.sync_capital()
         assert t.pf.cash == D("150")
+
+
+async def test_si_el_exchange_no_responde_la_conciliacion_frena_entradas_sin_caerse(tmp_path):
+    class Caido:
+        async def positions(self, symbol=None):
+            raise RuntimeError("se cortó internet")
+
+    v = RealVenue(Caido(), None, InstrumentRegistry([]), None, Portfolio(D("100")), ManualClock(T0),
+                  home=tmp_path, access_key=ACCESS, limits=limits_mod.load())
+    assert (await v.reconcile()).startswith("sin respuesta") and v.blocked == "exchange_sin_respuesta"

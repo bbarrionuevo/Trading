@@ -130,7 +130,7 @@ class RealVenue:
         if not intent.reduce_only:
             try:
                 free = Decimal(str((await self.account())["available"]))
-            except (TradingError, KeyError, TypeError, ValueError) as e:
+            except Exception as e:                                   # noqa: BLE001 (sin saldo, no se entra)
                 return self._reject(order, f"sin_saldo_leido:{str(e)[:80]}")
             if notional / Decimal(self.leverage) > free * MARGIN_BUFFER:
                 return self._reject(order, "supera_el_saldo_disponible")
@@ -226,18 +226,18 @@ class RealVenue:
     # -- conciliación -------------------------------------------------------------------------------------
     async def reconcile(self) -> str:
         """Compara las posiciones del exchange con las del motor. Si no coinciden, bloquea entradas y lo dice."""
+        theirs: dict[str, Decimal] = {}
         try:
             live = await self.client.positions()
             await self.account(fresh=True)
-        except TradingError as e:
+            for p in live:
+                sym = p.get("symbol", "")
+                spec = await self._spec(sym)
+                sign = 1 if int(p.get("positionType", 1)) == 1 else -1
+                theirs[sym] = theirs.get(sym, Decimal(0)) + Decimal(str(p.get("holdVol", 0) or 0)) * spec["size"] * sign
+        except Exception as e:                                       # noqa: BLE001 (sin datos, no se entra)
             self.blocked = "exchange_sin_respuesta"
             return f"sin respuesta: {str(e)[:120]}"
-        theirs: dict[str, Decimal] = {}
-        for p in live:
-            sym = p.get("symbol", "")
-            spec = await self._spec(sym)
-            sign = 1 if int(p.get("positionType", 1)) == 1 else -1
-            theirs[sym] = theirs.get(sym, Decimal(0)) + Decimal(str(p.get("holdVol", 0) or 0)) * spec["size"] * sign
         ours = {s: p.qty for s, p in self.portfolio.positions.items() if p.qty}
         diff = sorted(s for s in set(theirs) | set(ours) if theirs.get(s, Decimal(0)) != ours.get(s, Decimal(0)))
         self.blocked = f"diferencias:{','.join(diff)}" if diff else ""
