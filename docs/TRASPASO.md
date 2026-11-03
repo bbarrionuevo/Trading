@@ -75,7 +75,12 @@ Binance) y la PC del dueño (instalador completo, Telegram, tarea `trading-agent
   la IA: la comprada sube, la que compra suele bajar).
 - Fuentes nuevas: `cnbc.top`, `cnbc.earnings`, `seekingalpha`, `investing`.
 - Armado real con activos "todos" por defecto.
-- **Pendiente:** MEXC spot para monedas sin futuro (práctica primero; el real necesita enmendar A-3).
+- **MEXC spot, todavía no (datos del 3-nov):** de 1.367 pares USDT, solo 22 mueven ≥ 2 M USDT por día y solo
+  6 no tienen futuro en MEXC (ZIG, PUMP, XAUT, UPC y dos stablecoins). Futuros a 1x cobran menos (0 a 0,02 %
+  contra 0,05 %), permiten cortos y no se liquidan. Cuando aparezca un caso (un listado nuevo solo en spot y
+  líquido): `MexcSpot` como `BinanceSpot` (la API v3 de MEXC es compatible en libro, velas y ticker; los
+  filtros vienen como precisiones: `quotePrecision`, `baseAssetPrecision`, `baseSizePrecision`,
+  `quoteAmountPrecision`), primero en práctica; el real necesita enmendar A-3 (`/api/v3/order`).
 
 ## Próximo: aprender de la historia y reaccionar más rápido (pedido del dueño, 3-nov)
 
