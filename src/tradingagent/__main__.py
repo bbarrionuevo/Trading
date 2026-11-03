@@ -8,6 +8,7 @@
   python -m tradingagent collect --paper [--capital 120] [--rearm] [--mercados binance-spot,mexc-futuros]
                                              ...y del operador paper (rearme tras un halt)
   python -m tradingagent mexc-check          prueba la API de futuros de MEXC (y las claves de lectura, si hay)
+  python -m tradingagent llm-check           prueba la clave de Claude con una consulta mínima (centavos de centavo)
   python -m tradingagent sources [--check]   fuentes y su estado; --check lee cada una una vez
   python -m tradingagent journal-verify      verifica la cadena de hashes del diario
   python -m tradingagent paper-sim ESCENARIO reproduce libros + órdenes de un escenario JSONL
@@ -215,6 +216,30 @@ def cmd_mexc_check(args) -> int:
     return asyncio.run(main())
 
 
+def cmd_llm_check(args) -> int:
+    _setup("WARNING")
+    from .intelligence.llm import MODEL, LlmClassifier, api_key
+    key = api_key(os.environ)
+    if not key:
+        print("Falta ANTHROPIC_API_KEY en", paths.home() / ".env")
+        return 2
+
+    async def main():
+        c = LlmClassifier(key)
+        try:
+            r = await c.health_check()
+        finally:
+            await c.close()
+        if r.error:
+            print(f"Claude NO responde: {r.error} (decide el clasificador local)")
+            return 1
+        print(f"Claude OK · {MODEL} · {r.latency_ms:.0f} ms · {r.usd:.6f} USD · leyó: {r.signal.category} "
+              f"{r.signal.polarity:+.2f} sobre {', '.join(r.signal.assets)}")
+        return 0
+
+    return asyncio.run(main())
+
+
 def cmd_sources(args) -> int:
     _setup("WARNING")
     cfg = config.load(args.config or paths.home() / "config.yaml")
@@ -288,6 +313,7 @@ def main(argv=None) -> int:
     c.add_argument("--rearm", action="store_true", help="rearme humano tras un halt por drawdown (REGLAS A-4)")
     c.add_argument("--mercados", default="binance-spot,mexc-futuros", help="cuentas paper, separadas por comas")
     sub.add_parser("mexc-check")
+    sub.add_parser("llm-check")
     s = sub.add_parser("sources")
     s.add_argument("--check", action="store_true")
     s.add_argument("--config")
@@ -298,7 +324,7 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     handlers = {"run": cmd_run, "telegram-test": cmd_telegram_test, "telegram-chats": cmd_telegram_chats,
                 "sources": cmd_sources, "journal-verify": cmd_journal_verify, "paper-sim": cmd_paper_sim,
-                "collect": cmd_collect, "mexc-check": cmd_mexc_check}
+                "collect": cmd_collect, "mexc-check": cmd_mexc_check, "llm-check": cmd_llm_check}
     if args.cmd not in handlers:
         ap.print_help()
         return 2

@@ -223,6 +223,12 @@ class LlmClassifier:
             return LlmResult(None, why, usd, ms, data if isinstance(data, dict) else None)
         return LlmResult(sig, "", usd, ms, data)
 
+    async def health_check(self) -> LlmResult:
+        """Una consulta mínima con un titular fijo: ¿la clave y el modelo responden? (una vez por día)."""
+        title = "Solana-based exchange reportedly suspends withdrawals"
+        from .classifier import classify
+        return await self.classify(title, "", classify(title))
+
     def _fail(self, why: str, t0: float) -> LlmResult:
         self.budget.failures += 1
         log.warning("Claude no respondió (%s): decide el clasificador local", redact(why))

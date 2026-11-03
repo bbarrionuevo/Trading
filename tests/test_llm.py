@@ -117,7 +117,44 @@ async def test_el_recolector_guarda_la_opinion_de_la_ia_y_su_costo(tmp_path):
             s = await collect(tmp_path / "d", cfg, {}, clock=clock, sources=specs(furl), send_gap_s=0, llm=c)
         finally:
             await c.close()
-    assert s["llm"]["consultas"] == 1 and s["llm"]["usadas"] == 1 and len(fake.requests) == 1
+    assert s["llm"]["consultas"] == 1 and s["llm"]["usadas"] == 1 and s["llm"].get("verificacion") is None
+    assert len(fake.requests) == 2                                                  # chequeo del día + la dudosa
     evs = {e["url"].rsplit("/", 1)[1]: e for e in read_shards(tmp_path / "d", "eventos", T0, T0 + 60)}
     assert evs["r"]["nlp_llm"]["category"] == "hack" and evs["r"]["nlp_llm"]["motivo"]
     assert evs["r"]["nlp"]["rules"] == ["hackeo"] and "nlp_llm" not in evs["c"]
+
+
+async def test_chequeo_diario_de_la_clave_y_aviso_una_sola_vez(tmp_path):
+    import copy
+
+    from fake_feeds import Feeds, specs
+    from fake_telegram import TOKEN, FakeTelegram
+    from tradingagent import config
+    from tradingagent.alerts.telegram import TelegramTransport
+    from tradingagent.research.collector import collect
+
+    fake, feeds, tg, clock = FakeClaude(), Feeds(), FakeTelegram(), ManualClock(T0)
+    async with serve(feeds.app()) as furl, serve(fake.app()) as aurl, serve(tg.app()) as turl:
+        t = TelegramTransport(TOKEN, "4242", base_url=turl)
+        c = llm.LlmClassifier("sk-ant-otra-clave-que-no-vale-000000000", base_url=aurl, clock=clock)
+        try:
+            cfg = copy.deepcopy(config.load(None))
+            s1 = await collect(tmp_path / "d", cfg, {}, clock=clock, sources=specs(furl), telegram=t, send_gap_s=0,
+                               llm=c)
+            clock.advance(300)
+            s2 = await collect(tmp_path / "d", cfg, {}, clock=clock, sources=specs(furl), telegram=t, send_gap_s=0,
+                               llm=c)
+            c.key = KEY                                                         # el dueño arregla el secreto
+            c._client = None
+            clock.advance(300)
+            s3 = await collect(tmp_path / "d", cfg, {}, clock=clock, sources=specs(furl), telegram=t, send_gap_s=0,
+                               llm=c)
+            clock.advance(300)
+            s4 = await collect(tmp_path / "d", cfg, {}, clock=clock, sources=specs(furl), telegram=t, send_gap_s=0,
+                               llm=c)
+        finally:
+            await c.close()
+            await t.close()
+    assert s1["llm"]["verificacion"] == "http_401" and s2["llm"]["verificacion"] == "http_401"
+    assert sum("Claude" in m["text"] for m in tg.messages) == 1                     # un solo aviso
+    assert s3["llm"]["verificacion"] == "ok" and "llm" not in s4                     # una vez por día
