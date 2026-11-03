@@ -12,6 +12,13 @@ Además ajusta el meta-modelo (intelligence/meta.py) con las etiquetas de triple
 para cada noticia y activo, el alfa que tenía al entrar (un minuto después de la llegada) y si tocó primero
 el take-profit. κ ≤ 1: los datos pueden achicar la confianza del modelo, nunca agrandarla.
 
+**Solo cuenta lo que se habría operado** (meta-labeling, `entry_alpha`): para las categorías y para el
+meta-modelo, solo las apuestas que el modelo primario de verdad propone, con los umbrales de la decisión: la
+noticia habla de ese activo (relevancia C ≥ `c_min`) y el alfa al entrar todavía alcanza (|α| ≥ `alpha_min`).
+El 3-nov, 46 de las 47 muestras del meta-modelo eran noticias que nunca se iban a operar (37 con BTC "de
+referencia" de noticias ajenas como Ferrari, y alfas casi cero): con expiración casi nunca tocan el
+take-profit, κ quedó en 0, p = 1/3 en todo y se frenó toda entrada, listados incluidos.
+
 Los resultados quedan en `aprendizaje/estado.json` de la carpeta de datos, con la fecha y la versión del
 clasificador, y se recalculan como mucho una vez por hora.
 """
@@ -22,6 +29,7 @@ from pathlib import Path
 from statistics import NormalDist, fmean, stdev
 
 from .. import paths
+from ..decision.policy import PolicyConfig
 from ..intelligence import meta, vector
 from ..intelligence.classifier import NOT_TRADABLE, Signal, classify
 from ..intelligence.classifier import VERSION as NLP_VERSION
@@ -33,6 +41,8 @@ MIN_N = 30
 HORIZONS = ("r_recv_15m", "r_recv_60m")
 EVERY_S = 3600
 SIDES = {1: "largo", -1: "corto"}
+_POLICY = PolicyConfig()           # los mismos umbrales con los que se decide entrar (C-6)
+C_MIN, ALPHA_MIN = _POLICY.c_min, _POLICY.alpha_min
 
 
 def t_quantile(p: float, dof: int) -> float:
@@ -79,15 +89,25 @@ def signal_of(event: dict) -> Signal:
                     cluster_sources=event.get("cluster_sources", 1))
 
 
+def entry_alpha(sig: Signal, asset: str, event: dict) -> float | None:
+    """El alfa con el que se habría entrado (un minuto después de la llegada), o None si el modelo primario no
+    habría propuesto la apuesta: la noticia no habla de ese activo (C < c_min) o el alfa ya era chico."""
+    v = vector.vector(sig, asset, event)
+    dt, _ = vector.age_s(event, float(event["received_at"]) + 60)
+    alpha = vector.decay(v.alpha, dt)
+    return alpha if v.C >= C_MIN and abs(alpha) >= ALPHA_MIN else None
+
+
 def samples(events: list[dict], reactions: list[dict], cost: float = COST) -> dict[str, dict[str, list[float]]]:
-    """{"categoría:lado": {horizonte: [ganancia neta de operar la noticia desde la llegada]}}."""
+    """{"categoría:lado": {horizonte: [ganancia neta de operar la noticia desde la llegada]}}, solo con lo que
+    se habría operado (un listado que llegó a los 5 minutos no dice nada de los que llegan a tiempo)."""
     by_event: dict[str, list[dict]] = {}
     for r in reactions:
         if "error" not in r:
             by_event.setdefault(r["event_id"], []).append(r)
     out: dict[str, dict[str, list[float]]] = {}
     for e in events:
-        if e.get("dedup") != "new" or e.get("is_noise") or e["id"] not in by_event:
+        if e.get("dedup") != "new" or e.get("is_noise") or e["id"] not in by_event or "received_at" not in e:
             continue
         sig = signal_of(e)
         category, polarity = sig.category, sig.polarity
@@ -96,7 +116,7 @@ def samples(events: list[dict], reactions: list[dict], cost: float = COST) -> di
         sign = 1 if polarity > 0 else -1
         symbols = {f"{a}USDT" for a in sig.assets}
         for r in by_event[e["id"]]:
-            if r["symbol"] not in symbols:
+            if r["symbol"] not in symbols or entry_alpha(sig, r["symbol"].removesuffix("USDT"), e) is None:
                 continue
             for h in HORIZONS:
                 if r.get(h) is not None:
@@ -117,12 +137,13 @@ def meta_samples(events: list[dict], reactions: list[dict]) -> dict[str, list[tu
         sig = signal_of(e)
         if sig.category in NOT_TRADABLE or not sig.polarity:
             continue
-        dt, _ = vector.age_s(e, float(e["received_at"]) + 60)          # se entra al minuto siguiente a la llegada
         for r in by_event[e["id"]]:
             asset = r["symbol"].removesuffix("USDT")
             if asset not in sig.assets:
                 continue
-            alpha = vector.decay(vector.vector(sig, asset, e).alpha, dt)
+            alpha = entry_alpha(sig, asset, e)             # se entra al minuto siguiente a la llegada
+            if alpha is None:                              # el modelo primario no la habría propuesto
+                continue
             side = SIDES.get((alpha > 0) - (alpha < 0))
             if side is None or r.get(f"tb_{side}") is None:
                 continue

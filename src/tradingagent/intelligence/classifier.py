@@ -10,14 +10,17 @@ y horizonte, en microsegundos y sin red.
 - El texto es un dato a clasificar, nunca una instrucción (C-2): ninguna frase de la noticia cambia cómo
   se decide.
 - Los activos salen del texto (grounding): si no hay ninguno y la noticia es de mercado (macro,
-  regulación, ETF), se usa BTC como referencia, con menos confianza.
+  regulación, ETF, tesorería, quiebra), se usa BTC como referencia, con menos confianza. Si es el hecho de una
+  empresa o de un activo que la noticia no nombra (resultados de Ferrari, una recompra de 3M, un hackeo
+  cualquiera), no hay activo: nada que operar (reglas-3, ver `classify`).
+- Los resultados de empresas nunca son de una cripto: "LTC reports Q3 earnings" es LTC Properties, no Litecoin.
 """
 import re
 from dataclasses import asdict, dataclass
 
 from ..research import assets as asset_mod
 
-VERSION = "reglas-2"
+VERSION = "reglas-3"
 
 
 @dataclass(frozen=True)
@@ -123,6 +126,10 @@ UNCERTAIN = re.compile(r"\b(?i:reportedly|rumou?rs?|rumou?red|sources say|consid
                        r"expected to|proposal|proposes|potentially|might|could)\b|\bmay\b")
 DENIAL = _r(r"\b(denies|denied|false|fake|not true|no plans|rejects? (reports|rumou?rs)|debunk(s|ed)?)\b")
 EXCHANGES = _r(r"\b(binance|coinbase|kraken|upbit|okx|bybit|robinhood|bithumb)\b")
+# Resultados de una empresa: ninguna cripto "reporta ganancias" (3-nov: "LTC reports strong Q3 earnings" era LTC
+# Properties, una inmobiliaria, y se tomó como Litecoin).
+EARNINGS = _r(r"\b(earnings|EPS|A?FFO)\b|\bQ[1-4](\s+(FY)?20\d\d)?\s+(results|earnings|revenue|sales|profit|loss)\b|"
+              r"\bquarterly (results|earnings|revenue|profit|loss)\b")
 MARKET_WIDE = {"macro", "regulatorio", "etf", "tesoreria", "quiebra"}
 # Categorías donde las reglas no saben la dirección (en una fusión la comprada sube y la que compra suele bajar):
 # la certeza baja para que siempre decida la lectura de la IA.
@@ -135,6 +142,8 @@ def classify(title: str, body: str = "", *, tier: int = 2, cluster_sources: int 
     title = title or ""
     text = f"{title}. {(body or '')[:600]}"
     found = asset_mod.detect(title) or asset_mod.detect(text) or [a for a in hint_assets if a in asset_mod.ASSETS]
+    if EARNINGS.search(title):
+        found = [a for a in found if a not in asset_mod.ASSETS]
     hits = [r for r in RULES if r.pattern.search(text)]
     in_title = {r.name for r in RULES if r.pattern.search(title)}
     if not hits:
@@ -166,8 +175,17 @@ def classify(title: str, body: str = "", *, tier: int = 2, cluster_sources: int 
         confidence *= 1 + 0.1 * min(cluster_sources - 1, 3)
     if primary.category in ("listado", "deslistado") and EXCHANGES.search(title):
         confidence *= 1.2
+    if primary.category == "resultados":                 # los resultados son de empresas, nunca de una cripto
+        found = [a for a in found if a not in asset_mod.ASSETS]
     assets = tuple(found)
     if not assets:
+        # Sin activo en el texto, BTC de referencia solo si es un hecho de mercado. Antes iba siempre: una noticia
+        # de una empresa (Ferrari, 3M) o un hackeo cualquiera quedaba en BTC. Nunca podía entrar (relevancia 3 <
+        # 7), pero pagaba consultas a la IA y ensuciaba el aprendizaje: el 3-nov, 37 de las 47 muestras del
+        # meta-modelo eran eso (hasta "heladeras hackeadas en Europa"), llevaron κ a 0 y frenaron TODA entrada.
+        if not any(r.category in MARKET_WIDE for r in hits):
+            return Signal(primary.category, round(polarity, 3), 0.0, (), primary.horizon_min,
+                          tuple(r.name for r in hits), certainty=round(certainty, 3))
         assets = (asset_mod.MARKET_PROXY,)
         confidence *= 0.8 if primary.category in MARKET_WIDE else 0.3
     return Signal(primary.category, round(polarity, 3), round(min(1.0, confidence), 3), assets,

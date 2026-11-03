@@ -1,7 +1,7 @@
 # TRASPASO: qué es TRADING, en qué estado está y cómo seguir
 
 Para el agente que toma el sistema, sobre todo si trabaja **en la PC del dueño con dinero real en
-producción**. Leelo entero antes de tocar nada. Al día del 3-nov-2026, versión `main` después del PR #22.
+producción**. Leelo entero antes de tocar nada. Al día del 3-nov-2026 (noche), versión `main` después del PR #23.
 
 ## 1. Qué es y qué quiere el dueño
 
@@ -35,7 +35,8 @@ Lo que pidió, en sus palabras:
 | PC | Al día. El supervisor la actualiza sola desde `main` con el CI en verde. Tests en Windows OK |
 | Cuenta de práctica (paper) | 120 USDT simulados en futuros MEXC; 3 operaciones el 3-nov (−0,20 USDT, cortos mal leídos por las reglas antes de que la IA confirmara cada entrada) |
 | Simulacro del real | Armado el 3-nov con 100 USDT de mentira, 2 días. Mismo operador real, sin mandar órdenes |
-| **Dinero real** | **Arranca el 4-nov con 100 USDT** en la cuenta de futuros de MEXC. El dueño corre `mexc-real-check` y después `armar-real` (frase `ARMO DINERO REAL CON TODO EL SALDO POR 30 DIAS`). Al armar el real, se reemplaza el simulacro |
+| **Dinero real** | **Arranca el 4-nov con 100 USDT** en la cuenta de futuros de MEXC. El dueño corre `mexc-real-check` y después `armar-real` (frase `ARMO DINERO REAL CON TODO EL SALDO POR 30 DIAS`). Al armar el real, se reemplaza el simulacro. Leído el 3-nov a las 20 h (solo lectura): la cuenta ya está en modo Cobertura, sin posiciones ni órdenes, y **el saldo de futuros es 0**: el dueño pasa los 100 USDT a Futuros el 4-nov antes de la prueba |
+| Aprendizaje | **Arreglado el 3-nov (PR #23).** El meta-modelo había quedado en κ = 0 con 47 muestras, 37 de ellas noticias ajenas con BTC "de referencia" (Ferrari, 3M, "heladeras hackeadas"): p = 1/3 en todo y ninguna entrada posible, listados incluidos, desde la tarde del 3-nov. Ahora solo aprende de lo que se habría operado (sección 9) |
 | Fuentes | 14: Fed; medios cripto; CNBC, Seeking Alpha, Investing; anuncios oficiales de Binance (10 s) y Upbit (10 s, PR #22). OKX y Bitget apagados (sin efecto medido). SEC apagada (falta `SEC_USER_AGENT`) |
 | IA | Claude Haiku 5.5. Lee toda noticia que las reglas abrirían. Unos 0,002 USD por día. Techo de seguridad: 5 USD por día |
 | Tareas programadas (nube) | "Revisión diaria de TRADING" 7:36 y "Vigilancia de TRADING cada 2 horas" 8 a 24 (hora argentina). Sin conector de GitHub: dejan arreglos en ramas `claude/...` |
@@ -72,9 +73,14 @@ del dueño.
    (`SourceSpec.os_trust`, paquete `truststore`).
 2. **Ingesta** (`ingestion/engine.py`, `dedup.py`, `noise.py`). Frescura (`news.max_age_s` del sobre),
    deduplicado por similitud (una sola operación por historia) y ruido.
-3. **Clasificación rápida** (`intelligence/classifier.py`). Reglas en inglés y coreano: hackeo, deslistado,
-   quiebra, regulatorio, ETF, macro, listado, resultados, fusión, etc. Activos en `research/assets.py` más el
-   universo de MEXC.
+3. **Clasificación rápida** (`intelligence/classifier.py`, versión `reglas-3`). Reglas en inglés y coreano:
+   hackeo, deslistado, quiebra, regulatorio, ETF, macro, listado, resultados, fusión, etc. Activos en
+   `research/assets.py` más el universo de MEXC.
+   - Si la noticia no nombra un activo, BTC de referencia **solo** si es un hecho de mercado (macro, regulatorio,
+     ETF, tesorería, quiebra). El hecho de una empresa o de algo fuera del universo queda sin activo: nada que
+     operar ni consultar.
+   - Los resultados de empresas nunca son de una cripto ("LTC reports Q3 earnings" es LTC Properties).
+   - Un ticker sin letras (la moneda "4") no se detecta en el texto: era "$4.2B".
 4. **Universo** (`marketdata/universe.py`). Todo MEXC futuros operable por API con volumen de 24 h ≥ 0,1 M USDT
    (~350 activos). Los líquidos (≥ 1 M) se reconocen por nombre o ticker; los chicos, solo por su ticker escrito
    ("(FOO)", "$FOO"). Caché de 6 h.
@@ -118,7 +124,9 @@ del dueño.
     - Publica la rama pública `pc`: cada 2 min si hay algo armado o posiciones, si no cada 15. Publica
       práctica, simulacro, salud, errores, `tests.txt` y `red.json`, **nunca la cuenta real** (G-8).
 14. **Aprendizaje** (`research/learn.py`, `collector.py`). Cada 15 min etiqueta noticias con su reacción. Solo
-    reduce riesgo: apaga "categoría:lado" con evidencia en contra y ajusta el meta-modelo.
+    reduce riesgo: apaga "categoría:lado" con evidencia en contra y ajusta el meta-modelo. **Solo cuenta lo que
+    se habría operado** (`learn.entry_alpha`): relevancia C ≥ 7 y |α| ≥ 0,10 al entrar, los mismos umbrales de
+    la decisión. Si cambia la versión del clasificador, recalcula todo en la primera pasada (al arrancar).
 
 ## 5. Comandos (en la PC)
 
@@ -155,6 +163,8 @@ Qué mirar, en orden:
    - "sin_saldo_leido";
    - "supera_el_saldo_disponible".
 4. **Por qué no entra:** los `motivos` de las decisiones. Todo frenado por un mismo motivo raro puede ser un bug.
+   Ejemplo real (3-nov): `meta_p_baja:0.33` en todo era el aprendizaje con κ = 0
+   (`datos\aprendizaje\estado.json`, `meta.global.kappa`).
 5. **MEXC:** si hay dudas, compará las posiciones del programa con las de MEXC (`mexc-check` o la web de MEXC).
 
 **Emergencias, de menos a más:**
@@ -210,14 +220,23 @@ dueño qué hiciste y por qué.
 - **Comisiones:** futuros 0 a 0,02 % por lado contra 0,05 % de spot. A 1x, el futuro es lo mismo que comprar y
   permite cortos. Spot no se usa: solo 6 monedas líquidas no tienen futuro.
 - **MEXC guarda velas** de 1 min ~30 días, de 5 min ~6 meses y de 60 min más de 1 año.
+- **El aprendizaje con muestras ajenas frena todo** (3-nov, datos de la PC): de 47 muestras del meta-modelo, 37
+  eran BTC "de referencia" de noticias que no lo nombran y 46 tenían |α| < 0,10 (nunca se iban a operar). Con la
+  expiración de 60 min casi nunca tocan el take-profit: 0 de 47, κ = 0, p = 1/3 en todo. Recalculado con el
+  código nuevo sobre los mismos datos: 1 muestra válida, κ = 1 (por defecto) y un listado fresco con α = 0,40 da
+  p = 0,74 (con el aprendizaje roto daba 0,33). 53 de 421 noticias guardadas cambian de activo (46 eran BTC).
+- **El operador real recibe la misma lectura de la IA que la práctica**: las 45 decisiones del simulacro del
+  3-nov coinciden una por una con las de la práctica (la caché de la IA comparte la consulta).
 
 ## 10. Pendiente (en orden)
 
-1. **4-nov, dinero real.** Acompañar el armado del dueño: `mexc-real-check` tiene que dar todo OK, con el modo de
-   posición en Cobertura (Hedge). Después vigilar las primeras operaciones reales: llenado, deslizamiento, stop de
-   emergencia en MEXC, conciliación y avisos.
-2. **Upbit** (PR #22). Confirmar en `logs\agent.log` que la fuente `upbit.avisos` lee bien con el almacén de
-   Windows, y que un listado en wones ("신규 거래지원") se reconoce y opera.
+1. **4-nov, dinero real.** Acompañar el armado del dueño: primero pasa los 100 USDT a Futuros (el 3-nov el saldo
+   de futuros era 0; el modo Cobertura ya está). `mexc-real-check` tiene que dar todo OK. Después vigilar las
+   primeras operaciones reales: llenado, deslizamiento, stop de emergencia en MEXC (la prueba no manda
+   `stopLossPrice`: confirmarlo en la primera entrada real, en la web de MEXC o leyendo la orden), conciliación y
+   avisos. Antes de armar, confirmar que el aprendizaje recalculado dejó `meta` sin κ = 0.
+2. **Upbit** (PR #22). La fuente `upbit.avisos` lee bien con el almacén de Windows (3-nov: 20 avisos de historia,
+   sin fallas). Falta ver que un listado en wones ("신규 거래지원") se reconozca y opere.
 3. **Bybit:** desde la PC sus avisos andan (`red.json`). Estudiar si sus listados mueven el precio antes de
    sumarlos (como OKX, quizá no). El estudio tiene que correr en la PC: desde la nube Bybit está bloqueado.
 4. **Proteger la ganancia del stop móvil en el exchange** (si se apaga la PC, hoy el stop de emergencia queda en
@@ -228,6 +247,12 @@ dueño qué hiciste y por qué.
    claude.ai → Rutinas.
 7. **Más evidencia:** que el aprendizaje junte operaciones reales y de práctica (F-3: 60 operaciones con DSR ≥
    0,95 da una medida seria). Revisar el meta-modelo con ellas.
+8. **El aprendizaje mide la lectura de las reglas, no la de la IA**, que es la que decide cada entrada (las reglas
+   leen mal: "Mercado Bitcoin", "Roundup settlement" de Bayer como regulatorio cripto). Guardar con cada noticia
+   la lectura de la IA cuando la hubo y aprender con esa.
+9. **La etiqueta del meta-modelo** (triple barrera del etiquetador) expira a los 60 min, y el prior supone un
+   paseo sin vencimiento (1/3 con α = 0). Con entradas reales, revisar si hay que calibrar el prior con la
+   expiración. Hoy no frena: solo cuentan las apuestas que se habrían hecho.
 
 ## 11. Detalles que muerden (Windows y MEXC)
 
