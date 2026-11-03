@@ -17,8 +17,11 @@ RUMOR = "Solana exchange reportedly hacked, funds may be at risk"
 def test_solo_se_consulta_lo_que_la_capa_rapida_no_resuelve():
     assert not llm.needs_llm(classify("Binance hacked: $40M in BTC stolen"), "Binance hacked: $40M in BTC stolen")
     assert llm.needs_llm(classify(RUMOR), RUMOR)                                    # rumor
-    assert llm.needs_llm(classify("Something strange is going on with Solana"), "Something strange is going on with Solana")
-    assert not llm.needs_llm(classify("Weekly podcast"), "Weekly podcast")          # sin activo: no vale la pena
+    fact = "Solana validators approve new fee model"                                # hecho que las reglas no conocen
+    assert llm.needs_llm(classify(fact), fact)
+    for t in ("Something strange is going on with Solana", "Will Bitcoin hit $200k this year?",
+              "Bitcoin price analysis: what to expect", "Weekly podcast"):           # vago, pregunta, opinión
+        assert not llm.needs_llm(classify(t), t), t                                 # o sin activo: no se paga
     assert llm.api_key({"CLAUDE_API_KEY": "k"}) == "k" and llm.api_key({}) is None
 
 
@@ -80,13 +83,14 @@ async def test_presupuesto_diario_y_sin_clave():
     fake = FakeClaude()
     clock = ManualClock(T0)
     async with serve(fake.app()) as url:
-        c = llm.LlmClassifier(KEY, base_url=url, limit_usd=0.0005, clock=clock)
+        c = llm.LlmClassifier(KEY, base_url=url, limit_usd=0.0001, clock=clock)
         try:
             fb = classify(RUMOR)
             assert (await c.classify(RUMOR, "", fb)).error == "presupuesto_agotado"      # el peor caso no entra
             c.limit_usd = 0.01
             assert (await c.classify(RUMOR, "", fb)).signal is not None
             c.budget.usd = 0.0099
+            c._cache.clear()                                                            # (sin caché: otro titular)
             assert (await c.classify(RUMOR, "", fb)).error == "presupuesto_agotado"
             clock.advance(86400)                                                        # día nuevo: se renueva
             assert (await c.classify(RUMOR, "", fb)).signal is not None
@@ -158,3 +162,17 @@ async def test_chequeo_diario_de_la_clave_y_aviso_una_sola_vez(tmp_path):
     assert s1["llm"]["verificacion"] == "http_401" and s2["llm"]["verificacion"] == "http_401"
     assert sum("Claude" in m["text"] for m in tg.messages) == 1                     # un solo aviso
     assert s3["llm"]["verificacion"] == "ok" and "llm" not in s4                     # una vez por día
+
+
+async def test_el_mismo_titular_no_se_paga_dos_veces():
+    fake = FakeClaude()
+    async with serve(fake.app()) as url:
+        c = llm.LlmClassifier(KEY, base_url=url, clock=ManualClock(T0))
+        try:
+            first = await c.classify(RUMOR, "", classify(RUMOR))
+            again = await c.classify("  solana EXCHANGE reportedly hacked, funds may be at risk ", "", classify(RUMOR))
+        finally:
+            await c.close()
+    assert first.usd > 0 and again.usd == 0 and again.signal == first.signal         # misma respuesta, gratis
+    assert len(fake.requests) == 1 and c.cache_hits == 1 and c.budget.calls == 1
+    assert fake.requests[0]["max_tokens"] == llm.MAX_TOKENS <= 300                   # respuesta corta, tope bajo

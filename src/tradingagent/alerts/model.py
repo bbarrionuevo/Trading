@@ -1,15 +1,21 @@
 """Alertas: prioridad, tipo y texto listo para Telegram (HTML con todo lo variable escapado).
 
+Los textos son para el dueño, no para un programador: castellano simple, sin siglas (nada de SL, TP, PnL,
+bps ni "circuit breaker"), números a la argentina (98.500,5) y siempre qué pasó, cuánto se ganó o se
+puede perder y por qué. Si algo necesita una acción del dueño, el mensaje lo dice; si no, lo aclara.
+
 Prioridades (la cola del despachador saca siempre la más urgente primero):
-  RISK (0): stop-loss, take-profit, circuit breaker y fallas de protección: nunca se descartan.
-  TRADE (1): cada orden ejecutada. SYSTEM (2): inicio, fallas de fuentes. INFO (3): latidos y resúmenes.
+  RISK (0): cierres por límite u objetivo y frenos de seguridad: nunca se descartan.
+  TRADE (1): cada operación. SYSTEM (2): inicio, fallas de fuentes. INFO (3): latidos y resúmenes.
 """
 import html
+import re
 from dataclasses import dataclass, field
 from decimal import Decimal as D
 from enum import IntEnum
 
 MAX_TELEGRAM_CHARS = 4096
+AR_OFFSET_H = -3                      # hora argentina = UTC - 3 (sin horario de verano)
 
 
 class Priority(IntEnum):
@@ -55,42 +61,197 @@ def clip(text: str, limit: int = MAX_TELEGRAM_CHARS) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
+# -- castellano simple -------------------------------------------------------------------------------------
+def num_es(x, dp: int | None = None) -> str:
+    """Número a la argentina: miles con punto y decimales con coma (98.500,5 · 0,0002)."""
+    if x is None:
+        return "—"
+    s = fmt_num(x) if dp is None else f"{D(str(x)):,.{dp}f}"
+    return s.replace(",", "\0").replace(".", ",").replace("\0", ".")
+
+
+def usdt_es(x, signed: bool = True) -> str:
+    """Plata con dos decimales: +0,45 USDT · -1,20 USDT."""
+    d = D(str(x or 0)).quantize(D("0.01"))
+    return f"{'+' if signed and d > 0 else ''}{num_es(d, 2)} USDT"
+
+
+def pct_es(x, signed: bool = True) -> str:
+    d = D(str(x or 0)).quantize(D("0.1"))
+    return f"{'+' if signed and d > 0 else ''}{num_es(d, 1)} %"
+
+
+def asset_es(symbol) -> str:
+    """BTC_USDT o BTCUSDT → BTC."""
+    s = str(symbol)
+    for suffix in ("_USDT", "USDT"):
+        if s.endswith(suffix) and len(s) > len(suffix):
+            return s[: -len(suffix)]
+    return s
+
+
+def mode_es(mode: str) -> str:
+    """Etiqueta del mercado: siempre deja claro si es práctica o plata de verdad."""
+    m = str(mode or "PAPER")
+    if m.upper().startswith("PAPER"):
+        where = m[5:].strip()
+        return f"práctica{' en ' + where if where else ''} (sin plata real)"
+    return "💵 DINERO REAL"
+
+
+def minutes_es(m) -> str:
+    m = int(m or 0)
+    if m < 60:
+        return f"{m} min"
+    return f"{m // 60} h" + (f" {m % 60} min" if m % 60 else "")
+
+
+def ops_es(n: int) -> str:
+    return f"{n} operación" if n == 1 else f"{n} operaciones"
+
+
+def utc_hhmm_to_ar(hhmm: str) -> str:
+    h, m = (int(x) for x in hhmm.split(":"))
+    return f"{(h + AR_OFFSET_H) % 24:02d}:{m:02d}"
+
+
+CATEGORY_ES = {
+    "hack": "un hackeo o robo", "deslistado": "que un exchange lo saca de la lista",
+    "quiebra": "una quiebra o retiros frenados", "regulatorio": "una noticia de reguladores o juicios",
+    "etf": "una noticia de ETF (fondos que cotizan en bolsa)", "macro": "una noticia de la Reserva Federal o de tasas",
+    "desbloqueo": "un desbloqueo de tokens (más oferta)", "caida_red": "una caída de la red",
+    "listado": "un listado nuevo en un exchange", "tesoreria": "una compra de cripto por una empresa o un país",
+    "adopcion": "una alianza o un uso nuevo", "quema": "una quema o recompra de tokens",
+    "mejora_red": "una mejora de la red", "precio": "un movimiento de precio", "otro": "una noticia",
+}
+SOURCE_ES = {"fed.press": "la Reserva Federal", "fed.monetary": "la Reserva Federal (tasas de interés)",
+             "sec.press": "la SEC (el regulador de EE. UU.)", "sec.edgar.8k": "la SEC (informe de una empresa)"}
+
+
+def category_es(category: str) -> str:
+    return CATEGORY_ES.get(str(category), "una noticia")
+
+
+def side_es(side: str) -> str:
+    """El lado de una apuesta, en palabras: "largo" → cuando apuesto a que sube."""
+    return "cuando apuesto a que sube" if str(side) == "largo" else "cuando apuesto a que baja"
+
+
+def _why_line(why: str, category: str = "", title: str = "", source: str = "") -> str:
+    if title or category:
+        what = category_es(category) if category else "una noticia"
+        quote = f" — «{esc(title[:200])}»" if title else ""
+        return f"📰 Por qué: {esc(what)}{quote}" + (f" ({esc(source)})" if source else "")
+    return f"📰 Por qué: {esc(why[:220])}" + (f" ({esc(source)})" if source else "") if why else ""
+
+
+# -- operaciones --------------------------------------------------------------------------------------------
 def trade_alert(symbol, side, qty, price, *, why: str = "", impact=None, confidence=None, source=None,
                 role: str = "entry", pnl=None, mode: str = "PAPER") -> Alert:
+    """Aviso genérico de una orden ejecutada (lo usa el servicio de ejecución del venue de prueba)."""
     side = str(side)
+    asset = asset_es(symbol)
     notional = D(str(qty)) * D(str(price)) if qty is not None and price is not None else None
     if role == "entry":
-        head = "🟢 <b>LONG</b>" if side == "buy" else "🔴 <b>SHORT</b>"
+        head = f"🟢 <b>Compré {esc(asset)}</b>" if side == "buy" else f"🔴 <b>Vendí en corto {esc(asset)}</b>"
     else:
-        head = "⚪ <b>CIERRE</b>"
-    line1 = (f"{head} <b>{esc(symbol)}</b> · {esc(fmt_num(qty))} (≈ {esc(fmt_num(round(notional, 2)) if notional else '—')} "
-             f"USDT) @ {esc(fmt_num(price))} · {esc(mode)}")
-    parts = []
-    if impact is not None:
-        parts.append(f"impacto {float(impact):+.2f}")
-    if confidence is not None:
-        parts.append(f"conf. {float(confidence):.2f}")
-    detail = " · ".join(parts)
-    reason = esc(why[:220]) if why else "sin resumen del análisis"
-    src = f" ({esc(source)})" if source else ""
-    line2 = f"🧠 {detail + ' — ' if detail else ''}{reason}{src}"
-    lines = [line1, line2]
+        head = f"⚪ <b>Cerré {esc(asset)}</b>"
+    lines = [f"{head} · {esc(mode_es(mode))}",
+             f"{esc(num_es(qty))} a {esc(num_es(price))}" + (f" (≈ {esc(usdt_es(notional, False))})" if notional else "")]
+    if why:
+        lines.append(_why_line(why, source=source or ""))
     if role != "entry" and pnl is not None:
-        lines.append(f"PnL {esc(fmt_money(pnl))} USDT")
+        lines.append(f"Resultado: {esc(usdt_es(pnl))}")
     return Alert(Priority.TRADE, "trade" if role == "entry" else "exit", clip("\n".join(lines)),
                  meta={"symbol": symbol, "side": side})
 
 
 def risk_alert(kind: str, symbol, side, qty, price, pnl=None, *, mode: str = "PAPER") -> Alert:
-    head = {"stop_loss": "🛑 <b>STOP-LOSS</b>", "take_profit": "🎯 <b>TAKE-PROFIT</b>"}.get(kind, f"⚠️ <b>{esc(kind)}</b>")
-    verb = "vendió" if str(side) == "sell" else "compró"
-    text = (f"{head} <b>{esc(symbol)}</b> · {verb} {esc(fmt_num(qty))} @ {esc(fmt_num(price))} · {esc(mode)}"
-            + (f"\nPnL {esc(fmt_money(pnl))} USDT" if pnl is not None else ""))
+    asset = esc(asset_es(symbol))
+    head = {"stop_loss": f"🔻 <b>Corté la pérdida en {asset}</b>",
+            "take_profit": f"✅ <b>Cobré la ganancia en {asset}</b>"}.get(kind, f"⚠️ <b>Cerré {asset}</b>")
+    text = (f"{head} · {esc(mode_es(mode))}\n{esc(num_es(qty))} a {esc(num_es(price))}"
+            + (f"\nResultado: {esc(usdt_es(pnl))}" if pnl is not None else ""))
     return Alert(Priority.RISK, kind, clip(text), meta={"symbol": symbol})
 
 
+def entry_alert(symbol, side: int, qty, price, notional, *, stop, tp, p: float, alpha: float = 0.0, why: str = "",
+                source: str = "", order_id: str = "", mode: str = "PAPER", expiry_min: int | None = None,
+                category: str = "", title: str = "") -> Alert:
+    """Aviso de entrada: qué hizo, con cuánto, cuándo sale (pierde poco o gana más) y por qué."""
+    asset = esc(asset_es(symbol))
+    price_d, notional_d = D(str(price)), D(str(notional))
+    loss = notional_d * abs(price_d - D(str(stop))) / price_d if price_d else D(0)
+    gain = notional_d * abs(D(str(tp)) - price_d) / price_d if price_d else D(0)
+    if side > 0:
+        head, bet = f"🟢 <b>Compré {asset}</b>", "Gano si sube."
+        exits = (f"Si baja a {esc(num_es(stop))} vendo y pierdo ≈ {esc(usdt_es(loss, False))}; si sube a "
+                 f"{esc(num_es(tp))} vendo y gano ≈ {esc(usdt_es(gain, False))}.")
+    else:
+        head, bet = f"🔴 <b>Vendí en corto {asset}</b>", "Gano si baja."
+        exits = (f"Si sube a {esc(num_es(stop))} cierro y pierdo ≈ {esc(usdt_es(loss, False))}; si baja a "
+                 f"{esc(num_es(tp))} cierro y gano ≈ {esc(usdt_es(gain, False))}.")
+    lines = [f"{head} · {esc(mode_es(mode))}",
+             f"Puse {esc(usdt_es(notional_d, False))} con {asset} a {esc(num_es(price))} USDT. {bet}",
+             exits + (f" Como mucho lo tengo {esc(minutes_es(expiry_min))}." if expiry_min else ""),
+             f"Chance estimada de ganar: {round(float(p) * 100)} %."]
+    why_line = _why_line(why, category, title, source)
+    if why_line:
+        lines.append(why_line)
+    return Alert(Priority.TRADE, "trade", clip("\n".join(lines)), meta={"symbol": symbol, "side": side})
+
+
+EXIT_REASON_ES = {
+    "take_profit": "Llegó al precio objetivo{level} y cobré la ganancia.",
+    "stop_loss": "Llegó al límite de pérdida{level} y corté. Es parte del plan: las pérdidas se cortan chicas.",
+    "expiracion": "Pasó el tiempo máximo sin llegar al objetivo ni al límite.",
+    "noticia_en_contra": "Salió una noticia en contra y preferí salir.",
+    "freno": "Lo cerró el freno de seguridad (la cuenta perdió demasiado en el día).",
+    "liquidacion": "El precio saltó de golpe más allá del límite y la posición se liquidó.",
+}
+
+
+def exit_alert(symbol, side: int, reason: str, qty, price, *, pnl, ret, slippage_bps: float | None = None,
+               why: str = "", mode: str = "PAPER", level=None) -> Alert:
+    """Aviso de salida: cuánto se ganó o perdió (neto de comisiones) y por qué se cerró."""
+    asset = esc(asset_es(symbol))
+    pnl_d = D(str(pnl or 0))
+    pct = pct_es(D(str(ret or 0)) * 100)
+    if pnl_d > 0:
+        head = f"✅ <b>Gané {esc(usdt_es(pnl_d))} con {asset}</b> ({esc(pct)})"
+    elif pnl_d < 0:
+        head = f"🔻 <b>Perdí {esc(usdt_es(pnl_d))} con {asset}</b> ({esc(pct)})"
+    else:
+        head = f"⚪ <b>Cerré {asset} sin ganar ni perder</b>"
+    if reason == "liquidacion":
+        head = f"💥 <b>{asset} se liquidó: perdí {esc(usdt_es(pnl_d))}</b>"
+    lvl = f" ({esc(num_es(level))})" if level is not None else ""
+    explain = EXIT_REASON_ES.get(reason, "Cerré la posición.").format(level=lvl)
+    lines = [f"{head} · {esc(mode_es(mode))}", explain]
+    if why:
+        lines.append(f"📰 {esc(why[:200])}")
+    prio = Priority.RISK if reason in ("stop_loss", "take_profit", "liquidacion", "freno") else Priority.TRADE
+    return Alert(prio, reason, clip("\n".join(lines)), meta={"symbol": symbol})
+
+
+# -- frenos, sistema e inicio ----------------------------------------------------------------------------------
 def circuit_breaker_alert(detail: str, *, until: str = "") -> Alert:
-    text = f"🚨 <b>CIRCUIT BREAKER</b> · {esc(detail)}" + (f"\nEntradas bloqueadas hasta {esc(until)}" if until else "")
+    """Los frenos de seguridad (REGLAS A-4), explicados: qué pasó, qué hace el programa y si hace falta algo."""
+    d = str(detail)
+    if m := re.match(r"HALT: drawdown ([\d.]+)% ≥ ([\d.]+)%", d):
+        text = (f"⛔ <b>Frené todo</b>: la cuenta cayó {esc(num_es(m.group(1)))} % desde su punto más alto (el tope "
+                f"es {esc(num_es(m.group(2)))} %). No abro operaciones nuevas hasta que lo revisemos juntos.")
+    elif m := re.match(r"pérdida del día ([\d.]+)%", d):
+        text = (f"🛑 <b>Freno del día</b>: hoy la cuenta bajó {esc(num_es(m.group(1)))} %. No abro operaciones nuevas "
+                "hasta las 21:00 (hora argentina) y cerré lo que estaba abierto. No hace falta que hagas nada.")
+    elif m := re.match(r"pérdida de la semana ([\d.]+)%", d):
+        text = (f"🛑 <b>Freno de la semana</b>: esta semana la cuenta bajó {esc(num_es(m.group(1)))} %. No abro "
+                "operaciones nuevas hasta el domingo a las 21:00 (hora argentina). No hace falta que hagas nada.")
+    elif m := re.match(r"(\d+) pérdidas seguidas: enfriamiento hasta (\d\d:\d\d) UTC", d):
+        text = (f"⏸ <b>Pausa corta</b>: {m.group(1)} pérdidas seguidas. Vuelvo a operar a las "
+                f"{utc_hhmm_to_ar(m.group(2))} (hora argentina). No hace falta que hagas nada.")
+    else:
+        text = f"🛑 <b>Freno de seguridad</b>: {esc(d)}" + (f"\nNo abro operaciones nuevas hasta {esc(until)}." if until else "")
     return Alert(Priority.RISK, "circuit_breaker", clip(text), key="circuit_breaker")
 
 
@@ -99,36 +260,30 @@ def system_alert(text: str, *, silent: bool = True, key: str = "") -> Alert:
 
 
 def startup_alert(mode: str, sources_active: int, sources_total: int, version: str, extra: str = "") -> Alert:
-    text = (f"✅ <b>Agente iniciado</b> · modo {esc(mode)} · {sources_active}/{sources_total} fuentes activas · "
-            f"v{esc(version)}" + (f"\n{esc(extra)}" if extra else ""))
+    text = (f"✅ <b>TRADING está funcionando</b> · {esc(mode_es(mode))}\nLeo {sources_active} de {sources_total} "
+            "fuentes de noticias. Te aviso cada operación y te mando un resumen por día."
+            + (f"\n{esc(extra)}" if extra else ""))
     return Alert(Priority.SYSTEM, "startup", clip(text), key="startup")
 
 
-def entry_alert(symbol, side: int, qty, price, notional, *, stop, tp, p: float, alpha: float, why: str,
-                source: str = "", order_id: str = "", mode: str = "PAPER", expiry_min: int | None = None) -> Alert:
-    """Aviso de entrada (informe): orden, par, dirección, capital, precio efectivo, SL y TP, causa y p."""
-    head = "🟢 <b>LARGO</b>" if side > 0 else "🔴 <b>CORTO</b>"
-    exp = f" · expira en {expiry_min} min" if expiry_min else ""
-    text = (f"{head} <b>{esc(symbol)}</b> · {esc(fmt_num(round(D(str(notional)), 2)))} USDT "
-            f"({esc(fmt_num(qty))}) @ {esc(fmt_num(price))} · {esc(mode)}\n"
-            f"SL {esc(fmt_num(stop))} · TP {esc(fmt_num(tp))}{exp}\n"
-            f"🧠 p={p:.2f} · α={alpha:+.2f} — {esc(why[:220])}" + (f" ({esc(source)})" if source else "")
-            + (f"\norden {esc(order_id)}" if order_id else ""))
-    return Alert(Priority.TRADE, "trade", clip(text), meta={"symbol": symbol, "side": side})
-
-
-EXIT_HEADS = {"take_profit": "🎯 <b>TAKE-PROFIT</b>", "stop_loss": "🛑 <b>STOP-LOSS</b>",
-              "expiracion": "⌛ <b>EXPIRACIÓN</b>", "liquidacion": "💥 <b>LIQUIDACIÓN</b>",
-              "freno": "🚨 <b>CIERRE POR FRENO</b>"}
-
-
-def exit_alert(symbol, side: int, reason: str, qty, price, *, pnl, ret, slippage_bps: float | None = None,
-               why: str = "", mode: str = "PAPER") -> Alert:
-    """Aviso de salida (informe): motivo, retorno neto realizado y deslizamiento contra el precio teórico."""
-    head = EXIT_HEADS.get(reason, "⚪ <b>CIERRE</b>")
-    slip = f" · deslizamiento {slippage_bps:+.1f} bps" if slippage_bps is not None else ""
-    text = (f"{head} <b>{esc(symbol)}</b> {'largo' if side > 0 else 'corto'} · {esc(fmt_num(qty))} @ "
-            f"{esc(fmt_num(price))} · {esc(mode)}\nPnL {esc(fmt_money(pnl))} USDT ({float(ret) * 100:+.2f} % neto){slip}"
-            + (f"\n{esc(why[:200])}" if why else ""))
-    prio = Priority.RISK if reason in ("stop_loss", "take_profit", "liquidacion", "freno") else Priority.TRADE
-    return Alert(prio, reason, clip(text), meta={"symbol": symbol})
+def daily_alert(day: str, *, mode: str, closed: int, won: int, pnl, equity, initial, total_closed: int,
+                needed: int = 60, llm: dict | None = None) -> Alert:
+    """Resumen diario de la cuenta de la PC, en una mirada."""
+    dd, mm = day[8:10], day[5:7]
+    if closed:
+        result = (f"{ops_es(closed)} cerrada{'s' if closed != 1 else ''} "
+                  f"({won} ganada{'s' if won != 1 else ''}): {usdt_es(pnl)}.")
+    else:
+        result = "No hubo operaciones (ninguna noticia pasó todos los filtros)."
+    lines = [f"📊 <b>Resumen del {dd}/{mm}</b> · {esc(mode_es(mode))}", esc(result),
+             f"Cuenta: {esc(usdt_es(equity, False))} (empezó con {esc(usdt_es(initial, False))})."]
+    if total_closed < needed:
+        lines.append(f"Para pasar a dinero real hacen falta {needed} operaciones cerradas con buen resultado: van "
+                     f"{total_closed}.")
+    if llm:
+        calls, usd, fails = llm.get("calls", 0), llm.get("usd", 0.0), llm.get("failures", 0)
+        line = f"IA: {calls} consulta{'s' if calls != 1 else ''} ({esc(num_es(round(usd, 4)))} USD)."
+        if fails and not calls:
+            line += " ⚠️ No respondió: revisá la clave de Claude."
+        lines.append(line)
+    return Alert(Priority.INFO, "info", clip("\n".join(lines)), key=f"resumen:{day}", silent=True)

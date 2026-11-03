@@ -31,7 +31,7 @@ from pathlib import Path
 import aiohttp
 
 from .. import paths
-from ..alerts.model import circuit_breaker_alert, entry_alert, esc, exit_alert, system_alert
+from ..alerts.model import asset_es, circuit_breaker_alert, entry_alert, esc, exit_alert, ops_es, system_alert, usdt_es
 from ..core.bus import EventBus
 from ..decision import barriers as bar
 from ..decision.policy import SIDE_NAME, PolicyConfig, assess, liquidation_ok, market_blocks, news_blocks, plan
@@ -278,7 +278,8 @@ class _Run:
             stats["pnl_neto"] = str(D(stats["pnl_neto"]) + net)
             self.risk.on_close(float(net), self.now, self.limits)
         await self._alert(exit_alert(sym, side, reason, done, avg, pnl=round(net, 4), ret=ret,
-                                     slippage_bps=slip, why=why, mode=self.market.label))
+                                     slippage_bps=slip, why=why, mode=self.market.label,
+                                     level=theoretical if reason in ("stop_loss", "take_profit") else None))
 
     async def exchange_exits(self) -> None:
         """Lo que el exchange habría ejecutado entre corridas: stop, take-profit y expiración, vela por vela.
@@ -420,7 +421,7 @@ class _Run:
                             "strategy_tag": STRATEGY_TAG, "mercado": self.market.name, "modo": "paper"})
         self.record(ev, sig, sym, "entrar", analisis=analysis)
         await self._alert(entry_alert(sym, p.side, order.filled_qty, avg, notional, stop=stop, tp=tp, p=p.p,
-                                      alpha=p.alpha, why=f"{sig.category}: {ev['title'][:160]}", source=ev["source"],
+                                      alpha=p.alpha, category=sig.category, title=ev["title"], source=ev["source"],
                                       order_id=order.order_id, mode=self.market.label,
                                       expiry_min=p.horizon_s // 60))
 
@@ -432,23 +433,33 @@ def _save(base: Path, now: float, st: dict, trades: list[dict], decisions: list[
     paths.write_json_atomic(base / STATE, st)
 
 
-def paper_line(data_dir, day: str, market_name: str = BinanceSpot.name) -> str:
-    """Línea del resumen diario: operaciones cerradas ese día (UTC), su PnL neto, el DSR y cómo quedó la cuenta."""
-    base = Path(data_dir) / DIR / market_name
-    st = paths.read_json(base / STATE, None)
+MARKET_ES = {"binance-spot": "Binance", "mexc-futuros": "futuros MEXC"}
+
+
+def day_stats(base: Path, day: str) -> dict:
+    """Operaciones cerradas ese día (UTC) en una cuenta: cuántas, cuántas ganadas y el resultado neto."""
+    st = paths.read_json(Path(base) / STATE, None)
     if not st:
+        return {}
+    closed = [r for r in _all_trades(Path(base))
+              if r.get("tipo") == "salida" and time.strftime("%Y-%m-%d", time.gmtime(r["ts"])) == day]
+    return {"st": st, "closed": len(closed), "won": sum(D(r["pnl_neto"]) > 0 for r in closed),
+            "pnl": sum((D(r["pnl_neto"]) for r in closed), D(0))}
+
+
+def paper_line(data_dir, day: str, market_name: str = BinanceSpot.name) -> str:
+    """Línea del resumen diario de la práctica de respaldo (GitHub), en castellano simple."""
+    s = day_stats(Path(data_dir) / DIR / market_name, day)
+    if not s:
         return ""
-    trades = _all_trades(base)
-    closed = [r for r in trades if r.get("tipo") == "salida" and time.strftime("%Y-%m-%d", time.gmtime(r["ts"])) == day]
-    won = sum(D(r["pnl_neto"]) > 0 for r in closed)
-    pnl = sum((D(r["pnl_neto"]) for r in closed), D(0))
-    ev = evaluation.by_version(trades).get(STRATEGY_TAG)
-    dsr = f" · DSR {ev['dsr']:.2f} (n={ev['n']})" if ev and ev["dsr"] is not None else ""
-    open_ = ", ".join(esc(s) for s in sorted(st["positions"])) or "ninguna"
-    halted = " · ⛔ HALT (rearme con --rearm)" if (st.get("risk") or {}).get("halted") else ""
-    return (f"🧪 Paper {esc(market_name)}: {len(closed)} cerradas ({won} ganadas) · PnL del día {pnl:+.2f} USDT · "
-            f"equity {D(st.get('equity', st['cash'])):.2f} de {D(st['initial']):.0f} USDT{dsr} · abiertas: {open_}"
-            f"{halted}")
+    st, n, won = s["st"], s["closed"], s["won"]
+    ops = (f"{ops_es(n)} ({won} ganada{'s' if won != 1 else ''}), {usdt_es(s['pnl'])}"
+           if n else "sin operaciones")
+    open_ = ", ".join(esc(asset_es(x)) for x in sorted(st["positions"]))
+    halted = " ⛔ Frenada por seguridad: hay que rearmarla." if (st.get("risk") or {}).get("halted") else ""
+    return (f"🧪 Práctica de respaldo en {MARKET_ES.get(market_name, esc(market_name))}: {ops}. Cuenta: "
+            f"{usdt_es(D(st.get('equity', st['cash'])), False)} (empezó con {usdt_es(D(st['initial']), False)})."
+            + (f" Abiertas: {open_}." if open_ else "") + halted)
 
 
 async def run_paper(data_dir, items: list[tuple[dict, object]], *, clock, session, limits: dict, telegram=None,
@@ -490,9 +501,8 @@ async def run_paper(data_dir, items: list[tuple[dict, object]], *, clock, sessio
     run = _Run(market, st, pf, registry, service, books, store, clock, limits, telegram, now, cfg, meta_model, session)
     if first:
         await run._alert(system_alert(
-            f"🧪 Operador paper activo · {market.name} · {capital:.0f} USDT simulados contra libros reales. Entra con "
-            "noticias frescas (vector de evento, alfa con vida media de 120 s, meta-modelo p ≥ 0,60, ¼-Kelly) y sale "
-            "por stop, take-profit, expiración o noticia en contra. Avisa cada operación y cada freno.", silent=False))
+            f"🧪 Empecé una cuenta de práctica en {MARKET_ES.get(market.name, market.name)} con {capital:.0f} USDT "
+            "simulados (precios reales, plata no). Te aviso cada operación y cada freno.", silent=False))
     if rearm:
         run.risk.rearm()
     await run.exchange_exits()
@@ -510,9 +520,9 @@ async def run_paper(data_dir, items: list[tuple[dict, object]], *, clock, sessio
         blocks.append(("dsr", f"estrategia_descartada:dsr={version['dsr']:.2f}<{evaluation.DISCARD}"))
         if st.get("aviso_descarte") != STRATEGY_TAG:
             st["aviso_descarte"] = STRATEGY_TAG
-            await run._alert(system_alert(f"📉 La versión {STRATEGY_TAG} quedó descartada: DSR {version['dsr']:.2f} "
-                                          f"< {evaluation.DISCARD} con {version['n']} operaciones (REGLAS F-3). No "
-                                          "abre más posiciones hasta una versión nueva.", silent=False))
+            await run._alert(system_alert(f"📉 La estrategia actual viene dando mal resultado en la práctica "
+                                          f"({version['n']} operaciones): dejo de abrir operaciones con ella hasta "
+                                          "que haya una versión mejorada.", silent=False))
     if killed:
         blocks = [("killed", "interruptor_KILL"), *blocks]
     for asset in CORE:                                                  # historia del spread (z-score)

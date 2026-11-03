@@ -7,7 +7,7 @@
   python -m tradingagent telegram-chats      lista los chats que le escribieron al bot (para el CHAT_ID)
   python -m tradingagent telegram-chats --avisar   el bot le manda a cada chat que le escribió /id su número
   python -m tradingagent collect [--data DIR]       una pasada del recolector de datos de entrenamiento
-  python -m tradingagent collect --paper [--capital 120] [--rearm] [--mercados binance-spot,mexc-futuros]
+  python -m tradingagent collect --paper [--capital 120] [--rearm] [--mercados binance-spot,mexc-futuros] [--ia]
                                              ...y del operador paper (rearme tras un halt)
   python -m tradingagent mexc-check          prueba la API de futuros de MEXC (y las claves de lectura, si hay)
   python -m tradingagent llm-check           prueba la clave de Claude con una consulta mínima (centavos de centavo)
@@ -145,8 +145,8 @@ def cmd_telegram_test(args) -> int:
                 print(f"getMe FALLÓ: {me.error}")
                 return 1
             print(f"Bot {me.error} OK ({me.latency_ms:.0f} ms)")
-            r = await t.send(system_alert(f"🔔 Prueba de tradingagent v{__version__}: si ves esto, las alertas "
-                                          "llegan.", silent=False))
+            r = await t.send(system_alert("🔔 Prueba de TRADING: si ves este mensaje, los avisos te llegan bien.",
+                                          silent=False))
             print("Mensaje de prueba enviado." if r.ok else f"sendMessage FALLÓ: {r.error}")
             return 0 if r.ok else 1
         finally:
@@ -233,8 +233,8 @@ def cmd_collect(args) -> int:
                  "mexc_keys": mexc_keys if all(mexc_keys) else None}
     from . import limits as limits_mod
     from .intelligence.llm import LlmClassifier, api_key
-    key = api_key(os.environ)
-    if not key:
+    key = api_key(os.environ) if args.ia else None   # en GitHub, sin IA: cuesta plata y ahí el alfa ya pasó
+    if args.ia and not key:
         print("IA apagada: falta ANTHROPIC_API_KEY (decide solo el clasificador local).", file=sys.stderr)
 
     async def main():
@@ -394,6 +394,8 @@ def main(argv=None) -> int:
     c.add_argument("--capital", type=float, default=120.0, help="USDT simulados al crear la cuenta paper")
     c.add_argument("--rearm", action="store_true", help="rearme humano tras un halt por drawdown (REGLAS A-4)")
     c.add_argument("--mercados", default="binance-spot,mexc-futuros", help="cuentas paper, separadas por comas")
+    c.add_argument("--ia", action="store_true", help="consultar a Claude las noticias dudosas (cuesta plata; en "
+                   "GitHub está apagado porque la noticia llega tarde)")
     sub.add_parser("mexc-check")
     sub.add_parser("llm-check")
     s = sub.add_parser("sources")

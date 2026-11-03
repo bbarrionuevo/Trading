@@ -113,6 +113,14 @@ def rmtree(path: Path) -> None:
         shutil.rmtree(path, onerror=retry)
 
 
+def change_title(subject: str, body: str = "") -> str:
+    """Qué cambió, en una línea: el título del PR fusionado (sin "Merge pull request #N ...")."""
+    m = re.match(r"Merge pull request #\d+(?::| from \S+)\s*(.*)", subject)
+    if not m:
+        return subject
+    return m.group(1).strip() or next((x.strip() for x in body.splitlines() if x.strip()), "mejoras")
+
+
 def notify(text: str, env=None) -> bool:
     """Telegram directo (el supervisor no usa el despachador del agente). Nunca lanza ni muestra el token."""
     env = env if env is not None else os.environ
@@ -287,10 +295,10 @@ class Supervisor:
         self.event("caidas", codigo=code, vivo_s=round(alive), motivo=why)
         log.warning("el agente terminó (código %s, vivió %.0f s): lo relanzo", code, alive)
         if len(self.crashes) >= 3 and now - self.state.get("aviso_caidas", 0) > 3600:
-            detail = ("hay otro agente corriendo con la misma carpeta" if why else
-                      "revisá logs\\agente-salida.log y logs\\agent.log")
-            notify(f"⚠️ TRADING: el agente se cayó {len(self.crashes)} veces en 10 min (código {code}). Lo sigo "
-                   f"relanzando; {detail}.", self.env)
+            detail = ("Hay otro TRADING abierto a mano en tu PC: cerralo, el automático ya está andando." if why
+                      else "Si sigue pasando, lo reviso.")
+            notify(f"⚠️ TRADING se cayó {len(self.crashes)} veces en 10 minutos y lo volví a levantar solo. {detail}",
+                   self.env)
             self.state["aviso_caidas"] = round(now)
             self.save()
         return 0.0 if alive > STABLE_S else float(BACKOFF[min(len(self.crashes) - 1, len(BACKOFF) - 1)])
@@ -364,6 +372,7 @@ class Supervisor:
         try:
             changed = set(git("diff", "--name-only", head, remote, repo=self.repo).splitlines())
             subject = git("log", "-1", "--format=%s", remote, repo=self.repo)
+            body = git("log", "-1", "--format=%b", remote, repo=self.repo)
         except (RuntimeError, OSError, subprocess.TimeoutExpired) as e:
             return f"sin_git:{str(e)[:120]}"
         reload = bool(changed & self.loaded_files())
@@ -387,13 +396,14 @@ class Supervisor:
             self.state["rechazada"] = remote
             self.state.pop("pendiente", None)
             self.event("actualizaciones", de=head[:7], a=remote[:7], resultado="rechazada", error=err)
-            notify(f"⚠️ TRADING: la versión {remote[:7]} no arrancó en tu PC; sigo con {head[:7]}. {err[:300]}",
-                   self.env)
+            notify(f"⚠️ La versión nueva de TRADING ({remote[:7]}) no arrancó en tu PC: sigo con la anterior, que "
+                   "anda bien. No hace falta que hagas nada; quedó anotado para revisarlo.", self.env)
             return "rechazada"
         self.version = remote
         self.state.pop("pendiente", None)
         self.event("actualizaciones", de=head[:7], a=remote[:7], resultado="ok", titulo=subject[:120])
-        notify(f"✅ TRADING actualizado a {remote[:7]}: {subject[:150]}", self.env)
+        notify(f"🔄 Actualicé TRADING (versión {remote[:7]}): {change_title(subject, body)[:150]}. Sigue "
+               "funcionando solo.", self.env)
         return "recargar_supervisor" if reload else "actualizado"
 
     def run_tests(self) -> None:

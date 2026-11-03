@@ -38,7 +38,7 @@ import aiohttp
 
 from .. import __version__, paths
 from .. import limits as limits_mod
-from ..alerts.model import Alert, Priority, esc
+from ..alerts.model import SOURCE_ES, Alert, Priority, asset_es, esc, pct_es
 from ..core.bus import EventBus
 from ..core.clock import SystemClock
 from ..core.events import TIER_OFFICIAL, NewsItem
@@ -159,27 +159,26 @@ class _Telegram:
 
 
 def digest(day: str, events: list[dict], reactions: list[dict], health: dict, paper: str = "") -> str:
-    """Resumen de un día UTC: noticias por fuente, corroboradas y los mayores movimientos a 15 minutos."""
+    """Resumen de un día UTC en castellano simple: cuántas noticias, cuáles movieron el precio y la práctica."""
     evs = [e for e in events if _day(e["received_at"]) == day]
     orig = [e for e in evs if e.get("dedup") == "new" and not e.get("is_noise")]
-    by_src = Counter(e["source"] for e in orig)
     ids = {e["id"]: e for e in orig}
-    copies = Counter(e["cluster"] for e in evs if e.get("dedup") != "new")
-    labeled = {r["event_id"] for r in reactions if r.get("event_id") in ids and "error" not in r}
     moves = sorted((r for r in reactions if r.get("event_id") in ids and r.get("r_15m") is not None),
                    key=lambda r: -abs(r["r_15m"]))[:3]
-    lines = [f"📊 <b>Recolector · {esc(day)}</b> · {len(orig)} noticias · "
-             f"{sum(1 for e in orig if e['tier'] == TIER_OFFICIAL)} oficiales · {len(labeled)} etiquetadas · "
-             f"{len(copies)} corroboradas"]
-    if by_src:
-        lines.append(" · ".join(f"{esc(s)} {n}" for s, n in by_src.most_common(8)))
-    for r in moves:
-        lines.append(f"{esc(r['symbol'])} {r['r_15m'] * 100:+.2f}% en 15 min · {esc(ids[r['event_id']]['title'][:90])}")
+    official = sum(1 for e in orig if e["tier"] == TIER_OFFICIAL)
+    lines = [f"📊 <b>Resumen de noticias del {day[8:10]}/{day[5:7]}</b> (recolector en GitHub)"]
+    if orig:
+        lines.append(f"Llegaron {len(orig)} noticias nuevas ({official} oficiales).")
+    else:
+        lines.append("No llegaron noticias nuevas (o las fuentes no respondieron).")
+    if moves:
+        lines.append("Lo que más movió el precio:")
+        for r in moves:
+            lines.append(f"• {esc(asset_es(r['symbol']))} {esc(pct_es(r['r_15m'] * 100))} en 15 min — "
+                         f"«{esc(ids[r['event_id']]['title'][:90])}»")
     bad = sorted(s for s, h in health.items() if not h.get("ok"))
     if bad:
-        lines.append("Fuentes con error en la última corrida: " + ", ".join(esc(s) for s in bad))
-    if not orig:
-        lines.append("Sin noticias nuevas ese día (o las fuentes no respondieron: ver estado.json).")
+        lines.append("Fuentes con problemas: " + ", ".join(esc(s) for s in bad) + " (se reintenta solo).")
     if paper:
         lines.append(paper)
     return "\n".join(lines)
@@ -326,8 +325,9 @@ async def collect(data_dir, cfg: dict, env, *, clock=None, sources=None, telegra
                     state["llm_verificado"] = _day(now)
                     state.pop("alerta_llm", None)
                 elif check.error.startswith(("http_4", "sin_conexion")) and not state.get("alerta_llm"):
-                    if await tg.send(f"⚠️ <b>Claude</b> no responde ({esc(check.error)}): decide solo el "
-                                     "clasificador local. Revisá el secreto CLAUDE_API_KEY.", silent=False):
+                    if await tg.send(f"⚠️ <b>La IA (Claude) no responde</b> ({esc(check.error)}). El programa sigue "
+                                     "decidiendo solo, sin ella. Si sigue mañana, revisá la clave de Claude.",
+                                     silent=False):
                         state["alerta_llm"] = round(now)
             originals = [e for e in new_events if e["dedup"] == "new" and not e["is_noise"]]
             results = await llm_mod.refine(llm, [(e["title"], bodies[e["id"]][0], signals[e["id"]]) for e in originals])
@@ -375,26 +375,28 @@ async def collect(data_dir, cfg: dict, env, *, clock=None, sources=None, telegra
 
         # -- Telegram ---------------------------------------------------------------------------
         if telegram is not None and not state.get("aviso_inicio"):
-            if await tg.send(f"✅ <b>Recolector de TRADING activo</b> · v{esc(__version__)} · {len(specs)} fuentes · "
-                             "cada 15 min. Junta noticias y la reacción del precio para entrenar la etapa 2. "
-                             "Te aviso las noticias oficiales y te mando un resumen por día.", silent=False):
+            if await tg.send(f"✅ <b>El recolector de noticias está andando</b> (en GitHub, {len(specs)} fuentes). "
+                             "Junta noticias y cómo reaccionó el precio para que el programa aprenda. Te aviso las "
+                             "noticias oficiales importantes y te mando un resumen por día.", silent=False):
                 state["aviso_inicio"] = round(now)
         for e in official[:MAX_OFFICIAL_ALERTS]:
             age = f"{e['age_s'] / 60:.0f} min" if e["age_s"] is not None else "sin hora"
             measured = ", ".join(s.removesuffix("USDT") for s in e["symbols"])
-            await tg.send(f"🏛️ <b>{esc(e['source'])}</b> · {esc(e['title'][:200])}\npublicada hace {esc(age)} · "
-                          f"se mide {esc(measured)}\n{esc(e['url'])}", silent=e["source"] not in LOUD_SOURCES)
+            who = SOURCE_ES.get(e["source"], e["source"])
+            await tg.send(f"🏛️ <b>Noticia oficial de {esc(who)}</b>\n«{esc(e['title'][:200])}»\nSalió hace {esc(age)}. "
+                          f"Miro cómo reacciona el precio de {esc(measured)}.\n{esc(e['url'])}",
+                          silent=e["source"] not in LOUD_SOURCES)
         any_ok = any(h["ok"] for h in health.values())
         if health and not any_ok and not state.get("alerta_fuentes"):
-            if await tg.send("⚠️ <b>Recolector</b>: ninguna fuente respondió en esta corrida "
-                             f"({esc(', '.join(sorted(health)))}). Te aviso cuando vuelvan.", silent=False):
+            if await tg.send("⚠️ <b>No pude leer ninguna fuente de noticias</b> desde GitHub. Reintento solo y te "
+                             "aviso cuando vuelvan; no hace falta que hagas nada.", silent=False):
                 state["alerta_fuentes"] = round(now)
         elif any_ok and state.get("alerta_fuentes"):
-            if await tg.send("✅ <b>Recolector</b>: las fuentes volvieron a responder."):
+            if await tg.send("✅ Las fuentes de noticias volvieron a responder."):
                 state.pop("alerta_fuentes")
         if store.errors and not store.candles and ready and not state.get("alerta_velas"):
-            if await tg.send("⚠️ <b>Recolector</b>: no pude bajar velas de ninguna fuente (Binance ni Coinbase). "
-                             "Las noticias quedan pendientes y se reintentan hasta 48 h.", silent=False):
+            if await tg.send("⚠️ <b>No pude bajar los precios</b> (ni de Binance ni de Coinbase). Reintento solo "
+                             "durante 48 h; no hace falta que hagas nada.", silent=False):
                 state["alerta_velas"] = round(now)
         elif store.candles and state.get("alerta_velas"):
             state.pop("alerta_velas")
@@ -427,8 +429,8 @@ async def collect(data_dir, cfg: dict, env, *, clock=None, sources=None, telegra
             try:
                 learned, newly = await asyncio.to_thread(learn.update, data, now)
                 for key in newly:
-                    await tg.send(f"🧠 <b>Aprendizaje</b>: apago {esc(learn.describe(learned, key))}. Evidencia "
-                                  "negativa neta de comisiones: el paper deja de operar esa categoría de ese lado.")
+                    await tg.send(f"🧠 <b>Aprendí algo</b>: {esc(learn.describe_es(learned, key))} Dejo de operar "
+                                  "ese caso (solo puede reducir el riesgo, nunca aumentarlo).")
             except Exception as e:                                     # sin aprendizaje se opera con los valores por
                 log.exception("el aprendizaje falló")                  # defecto (que el dueño ya aprobó)
                 learned = {"apagadas": [], "error": f"{type(e).__name__}"}
@@ -436,7 +438,7 @@ async def collect(data_dir, cfg: dict, env, *, clock=None, sources=None, telegra
                 try:                                                   # un mercado que falla no frena a los otros
                     paper_out[market.name] = await shadow.run_paper(
                         data, items, clock=clock, session=session, limits=limits,
-                        telegram=tg if telegram is not None else None, capital=float(paper.get("capital", 120.0)),
+                        telegram=None, capital=float(paper.get("capital", 120.0)),   # respaldo: sin avisos sueltos
                         market=market, rearm=bool(paper.get("rearm")), disabled=tuple(learned["apagadas"]),
                         learned=learned)
                 except Exception as e:                                 # el paper nunca rompe la corrida

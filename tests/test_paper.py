@@ -263,4 +263,4 @@ async def test_servicio_kill_tope_por_minuto_bus_diario_y_alertas(clock, tmp_pat
     assert sub.queue.qsize() >= 4 and any(k == "order" for k, _ in j.records)
     kinds = [a.kind for a in alerts.sent]
     assert kinds == ["trade", "stop_loss"]
-    assert "LONG" in alerts.sent[0].text and "reestructuración" in alerts.sent[0].text and "+0.80" in alerts.sent[0].text
+    assert "Compré" in alerts.sent[0].text and "reestructuración" in alerts.sent[0].text

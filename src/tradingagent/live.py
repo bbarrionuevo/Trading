@@ -20,15 +20,18 @@ import time
 from pathlib import Path
 
 from . import paths
-from .alerts.model import circuit_breaker_alert, system_alert
+from .alerts.model import circuit_breaker_alert, daily_alert, system_alert
 from .core.bus import EventBus
 from .decision.policy import PolicyConfig, news_blocks
+from .decision.risk import RiskState
 from .execution.paper import PaperConfig, PaperVenue
 from .execution.service import ExecutionService
 from .intelligence import llm as llm_mod
+from .intelligence import vector as vec
 from .intelligence.classifier import classify
 from .intelligence.meta import MetaModel
 from .marketdata.providers import MarketDataError
+from .research import assets as asset_mod
 from .research import learn, shadow
 from .research.labeler import MIN, minute
 
@@ -78,9 +81,9 @@ class LiveTrader:
                                         journal=self.journal, limits=self.limits)
         if self.first:
             await self.send_alert(system_alert(
-                f"🧪 Operador paper EN VIVO · {self.market.name} · {self.capital:.0f} USDT simulados. Reacciona a "
-                "cada noticia en segundos (alfa con vida media de 120 s) y vigila stop, take-profit y expiración "
-                "cada segundo.", silent=False))
+                f"🧪 Empecé la cuenta de práctica en {shadow.MARKET_ES.get(self.market.name, self.market.name)} con "
+                f"{self.capital:.0f} USDT simulados (precios reales, plata no). Cuando llegue una noticia que valga "
+                "la pena, opero en segundos y te aviso.", silent=False))
 
     def learned(self) -> dict:
         return paths.read_json(self.learned_path, None) or {}
@@ -124,14 +127,42 @@ class LiveTrader:
                 "tier": it.tier, "cluster": ing.dedup.cluster_id, "cluster_sources": ing.dedup.distinct_sources,
                 "published_at": it.published_at, "received_at": it.received_at, "assets_hint": list(it.assets_hint)}
 
+    def worth_asking(self, ev: dict, sig) -> str:
+        """'' si vale la pena pagar una consulta a Claude; si no, por qué no. Solo se consulta cuando la
+        respuesta puede cambiar lo que se hace: la noticia está fresca, no hay un freno que impida entrar (o hay
+        una posición abierta de ese activo que quizá haya que cerrar) y queda lugar para operar."""
+        now = self.clock.time()
+        pre = [w for w in news_blocks(ev, sig, now, self.limits, set(self.st["clusters"]))
+               if not w.startswith("categoria_no_operable")]
+        if pre:
+            return pre[0].split(":")[0]
+        dt, _ = vec.age_s(ev, now)
+        if vec.stale(dt, self.cfg.half_life_s):
+            return "alfa_obsoleta"
+        assets = set(sig.assets) | set(asset_mod.detect(ev["title"]))
+        if any(self.market.symbol(a) in self.st["positions"] for a in assets):
+            return ""                                                  # una salida a tiempo vale la consulta
+        if self.kill_file.exists():
+            return "kill"
+        equity = float(self.st.get("equity") or self.st["cash"])
+        if RiskState.from_dict(self.st.get("risk")).blocks(now, equity, self.limits):
+            return "frenos"
+        if len(self.st["positions"]) >= int(self.limits["portfolio"]["max_positions"]):
+            return "cupo_lleno"
+        return ""
+
     async def on_news(self, ing) -> None:
         ev = self._event(ing)
         sig = classify(ev["title"], ev["body"], tier=ev["tier"], cluster_sources=ev["cluster_sources"],
                        hint_assets=tuple(ev["assets_hint"]))
         if self.llm is not None and self.llm.enabled and llm_mod.needs_llm(sig, ev["title"]):
-            res = await self.llm.classify(ev["title"], ev["body"], sig)
-            if res.signal is not None:
-                sig = res.signal                                       # la IA propone; el núcleo decide (C-3)
+            skip = self.worth_asking(ev, sig)
+            if skip:                                                   # no cambiaría nada: no se paga
+                self.counts["ia_evitada"] = self.counts.get("ia_evitada", 0) + 1
+            else:
+                res = await self.llm.classify(ev["title"], ev["body"], sig)
+                if res.signal is not None:
+                    sig = res.signal                                   # la IA propone; el núcleo decide (C-3)
         async with self.lock:
             run = self.run()
             now = run.now
@@ -222,7 +253,26 @@ class LiveTrader:
             for sym, meta in list(self.st["positions"].items()):
                 await self.market.settle(run, sym, meta, int(run.now * 1000))
             await self.after_exits(run)
+            await self.daily_summary(run)
             await self.save(run)
+
+    async def daily_summary(self, run: _LiveRun) -> None:
+        """Una vez por día, al pasar las 00:00 UTC (21:00 en Argentina): cómo le fue ayer a la cuenta."""
+        day = time.strftime("%Y-%m-%d", time.gmtime(run.now))
+        last = self.st.get("resumen_dia")
+        if last == day:
+            return
+        self.st["resumen_dia"] = day
+        if last is None:                                               # primera vez: cuenta desde hoy
+            return
+        s = await asyncio.to_thread(shadow.day_stats, self.base, last)
+        if not s:
+            return
+        llm = self.llm.budget.as_dict() if self.llm is not None and self.llm.budget.day == last else None
+        await self.send_alert(daily_alert(
+            last, mode=self.market.label, closed=s["closed"], won=s["won"], pnl=s["pnl"],
+            equity=self.st.get("equity") or self.st["cash"], initial=self.st["initial"],
+            total_closed=self.st["stats"]["operaciones"], llm=llm))
 
     async def watch(self, stop: asyncio.Event) -> None:
         last_house = 0.0
@@ -243,7 +293,8 @@ class LiveTrader:
         return {"mercado": self.market.name, "cash": self.st.get("cash"), "equity": self.st.get("equity"),
                 "abiertas": sorted(self.st.get("positions", {})), "operaciones": self.st["stats"]["operaciones"],
                 "pnl_neto": self.st["stats"]["pnl_neto"], "halt": bool((self.st.get("risk") or {}).get("halted")),
-                "llm": self.llm.budget.as_dict() if self.llm is not None else None, **self.counts}
+                "llm": ({**self.llm.budget.as_dict(), "tope_usd": self.llm.limit_usd} if self.llm is not None else None),
+                **self.counts}
 
 
 async def learn_loop(stop: asyncio.Event, cfg: dict, env, limits: dict, data_dir: Path,

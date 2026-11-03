@@ -158,6 +158,16 @@ def update(data_dir, now: float, *, every_s: float = EVERY_S, force: bool = Fals
     return res, newly
 
 
+def describe_es(res: dict, key: str) -> str:
+    """La categoría apagada, en una frase para el dueño (Telegram)."""
+    from ..alerts.model import category_es, side_es
+    cat, _, side = key.partition(":")
+    st = res["categorias"].get(key, {})
+    n = max((st[h]["n"] for h in st.get("apagada_por", []) if h in st), default=0)
+    return (f"las noticias de {category_es(cat)}, {side_es(side)}, vienen saliendo mal ({n} casos, contando "
+            "comisiones).")
+
+
 def describe(res: dict, key: str) -> str:
     """Texto corto con la evidencia de una categoría apagada (para Telegram)."""
     st = res["categorias"].get(key, {})

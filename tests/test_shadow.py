@@ -108,7 +108,8 @@ async def test_entrada_con_el_nucleo_y_take_profit_entre_corridas(tmp_path):
         decision = p.rows("decisiones")[0]
         assert decision["decision"] == "entrar" and decision["analisis"]["vector"]["C"] == 10
         last = p.texts()[-1]
-        assert "LARGO" in last and "SOLUSDT" in last and "SL 149.11" in last and "TP 151.83" in last and "p=0.67" in last
+        assert "Compré SOL" in last and "Si baja a 149,11" in last and "si sube a 151,83" in last
+        assert "Chance estimada de ganar: 67 %" in last and "un listado nuevo en un exchange" in last
 
         p.clock.set(t1 + 5 * 60)                                                    # siguiente corrida del cron
         s2 = await p.run()
@@ -120,7 +121,7 @@ async def test_entrada_con_el_nucleo_y_take_profit_entre_corridas(tmp_path):
         assert D(out["pnl_neto"]) == pytest.approx(gross - fees, abs=D("0.000001"))
         assert D(out["retorno_neto"]) == pytest.approx((gross - fees) / (D("0.077") * D("150.02")), abs=D("0.000001"))
         assert D(p.state()["cash"]) == pytest.approx(D("120") + gross - fees, abs=D("0.000001"))
-        assert "TAKE-PROFIT" in p.texts()[-1] and "% neto" in p.texts()[-1]
+        assert "Gané +" in p.texts()[-1] and "cobré la ganancia" in p.texts()[-1]
 
 
 async def test_stop_con_salto_noticia_en_contra_y_expiracion(tmp_path):
@@ -138,7 +139,7 @@ async def test_stop_con_salto_noticia_en_contra_y_expiracion(tmp_path):
         assert D(rows["SOLUSDT"]["price"]) == D("145.20")                        # 145,5 − 20 bps, al tick de abajo
         assert rows["SOLUSDT"]["deslizamiento_bps"] > 200                        # contra el stop teórico
         assert rows["ETHUSDT"]["motivo"] == "noticia_en_contra" and s2["noticia_en_contra"] == 1
-        assert s2["abiertas"] == [] and "STOP-LOSS" in "\n".join(p.texts())
+        assert s2["abiertas"] == [] and "límite de pérdida" in "\n".join(p.texts())
         short = [d for d in p.rows("decisiones") if d["event_id"] == "n1"][0]
         assert "corto_no_disponible" in short["motivos"]                         # spot: sin cortos
 
@@ -150,7 +151,7 @@ async def test_stop_con_salto_noticia_en_contra_y_expiracion(tmp_path):
         s4 = await p.run()
         out = p.rows("operaciones")[-1]
         assert s4["expiracion"] == 1 and s4["abiertas"] == [] and D(out["price"]) == D("99800.00")
-        assert "EXPIRACIÓN" in p.texts()[-2] and "3 pérdidas seguidas" in p.texts()[-1]   # y el enfriamiento
+        assert "tiempo máximo" in p.texts()[-2] and "3 pérdidas seguidas" in p.texts()[-1]   # y la pausa
         stats = p.state()["stats"]
         assert stats["operaciones"] == 3 and stats["perdidas"] == 3
         assert D(stats["pnl_neto"]) == sum(D(r["pnl_neto"]) for r in p.rows("operaciones") if r["tipo"] == "salida")
@@ -167,7 +168,7 @@ async def test_freno_diario_cierra_todo_y_no_abre_hasta_el_otro_dia(tmp_path):
         s2 = await p.run([ev("e3", "Kraken adds trading for Bitcoin (BTC) options", t1 + 5 * 60)])
         assert s2["stop_loss"] == 1 and s2["freno"] == 1 and s2["abiertas"] == []  # ETH sale por el freno
         assert s2.get("entradas", 0) == 0 and any("pérdida del día" in f for f in s2["frenos"])
-        assert any("CIERRE POR FRENO" in x for x in p.texts()) and any("CIRCUIT BREAKER" in x for x in p.texts())
+        assert any("freno de seguridad" in x for x in p.texts()) and any("Freno del día" in x for x in p.texts())
         p.clock.set(T0 + 86400 + 60)                                            # día nuevo
         s3 = await p.run([ev("e4", "Kraken adds trading for Bitcoin (BTC) options", T0 + 86400 + 60)])
         assert s3["entradas"] == 1
@@ -184,12 +185,12 @@ async def test_enfriamiento_y_kill(tmp_path):
         s2 = await p.run([ev("e2", "Coinbase will list Ethereum (ETH) futures", t1 + 5 * 60)])
         assert s2["stop_loss"] == 1 and s2.get("entradas", 0) == 0               # el stop dispara el enfriamiento
         assert any("enfriamiento" in f for f in s2["frenos"])
-        assert sum("CIRCUIT BREAKER" in x for x in p.texts()) == 1
+        assert sum("Pausa corta" in x for x in p.texts()) == 1
         why = p.rows("decisiones")[-1]
         assert why["decision"] == "no_entrar" and "enfriamiento" in why["motivos"][0]
         p.clock.set(t1 + 10 * 60)
         await p.run([ev("e3", "Kraken adds trading for Bitcoin (BTC) options", t1 + 10 * 60)])
-        assert sum("CIRCUIT BREAKER" in x for x in p.texts()) == 1               # un solo aviso por freno
+        assert sum("Pausa corta" in x for x in p.texts()) == 1                   # un solo aviso por freno
 
         p.clock.set(t1 + 80 * 60)                                               # pasó el enfriamiento
         (p.data / "KILL").write_text("")
@@ -284,7 +285,7 @@ async def test_recolector_clasifica_y_opera_en_paper_con_resumen_diario(tmp_path
 
         s1 = await run()                                                       # historia: no se opera
         assert s1["paper"]["binance-spot"]["equity"] == 120.0 and s1["paper"]["binance-spot"]["operaciones"] == 0
-        assert any("Operador paper activo" in m["text"] for m in tg.messages)
+        assert not any("práctica" in m["text"] for m in tg.messages)            # el respaldo no avisa suelto
 
         t2 = T0 + 10 * 60
         feeds.add("media", "sol", LISTING, t2 - 20, body="Trading opens today.")
@@ -298,14 +299,14 @@ async def test_recolector_clasifica_y_opera_en_paper_con_resumen_diario(tmp_path
         assert evs["sol"]["nlp"]["confidence"] > classify(LISTING).confidence    # corroborada en la misma corrida
         assert evs["sol2"]["nlp"]["category"] == "listado"                        # las copias también se clasifican
         assert s2["paper"]["binance-spot"]["entradas"] == 1 and s2["paper"]["binance-spot"]["abiertas"] == ["SOLUSDT"]
-        assert "LARGO" in tg.messages[-1]["text"]
+        assert not any("Compré" in m["text"] for m in tg.messages)              # sus operaciones tampoco
 
         clock.set(T0 + 13 * 3600)                                               # 3-nov 01:00: resumen de ayer
         s3 = await run()
         assert s3["paper"]["binance-spot"]["expiracion"] == 1                   # vencieron los 60 min
-        digest = next(m["text"] for m in tg.messages if "Recolector · 2026-11-02" in m["text"])
-        assert "🧪 Paper binance-spot:" in digest and "abiertas: SOLUSDT" in digest   # la cuenta al cierre de ayer
-        assert "equity" in digest and "de 120 USDT" in digest
+        digest = next(m["text"] for m in tg.messages if "Resumen de noticias del 02/11" in m["text"])
+        assert "Práctica de respaldo en Binance" in digest and "Abiertas: SOL." in digest   # la cuenta al cierre
+        assert "(empezó con 120,00 USDT)" in digest
 
 
 async def test_si_el_paper_falla_los_datos_del_recolector_quedan(tmp_path, monkeypatch):

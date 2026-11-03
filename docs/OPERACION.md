@@ -34,7 +34,7 @@ correrlo no rompe nada (sirve para cargar una clave nueva).
   si los tests de GitHub dieron verde, y espera a que no haya posiciones abiertas (como mucho 6 h). Para al
   agente con calma (posiciones y caja quedan guardadas), actualiza, prueba que arranque y lo vuelve a
   prender en segundos. Si la versión nueva no arranca, vuelve a la anterior y te avisa. Cada actualización
-  te llega por Telegram ("✅ TRADING actualizado a …").
+  te llega por Telegram ("🔄 Actualicé TRADING …").
 - **Se prueba en tu PC:** después de cada actualización corre todos los tests en segundo plano (prioridad
   baja, sin tus claves y en una carpeta aparte). El resultado se ve en el tablero.
 - **Claude ve cómo va (REGLAS G-8):** cada 15 minutos publica en la rama `pc` del repo el estado de la PC
@@ -104,17 +104,31 @@ propias, intervalos y apagados van en `%LOCALAPPDATA%\TRADING\config.yaml`; hay 
 
 Al arrancar:
 
-- Llega por Telegram "✅ Agente iniciado · modo PAPER · N/M fuentes activas", y la primera vez
-  "🧪 Operador paper EN VIVO · mexc-futuros · 120 USDT simulados".
+- Llega por Telegram "✅ TRADING está funcionando · práctica (sin plata real)", y la primera vez
+  "🧪 Empecé la cuenta de práctica en futuros MEXC con 120 USDT simulados".
 - Cada 15 s aparece en consola el latido (♥ …).
 - Cada noticia nueva que pasa los filtros aparece como 📰 y se evalúa en el momento.
 
 Ctrl+C cierra en orden.
 
+**Qué te llega por Telegram desde la PC** (siempre en castellano simple, sin siglas):
+
+- Cada operación: qué hizo ("Compré BTC" / "Vendí en corto ETH"), con cuánto, a qué precio sale si
+  pierde y cuánto perdería, a qué precio cobra y cuánto ganaría, cuánto tiempo como mucho y por qué.
+- Cada cierre: cuánto ganó o perdió (neto de comisiones) y por qué cerró.
+- Cada freno de seguridad: qué pasó, qué hace el programa y si tenés que hacer algo (casi nunca).
+- Un resumen por día a las 21:00 (hora argentina): operaciones, resultado, cómo está la cuenta, cuánto
+  falta para dinero real y el gasto de la IA.
+- Avisos del supervisor: cuando se actualiza o si se cayó y lo levantó.
+
 **Qué hace solo** (`live.py`, el mismo núcleo que usa GitHub Actions):
 
-1. Clasifica cada noticia en microsegundos. Si la noticia es dudosa y hay clave de Claude, le pregunta a
-   Claude Haiku 5.5 (máximo 8 s y 5 USD por día).
+1. Clasifica cada noticia en microsegundos, sin costo. A Claude Haiku 5.5 le pregunta **solo cuando la
+   respuesta puede cambiar lo que se hace**: la noticia es dudosa (rumor, desmentido) o describe un hecho
+   concreto que las reglas no reconocen, está fresca, no hay un freno que impida entrar y queda lugar para
+   operar (o hay una posición abierta de ese activo). Preguntas, opiniones y análisis no se consultan, y el
+   mismo titular no se paga dos veces. Tope: 0,30 USD por día (`trader.llm_usd_dia`); en la práctica son
+   centavos por mes. El tablero muestra cuántas consultas se hicieron y cuántas se evitaron.
 2. Calcula el vector de evento y el alfa, que vale la mitad cada 120 s, y el meta-modelo (p ≥ 0,60).
 3. Calcula la triple barrera por volatilidad y los costos, y el tamaño por ¼-Kelly.
 4. Revisa el libro real: spread y su z-score, profundidad, L3, divergencia y lambda de Kyle.
@@ -187,8 +201,8 @@ sigue midiendo. GitHub a veces demora el cron (el 2-nov tardó horas en dar la p
 programada). En cada corrida:
 
 1. Lee las fuentes y guarda las noticias nuevas de hasta 3 horas en la rama `data`. Las copias de otras
-   fuentes y lo que parece ruido también quedan, marcados. Cada noticia lleva su clasificación (`nlp`), y
-   las dudosas la opinión de Claude (`nlp_llm`).
+   fuentes y lo que parece ruido también quedan, marcados. Cada noticia lleva su clasificación (`nlp`).
+   Acá Claude no se consulta (la noticia llega minutos tarde y ya no cambiaría nada): solo con `--ia`.
 2. Una hora después de cada noticia, mide la reacción del precio con velas públicas de 1 minuto
    (Binance; si no responde, Coinbase) a 1, 5, 15 y 60 minutos desde la publicación, y la triple barrera
    desde la llegada. Con eso aprende: apaga lo que pierde y ajusta el meta-modelo (solo reduce riesgo).
@@ -196,12 +210,13 @@ programada). En cada corrida:
    y futuros de MEXC (largos y cortos a 1x). Todo queda en `paper/<mercado>/` de la rama `data`. Con el
    cron, la noticia llega minutos tarde: casi siempre el alfa ya se fue y no entra. Es lo esperable: la
    evidencia en serio sale de la PC.
-4. Por Telegram:
+4. Por Telegram, en castellano simple:
    - un aviso al activarse;
-   - las noticias de la Fed y la SEC;
-   - cada operación paper con su SL, TP y p, y cada salida con su motivo y su retorno neto;
-   - cada freno;
-   - un resumen por día con una línea por cuenta paper.
+   - las noticias oficiales de la Reserva Federal y la SEC;
+   - un resumen de noticias por día, con una línea por cuenta de práctica de respaldo.
+
+   Las operaciones de práctica de GitHub **no** se avisan una por una (son un respaldo y confundían con las
+   de la PC): las que te llegan son las de tu PC.
 
 Nunca hay órdenes reales (REGLAS G-6): el código no las tiene. Para frenar solo las entradas del paper,
 subí un archivo vacío `KILL` a la rama `data`.

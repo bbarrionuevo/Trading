@@ -24,7 +24,7 @@
 | `execution/` | Intenciones de orden, venue paper, cartera, servicio, harness, costos (raíz cuadrada y Almgren-Chriss) | `orders`, `instruments`, `paper`, `portfolio`, `service`, `harness`, `costs` |
 | `alerts/` | Telegram fail-safe | `model`, `telegram`, `dispatcher` |
 | `telemetry/` | Diario, latido, logs | `journal`, `heartbeat`, `logs` |
-| `intelligence/` | Señal de cada noticia: capa rápida determinista, capa lenta con Claude Haiku 5.5 (esquema, grounding, presupuesto), vector C/P/I/M/D con decaimiento del alfa, meta-modelo p = P(TP antes que SL) | `classifier`, `llm`, `vector`, `meta` |
+| `intelligence/` | Señal de cada noticia: capa rápida determinista, capa lenta con Claude Haiku 5.5 solo cuando su respuesta puede cambiar una decisión (esquema, grounding, caché, tope diario chico), vector C/P/I/M/D con decaimiento del alfa, meta-modelo p = P(TP antes que SL) | `classifier`, `llm`, `vector`, `meta` |
 | `decision/` | Núcleo de decisión determinista (la IA no decide, C-3) y frenos con estado | `policy` (noticia → evento → plan → libro), `barriers` (triple barrera), `risk` (A-4) |
 | `research/` | Recolector de datos de entrenamiento, operador paper por corridas, aprendizaje y evaluación | `assets`, `labeler` (reacciones y triple barrera), `collector`, `shadow` (paper por corridas, un adaptador por mercado), `futures` (MEXC), `learn` (solo reduce riesgo), `evaluation` (PSR/DSR) |
 | `live.py` | Operador paper en vivo para la PC 24/7: el mismo núcleo, reaccionando en segundos y vigilando barreras cada segundo | `LiveTrader`, `learn_loop` |
