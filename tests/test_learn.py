@@ -17,7 +17,7 @@ def make(n, title, mean, *, sd=0.004, seed=1, sym="SOLUSDT", nlp=True, start=0):
     for i in range(start, start + n):
         eid = f"{title[:6]}{i}"
         e = {"id": eid, "dedup": "new", "is_noise": False, "title": title, "snippet": "", "tier": 2,
-             "cluster_sources": 1}
+             "cluster_sources": 1, "published_at": T0 + i * 600 - 30, "received_at": T0 + i * 600}
         if nlp:
             e["nlp"] = {"category": "listado", "polarity": 0.6, "assets": [sym.removesuffix("USDT")],
                         "version": VERSION}
@@ -86,3 +86,21 @@ def test_update_cada_hora_y_avisa_lo_recien_apagado(tmp_path):
     assert learn.update(data, T0 + 7200)[1] == []                           # ya avisada
     saved = json.loads((data / "aprendizaje" / "estado.json").read_text(encoding="utf-8"))
     assert saved["apagadas"] == ["listado:largo"] and saved["calculado"] == T0 + 7200
+
+
+def test_meta_modelo_aprende_de_la_triple_barrera_y_solo_baja():
+    events, reactions = make(60, "Binance will list SOL", 0.0)
+    for e in events:
+        e["published_at"] = e["received_at"] - 5                             # noticia fresca: alfa alto
+    rng = random.Random(9)
+    for r in reactions:
+        if r["symbol"] == "SOLUSDT":
+            r["tb_largo"] = 1 if rng.random() < 0.2 else -1                  # en la realidad casi nunca tocó el TP
+    res = learn.evaluate(events, reactions)
+    fitted = res["meta"]["listado:largo"]
+    assert fitted["n"] == 60 and fitted["tasa_tp"] < 0.35 and fitted["kappa"] < 0.5
+    assert res["meta"]["global"]["n"] == 60
+    for r in reactions:
+        if r["symbol"] == "SOLUSDT":
+            r["tb_largo"] = 1                                                 # siempre ganó: igual no sube de 1
+    assert learn.evaluate(events, reactions)["meta"]["listado:largo"]["kappa"] == 1.0

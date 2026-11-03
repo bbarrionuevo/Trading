@@ -8,13 +8,12 @@ from decimal import Decimal as D
 import pytest
 
 from tradingagent import limits as limits_mod
-from tradingagent.decision.policy import PolicyConfig, atr_5m, market_blocks, news_blocks, plan_entry
+from tradingagent.decision.policy import PolicyConfig, market_blocks, news_blocks
 from tradingagent.decision.risk import RiskState
 from tradingagent.intelligence.classifier import Signal, classify
 from tradingagent.marketdata.book import OrderBook
 
 T0 = calendar.timegm((2026, 11, 2, 12, 0, 0))              # lunes 2-nov-2026 12:00 UTC
-MIN = 60_000
 
 
 @pytest.fixture
@@ -135,7 +134,7 @@ def test_perdidas_seguidas_dan_enfriamiento_y_una_ganancia_resetea(lim):
     assert r.blocks(T0 + 60 + 3600, 997.0, lim) == []                        # 60 min después
 
 
-# -- política --------------------------------------------------------------------------------------
+# -- política: la noticia ---------------------------------------------------------------------------
 def sig(category="listado", polarity=0.6, confidence=0.66, assets=("SOL",), horizon=60) -> Signal:
     return Signal(category, polarity, confidence, assets, horizon, ("test",))
 
@@ -146,27 +145,13 @@ def event(**kw):
 
 
 def test_motivos_para_no_actuar_sobre_una_noticia(lim):
-    cfg = PolicyConfig()
-    assert news_blocks(event(), sig(), T0, lim, cfg) == []
-    assert news_blocks(event(), sig(category="precio"), T0, lim, cfg)[0] == "categoria_no_operable:precio"
-    assert news_blocks(event(), sig(confidence=0.4), T0, lim, cfg) == ["conviccion_baja:0.24"]
-    assert news_blocks(event(published_at=T0 - 601), sig(), T0, lim, cfg) == ["noticia_vieja:601s"]
-    assert news_blocks(event(published_at=None, received_at=T0 - 30), sig(), T0, lim, cfg) == []   # sin hora: llegada
-    assert news_blocks(event(), sig(), T0, lim, cfg, {"c1"}) == ["historia_ya_operada"]            # B-3
-    assert news_blocks(event(tier=3), sig(), T0, lim, cfg) == ["nivel3_sin_corroboracion"]          # B-1
-    assert news_blocks(event(tier=3, cluster_sources=2), sig(), T0, lim, cfg) == []
-
-
-def candles(n=60, price=100.0, rng=0.2, end_ms=T0 * 1000):
-    return {end_ms - (n - i) * MIN: (price, price + rng / 2, price - rng / 2, price) for i in range(n)}
-
-
-def test_atr_de_velas_de_5_minutos():
-    assert atr_5m(candles(), T0 * 1000) == pytest.approx(0.2)
-    jumpy = candles()
-    jumpy[T0 * 1000 - 3 * MIN] = (100.0, 103.0, 100.0, 103.0)               # una vela de +3 en la última barra
-    assert atr_5m(jumpy, T0 * 1000) == pytest.approx((11 * 0.2 + 3.1) / 12)
-    assert atr_5m(candles(n=20), T0 * 1000) is None                          # menos de media hora de datos
+    assert news_blocks(event(), sig(), T0, lim) == []
+    assert news_blocks(event(), sig(category="precio"), T0, lim)[0] == "categoria_no_operable:precio"
+    assert news_blocks(event(published_at=T0 - 601), sig(), T0, lim) == ["noticia_vieja:601s"]
+    assert news_blocks(event(published_at=None, received_at=T0 - 30), sig(), T0, lim) == []   # sin hora: llegada
+    assert news_blocks(event(), sig(), T0, lim, {"c1"}) == ["historia_ya_operada"]            # B-3
+    assert news_blocks(event(tier=3), sig(), T0, lim) == ["nivel3_sin_corroboracion"]          # B-1
+    assert news_blocks(event(tier=3, cluster_sources=2), sig(), T0, lim) == []
 
 
 def book(bid="99.99", ask="100.01", qty="100", levels=5):
@@ -175,32 +160,17 @@ def book(bid="99.99", ask="100.01", qty="100", levels=5):
                                  [(D(ask) + i * tick, qty) for i in range(levels)], T0)
 
 
-def test_validacion_de_mercado_b4(lim):
+def test_validacion_de_mercado_b4_y_microestructura(lim):
     cfg = PolicyConfig()
     assert market_blocks(book(), D("48"), lim, cfg) == []
     assert market_blocks(book(bid="99.80", ask="100.20"), D("48"), lim, cfg) == ["spread:40.0bps"]
-    assert market_blocks(book(qty="0.04"), D("48"), lim, cfg) == ["profundidad:20USDT"]     # 5 niveles × 4 USDT
+    assert market_blocks(book(qty="0.04"), D("48"), lim, cfg) == ["profundidad:20USDT", "l3:24USDT"]
+    thin_top = OrderBook.from_levels("t", "SOLUSDT", [("99.99", "0.1"), ("99.98", "0.1"), ("99.97", "0.1"),
+                                                      ("99.96", "10")],
+                                     [("100.01", "0.1"), ("100.02", "0.1"), ("100.03", "0.1"), ("100.04", "10")], T0)
+    assert market_blocks(thin_top, D("48"), lim, cfg) == ["l3:60USDT"]          # profundidad sí, L3 < 5 × la orden
+    assert market_blocks(book(), D("48"), lim, cfg, spread_z=2.6) == ["spread_z:2.6"]
+    assert market_blocks(book(), D("48"), lim, cfg, last=101.5) == ["divergencia:1.50%"]
+    assert market_blocks(book(), D("48"), lim, cfg, kyle_ratio=5.0) == ["kyle:5.0x"]
     empty = OrderBook.from_levels("t", "SOLUSDT", [], [("100", "1")], T0)
     assert market_blocks(empty, D("48"), lim, cfg) == ["libro_vacio"]
-
-
-def test_tamano_por_riesgo_al_stop_y_topes_del_sobre(lim):
-    cfg = PolicyConfig()
-    kw = dict(equity=1000.0, cash=1000.0, gross=0.0, n_positions=0, price=100.0, min_notional=5.0, limits=lim,
-              cfg=cfg)
-    plan, why = plan_entry(sig(polarity=1.0, confidence=1.0), "SOLUSDT", atr=1.0, **kw)    # stop 2 ATR = 2 %
-    assert why == [] and plan.stop_frac == pytest.approx(0.02) and plan.tp_frac == pytest.approx(0.04)
-    assert plan.notional == D("400.0")                       # 1 % / 2 % = 500, pero tope 40 % del equity
-    assert plan.risk_usd <= 1000 * lim["per_trade"]["max_risk_pct"] / 100
-    plan, _ = plan_entry(sig(polarity=1.0, confidence=1.0), "SOLUSDT", atr=5.0, **kw)      # stop 10 % → tope 5 %
-    assert plan.stop_frac == pytest.approx(0.05) and plan.notional == D("200.0")
-    plan, _ = plan_entry(sig(polarity=1.0, confidence=1.0), "SOLUSDT", atr=0.01, **kw)     # stop mínimo 0,6 %
-    assert plan.stop_frac == pytest.approx(0.006)
-    weak, _ = plan_entry(sig(polarity=0.6, confidence=0.5), "SOLUSDT", atr=5.0, **kw)      # menos convicción
-    assert weak.notional < D("200.0") and weak.risk_usd == pytest.approx(float(weak.notional) * 0.05, rel=1e-3)
-    assert plan_entry(sig(), "SOLUSDT", atr=1.0, **{**kw, "n_positions": 3})[1] == ["maximo_de_posiciones"]
-    assert plan_entry(sig(), "SOLUSDT", atr=None, **kw)[1] == ["sin_volatilidad_medible"]
-    full, _ = plan_entry(sig(polarity=1.0, confidence=1.0), "SOLUSDT", atr=1.0, **{**kw, "gross": 700.0})
-    assert full.notional == D("100.0")                       # exposición bruta ≤ 80 %
-    tiny = plan_entry(sig(), "SOLUSDT", atr=1.0, **{**kw, "cash": 3.0})
-    assert tiny[0] is None and tiny[1][0].startswith("nominal_menor_al_minimo")

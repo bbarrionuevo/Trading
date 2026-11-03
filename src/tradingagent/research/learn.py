@@ -8,6 +8,10 @@ Solo reduce riesgo:
 - nunca agranda nada del sobre ni prende algo que la política tenga apagado. Si la evidencia cambia, la
   categoría vuelve al valor por defecto (operable), que es lo que el dueño ya aprobó.
 
+Además ajusta el meta-modelo (intelligence/meta.py) con las etiquetas de triple barrera del etiquetador:
+para cada noticia y activo, el alfa que tenía al entrar (un minuto después de la llegada) y si tocó primero
+el take-profit. κ ≤ 1: los datos pueden achicar la confianza del modelo, nunca agrandarla.
+
 Los resultados quedan en `aprendizaje/estado.json` de la carpeta de datos, con la fecha y la versión del
 clasificador, y se recalculan como mucho una vez por hora.
 """
@@ -18,7 +22,8 @@ from pathlib import Path
 from statistics import NormalDist, fmean, stdev
 
 from .. import paths
-from ..intelligence.classifier import NOT_TRADABLE, classify
+from ..intelligence import meta, vector
+from ..intelligence.classifier import NOT_TRADABLE, Signal, classify
 from ..intelligence.classifier import VERSION as NLP_VERSION
 
 log = logging.getLogger("tradingagent.learn")
@@ -60,14 +65,18 @@ def _rows(data: Path, kind: str) -> list[dict]:
     return out
 
 
-def signal_of(event: dict):
+def signal_of(event: dict) -> Signal:
     """La clasificación guardada si es de esta versión del clasificador; si no, se recalcula (determinista)."""
     nlp = event.get("nlp") or {}
     if nlp.get("version") == NLP_VERSION:
-        return nlp["category"], float(nlp["polarity"]), list(nlp["assets"])
-    s = classify(event["title"], event.get("snippet", ""), tier=event.get("tier", 2),
-                 cluster_sources=event.get("cluster_sources", 1))
-    return s.category, s.polarity, list(s.assets)
+        try:
+            return Signal(nlp["category"], float(nlp["polarity"]), float(nlp.get("confidence", 0.5)),
+                          tuple(nlp["assets"]), int(nlp.get("horizon_min", 60)), tuple(nlp.get("rules", ())),
+                          certainty=float(nlp.get("certainty", 1.0)))
+        except (KeyError, TypeError, ValueError):
+            pass
+    return classify(event["title"], event.get("snippet", ""), tier=event.get("tier", 2),
+                    cluster_sources=event.get("cluster_sources", 1))
 
 
 def samples(events: list[dict], reactions: list[dict], cost: float = COST) -> dict[str, dict[str, list[float]]]:
@@ -80,17 +89,44 @@ def samples(events: list[dict], reactions: list[dict], cost: float = COST) -> di
     for e in events:
         if e.get("dedup") != "new" or e.get("is_noise") or e["id"] not in by_event:
             continue
-        category, polarity, assets = signal_of(e)
+        sig = signal_of(e)
+        category, polarity = sig.category, sig.polarity
         if category in NOT_TRADABLE or not polarity:
             continue
         sign = 1 if polarity > 0 else -1
-        symbols = {f"{a}USDT" for a in assets}
+        symbols = {f"{a}USDT" for a in sig.assets}
         for r in by_event[e["id"]]:
             if r["symbol"] not in symbols:
                 continue
             for h in HORIZONS:
                 if r.get(h) is not None:
                     out.setdefault(f"{category}:{SIDES[sign]}", {}).setdefault(h, []).append(sign * r[h] - cost)
+    return out
+
+
+def meta_samples(events: list[dict], reactions: list[dict]) -> dict[str, list[tuple[float, int]]]:
+    """{"categoría:lado": [(p del prior con el alfa al entrar, 1 si tocó primero el take-profit)]}."""
+    by_event: dict[str, list[dict]] = {}
+    for r in reactions:
+        if "error" not in r:
+            by_event.setdefault(r["event_id"], []).append(r)
+    out: dict[str, list[tuple[float, int]]] = {}
+    for e in events:
+        if e.get("dedup") != "new" or e.get("is_noise") or e["id"] not in by_event or "received_at" not in e:
+            continue
+        sig = signal_of(e)
+        if sig.category in NOT_TRADABLE or not sig.polarity:
+            continue
+        dt, _ = vector.age_s(e, float(e["received_at"]) + 60)          # se entra al minuto siguiente a la llegada
+        for r in by_event[e["id"]]:
+            asset = r["symbol"].removesuffix("USDT")
+            if asset not in sig.assets:
+                continue
+            alpha = vector.decay(vector.vector(sig, asset, e).alpha, dt)
+            side = SIDES.get((alpha > 0) - (alpha < 0))
+            if side is None or r.get(f"tb_{side}") is None:
+                continue
+            out.setdefault(f"{sig.category}:{side}", []).append((meta.prior(alpha), int(r[f"tb_{side}"] == 1)))
     return out
 
 
@@ -102,7 +138,8 @@ def evaluate(events: list[dict], reactions: list[dict], *, min_n: int = MIN_N, c
         if bad:
             off.append(key)
             stats[key]["apagada_por"] = bad
-    return {"categorias": stats, "apagadas": off, "costo": cost, "min_n": min_n, "nlp": NLP_VERSION}
+    return {"categorias": stats, "apagadas": off, "costo": cost, "min_n": min_n, "nlp": NLP_VERSION,
+            "meta": meta.fit(meta_samples(events, reactions), min_n)}
 
 
 def update(data_dir, now: float, *, every_s: float = EVERY_S, force: bool = False) -> tuple[dict, list[str]]:

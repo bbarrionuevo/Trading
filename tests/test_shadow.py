@@ -1,5 +1,6 @@
-"""Operador paper por corridas (research/shadow.py) contra un Binance falso: entradas contra el libro, OCO con
-velas de 1 minuto entre corridas, salidas del agente, frenos (A-4), KILL (E-1) y registros (F-1, F-2)."""
+"""Operador paper por corridas (research/shadow.py) contra un Binance falso: entradas con el núcleo de decisión
+(vector y alfa, meta-modelo, ¼-Kelly, libro real), triple barrera entre corridas (stop, take-profit y
+expiración), salidas por noticia en contra, frenos (A-4, el diario cierra todo), KILL (E-1) y registros."""
 import calendar
 import contextlib
 import copy
@@ -36,7 +37,7 @@ def step_price(moves: dict[str, list[tuple[float, float]]]):
     return price
 
 
-def ev(eid, title, t, *, source="media", tier=2, pub_lag=60, cluster=None, cluster_sources=1):
+def ev(eid, title, t, *, source="media", tier=2, pub_lag=10, cluster=None, cluster_sources=1):
     return {"id": eid, "title": title, "source": source, "tier": tier, "cluster": cluster or eid,
             "cluster_sources": cluster_sources, "published_at": t - pub_lag, "received_at": t - 5}
 
@@ -73,72 +74,103 @@ class Paper:
                                paper_config=self.cfg, **kw)
 
     def state(self):
-        return json.loads((self.data / "paper" / "estado.json").read_text(encoding="utf-8"))
+        return json.loads((self.data / "paper" / "binance-spot" / "estado.json").read_text(encoding="utf-8"))
 
     def rows(self, kind):
-        f = self.data / "paper" / kind / "2026-11.jsonl"
+        f = self.data / "paper" / "binance-spot" / kind / "2026-11.jsonl"
         return [json.loads(x) for x in f.read_text(encoding="utf-8").splitlines()] if f.exists() else []
 
     def texts(self):
         return [m["text"] for m in self.tg.messages]
 
 
-async def test_entrada_contra_el_libro_y_take_profit_entre_corridas(tmp_path):
+async def test_entrada_con_el_nucleo_y_take_profit_entre_corridas(tmp_path):
     t1 = T0 + 10 * 60 + 30
     async with Paper(tmp_path, {"SOLUSDT": [(T0 + 12 * 60, 1.02)]}) as p:          # +2 % a las 12:12
         p.clock.set(t1)
         s1 = await p.run([ev("e1", LISTING, t1)])
         assert s1["entradas"] == 1 and s1["abiertas"] == ["SOLUSDT"]
+        entry = p.rows("operaciones")[0]
+        plan = entry["plan"]
+        # α_E = 0,6·1·0,7·0,8 = 0,336, 10 s después 0,317 ⇒ p = 0,668; precio quieto ⇒ SL 0,6 % (piso), TP 1,2 %
+        assert plan["p"] == pytest.approx(0.6683, abs=1e-3) and plan["alfa"] == pytest.approx(0.3171, abs=1e-3)
+        assert (plan["sl"], plan["tp"], plan["tramos"]) == (0.006, 0.012, 1)
+        # ¼-Kelly con b neto de comisiones y spread: 9,7 % de 120 = 11,6 USDT (riesgo al stop ≈ 0,1 USDT)
+        assert plan["kelly"] == pytest.approx(0.0966, abs=1e-3) and plan["notional"] == "11.6"
+        assert plan["riesgo_usd"] < 120 * 0.01
         st = p.state()
         pos = st["positions"]["SOLUSDT"]
-        # 48 USDT (tope 40 % de 120) al mejor ask; stop a 0,6 % (mínimo) y take-profit a 2R, al tick
-        assert D(pos["qty"]) == D("0.319") and D(pos["avg_price"]) == D("150.02")
-        assert D(pos["stop"]) == D("149.11") and D(pos["tp"]) == D("151.83")
+        assert D(pos["qty"]) == D("0.077") and D(pos["avg_price"]) == D("150.02") and pos["side"] == "largo"
+        assert D(pos["stop"]) == D("149.11") and D(pos["tp"]) == D("151.83")         # al tick, del lado prudente
         assert pos["until"] == round(t1) + 3600 and pos["category"] == "listado"
-        assert D(st["cash"]) == D("120") - D("0.319") * D("150.02") * D("1.001")
-        entry = p.rows("operaciones")[0]
-        assert entry["tipo"] == "entrada" and entry["modo"] == "paper" and entry["strategy_tag"]
-        assert p.rows("decisiones")[0]["decision"] == "entrar"
-        assert "LONG" in p.texts()[-1] and "SOLUSDT" in p.texts()[-1] and "listado" in p.texts()[-1]
+        assert D(st["cash"]) == D("120") - D("0.077") * D("150.02") * D("1.001")
+        assert entry["tipo"] == "entrada" and entry["modo"] == "paper" and entry["order_id"].startswith("P")
+        decision = p.rows("decisiones")[0]
+        assert decision["decision"] == "entrar" and decision["analisis"]["vector"]["C"] == 10
+        last = p.texts()[-1]
+        assert "LARGO" in last and "SOLUSDT" in last and "SL 149.11" in last and "TP 151.83" in last and "p=0.67" in last
 
         p.clock.set(t1 + 5 * 60)                                                    # siguiente corrida del cron
         s2 = await p.run()
         assert s2["take_profit"] == 1 and s2["abiertas"] == [] and s2["operaciones"] == 1
         out = p.rows("operaciones")[-1]
-        assert (out["motivo"], D(out["price"])) == ("take_profit", D("151.83"))
-        gross = D("0.319") * (D("151.83") - D("150.02"))
-        fees = D("0.319") * (D("151.83") + D("150.02")) * D("0.001")
+        assert (out["motivo"], D(out["price"]), out["deslizamiento_bps"]) == ("take_profit", D("151.83"), 0.0)
+        gross = D("0.077") * (D("151.83") - D("150.02"))
+        fees = D("0.077") * (D("151.83") + D("150.02")) * D("0.001")
         assert D(out["pnl_neto"]) == pytest.approx(gross - fees, abs=D("0.000001"))
+        assert D(out["retorno_neto"]) == pytest.approx((gross - fees) / (D("0.077") * D("150.02")), abs=D("0.000001"))
         assert D(p.state()["cash"]) == pytest.approx(D("120") + gross - fees, abs=D("0.000001"))
-        assert "TAKE-PROFIT" in p.texts()[-1]
+        assert "TAKE-PROFIT" in p.texts()[-1] and "% neto" in p.texts()[-1]
 
 
-async def test_stop_con_salto_noticia_negativa_y_horizonte(tmp_path):
+async def test_stop_con_salto_noticia_en_contra_y_expiracion(tmp_path):
     t1 = T0 + 10 * 60 + 30
     async with Paper(tmp_path, {"SOLUSDT": [(T0 + 13 * 60, 0.97)]}) as p:               # -3 % a las 12:13...
         p.mk.overrides[("SOLUSDT", (T0 + 12 * 60) * 1000)] = (150.0, 150.1, 149.9, 150.0)   # ...de un salto
         p.clock.set(t1)
         await p.run([ev("e1", LISTING, t1), ev("e2", "Coinbase will list Ethereum (ETH) futures", t1)])
-        assert sorted(p.state()["positions"]) == ["ETHUSDT", "SOLUSDT"]          # 2 × 48: tope de exposición
+        assert sorted(p.state()["positions"]) == ["ETHUSDT", "SOLUSDT"]
 
         p.clock.set(t1 + 5 * 60)
         s2 = await p.run([ev("n1", "Ethereum foundation wallet hacked, ETH drained", t1 + 5 * 60)])
         rows = {r["symbol"]: r for r in p.rows("operaciones") if r["tipo"] == "salida"}
         assert rows["SOLUSDT"]["motivo"] == "stop_loss"                          # abrió debajo del stop: desde ahí
         assert D(rows["SOLUSDT"]["price"]) == D("145.20")                        # 145,5 − 20 bps, al tick de abajo
-        assert rows["ETHUSDT"]["motivo"] == "noticia_negativa" and s2["noticia_negativa"] == 1
+        assert rows["SOLUSDT"]["deslizamiento_bps"] > 200                        # contra el stop teórico
+        assert rows["ETHUSDT"]["motivo"] == "noticia_en_contra" and s2["noticia_en_contra"] == 1
         assert s2["abiertas"] == [] and "STOP-LOSS" in "\n".join(p.texts())
+        short = [d for d in p.rows("decisiones") if d["event_id"] == "n1"][0]
+        assert "corto_no_disponible" in short["motivos"]                         # spot: sin cortos
 
         t3 = t1 + 10 * 60
         p.clock.set(t3)
         s3 = await p.run([ev("e3", "Kraken adds trading for Bitcoin (BTC) options", t3)])
         assert s3["entradas"] == 1 and s3["abiertas"] == ["BTCUSDT"]
-        p.clock.set(t3 + 61 * 60)                                               # vence el horizonte (60 min)
+        p.clock.set(t3 + 61 * 60)                                               # barrera vertical: 60 min
         s4 = await p.run()
-        assert s4["horizonte"] == 1 and s4["abiertas"] == []
+        out = p.rows("operaciones")[-1]
+        assert s4["expiracion"] == 1 and s4["abiertas"] == [] and D(out["price"]) == D("99800.00")
+        assert "EXPIRACIÓN" in p.texts()[-2] and "3 pérdidas seguidas" in p.texts()[-1]   # y el enfriamiento
         stats = p.state()["stats"]
         assert stats["operaciones"] == 3 and stats["perdidas"] == 3
         assert D(stats["pnl_neto"]) == sum(D(r["pnl_neto"]) for r in p.rows("operaciones") if r["tipo"] == "salida")
+
+
+async def test_freno_diario_cierra_todo_y_no_abre_hasta_el_otro_dia(tmp_path):
+    lim = copy.deepcopy(limits_mod.load())
+    lim["loss"]["daily_pct"] = 0.05                                             # más estricto, para probarlo
+    t1 = T0 + 10 * 60 + 30
+    async with Paper(tmp_path, {"SOLUSDT": [(T0 + 13 * 60, 0.97)]}, limits=lim) as p:
+        p.clock.set(t1)
+        await p.run([ev("e1", LISTING, t1), ev("e2", "Coinbase will list Ethereum (ETH) futures", t1)])
+        p.clock.set(t1 + 5 * 60)
+        s2 = await p.run([ev("e3", "Kraken adds trading for Bitcoin (BTC) options", t1 + 5 * 60)])
+        assert s2["stop_loss"] == 1 and s2["freno"] == 1 and s2["abiertas"] == []  # ETH sale por el freno
+        assert s2.get("entradas", 0) == 0 and any("pérdida del día" in f for f in s2["frenos"])
+        assert any("CIERRE POR FRENO" in x for x in p.texts()) and any("CIRCUIT BREAKER" in x for x in p.texts())
+        p.clock.set(T0 + 86400 + 60)                                            # día nuevo
+        s3 = await p.run([ev("e4", "Kraken adds trading for Bitcoin (BTC) options", T0 + 86400 + 60)])
+        assert s3["entradas"] == 1
 
 
 async def test_enfriamiento_y_kill(tmp_path):
@@ -170,7 +202,7 @@ async def test_enfriamiento_y_kill(tmp_path):
 
 async def test_drawdown_halt_hasta_el_rearme(tmp_path):
     lim = copy.deepcopy(limits_mod.load())
-    lim["loss"]["max_drawdown_pct"] = 0.3                                       # más estricto, para probarlo
+    lim["loss"]["max_drawdown_pct"] = 0.05                                      # más estricto, para probarlo
     t1 = T0 + 10 * 60 + 30
     async with Paper(tmp_path, {"SOLUSDT": [(T0 + 13 * 60, 0.97)]}, limits=lim) as p:
         p.clock.set(t1)
@@ -193,20 +225,31 @@ async def test_noticias_que_no_se_operan_quedan_registradas_con_su_motivo(tmp_pa
         p.mk.down.add("info")                                                   # sin filtros del par
         s = await p.run([
             ev("v", LISTING, t1, pub_lag=900),                                    # vieja (B-2)
-            ev("r", "Kraken reportedly plans to list Solana", t1),                # rumor: poca convicción
+            ev("o", LISTING, t1, pub_lag=400),                                    # alfa obsoleta (> 360 s)
+            ev("r", "Kraken reportedly plans to list Solana", t1),                # rumor: el meta-modelo no da
             ev("u", LISTING, t1, tier=3),                                         # nivel 3 sin corroborar (B-1)
             ev("f", "Coinbase will list Ethereum (ETH) futures", t1),             # sin filtros: no se opera
         ])
         motives = {d["event_id"]: d["motivos"] for d in p.rows("decisiones")}
-        assert motives["v"][0].startswith("noticia_vieja") and motives["r"] == ["conviccion_baja:0.24"]
+        assert motives["v"][0].startswith("noticia_vieja") and motives["o"][0] == "alfa_obsoleta:400s"
+        assert motives["r"][0] == "meta_p_baja:0.54"
         assert "nivel3_sin_corroboracion" in motives["u"] and motives["f"] == ["par_sin_filtros"]
-        assert s.get("entradas", 0) == 0 and s["descartada"] == 4 and p.state()["positions"] == {}
+        assert s.get("entradas", 0) == 0 and s["descartada"] == 5 and p.state()["positions"] == {}
 
         p.mk.down.discard("info")
-        p.mk.spread_bps = 45                                                    # spread fuera del sobre (30 bps)
+        p.mk.spread_bps = 45                                                    # el spread se come la ventaja
         s = await p.run([ev("w", LISTING, t1)])
-        assert s.get("entradas", 0) == 0 and p.rows("decisiones")[-1]["motivos"][0].startswith("spread:")
+        assert s.get("entradas", 0) == 0 and p.rows("decisiones")[-1]["motivos"][0].startswith("sin_ventaja_neta")
+        p.mk.spread_bps = 15                                                    # rinde, pero el sobre se achicó a 10
+        p.limits["market"]["max_spread_bps"] = 10
+        s = await p.run([ev("w1", LISTING, t1)])
+        assert s.get("entradas", 0) == 0 and p.rows("decisiones")[-1]["motivos"][0] == "spread:16.0bps"
+        p.limits["market"]["max_spread_bps"] = 30
         p.mk.spread_bps = 2
+        p.mk.last["SOLUSDT"] = 152.0                                            # último precio a 1,3 % del medio
+        s = await p.run([ev("d", LISTING, t1)])
+        assert p.rows("decisiones")[-1]["motivos"] == ["divergencia:1.33%"]
+        p.mk.last.clear()
         s = await p.run([ev("w2", LISTING, t1, cluster="w")])                    # otra copia de la misma historia
         assert s["entradas"] == 1
         p.clock.set(t1 + 300)
@@ -243,8 +286,8 @@ async def test_recolector_clasifica_y_opera_en_paper_con_resumen_diario(tmp_path
         assert any("Operador paper activo" in m["text"] for m in tg.messages)
 
         t2 = T0 + 10 * 60
-        feeds.add("media", "sol", LISTING, t2 - 90, body="Trading opens today.")
-        feeds.add("copia", "sol2", LISTING, t2 - 30)                             # copia: corrobora, no se opera
+        feeds.add("media", "sol", LISTING, t2 - 20, body="Trading opens today.")
+        feeds.add("copia", "sol2", LISTING, t2 - 10)                             # copia: corrobora, no se opera
         feeds.add("media", "pod", "Weekly crypto podcast: what to watch", t2 - 60)
         clock.set(t2)
         s2 = await run()
@@ -254,13 +297,13 @@ async def test_recolector_clasifica_y_opera_en_paper_con_resumen_diario(tmp_path
         assert evs["sol"]["nlp"]["confidence"] > classify(LISTING).confidence    # corroborada en la misma corrida
         assert evs["sol2"]["nlp"]["category"] == "listado"                        # las copias también se clasifican
         assert s2["paper"]["entradas"] == 1 and s2["paper"]["abiertas"] == ["SOLUSDT"]
-        assert "LONG" in tg.messages[-1]["text"]
+        assert "LARGO" in tg.messages[-1]["text"]
 
         clock.set(T0 + 13 * 3600)                                               # 3-nov 01:00: resumen de ayer
         s3 = await run()
-        assert s3["paper"]["horizonte"] == 1                                    # vencieron los 60 min
+        assert s3["paper"]["expiracion"] == 1                                   # vencieron los 60 min
         digest = next(m["text"] for m in tg.messages if "Recolector · 2026-11-02" in m["text"])
-        assert "🧪 Paper:" in digest and "abiertas: SOLUSDT" in digest           # la cuenta al cierre de ayer
+        assert "🧪 Paper binance-spot:" in digest and "abiertas: SOLUSDT" in digest   # la cuenta al cierre de ayer
         assert "equity" in digest and "de 120 USDT" in digest
 
 
@@ -294,4 +337,4 @@ async def test_categoria_apagada_por_el_aprendizaje_no_entra_pero_salir_siempre_
         p.clock.set(t1 + 300)
         s = await p.run([ev("n1", "Ethereum foundation wallet hacked, ETH drained", t1 + 300)],
                         disabled=("hack:corto", "hack:largo"))
-        assert s["noticia_negativa"] == 1 and s["abiertas"] == []
+        assert s["noticia_en_contra"] == 1 and s["abiertas"] == []

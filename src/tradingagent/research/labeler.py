@@ -11,9 +11,14 @@ Para cada noticia y cada par:
 - r_1m, r_5m, r_15m, r_60m = retorno hasta la apertura del minuto t0 + k;
 - mfe_60m / mae_60m = máximo a favor y en contra dentro de la hora (para stops y take-profits);
 - r_recv = cuánto ya se había movido al recibirla; r_recv_15m / r_recv_60m = lo que quedaba por
-  capturar desde la llegada (lo que un agente con esa latencia podía ganar).
+  capturar desde la llegada (lo que un agente con esa latencia podía ganar);
+- triple barrera desde la llegada (decision/barriers.py): entrada a la apertura del minuto siguiente a la
+  llegada, σ de 1 minuto de la hora previa a t0, SL 1,5σ√60 y TP 3σ√60, expiración a los 60 minutos.
+  `tb_largo` y `tb_corto` = 1 (tocó el TP), −1 (el SL) o 0 (expiró), con su retorno bruto (`*_r`). Es la
+  etiqueta con la que aprende el meta-modelo.
 Se etiqueta cuando pasaron 62 minutos desde la llegada. Las velas se piden por par y por rango: un
-pedido cubre todas las noticias cercanas (poco tráfico contra la fuente de datos).
+pedido cubre todas las noticias cercanas (poco tráfico contra la fuente de datos). Cada vela guarda
+también el volumen en USDT y, si la fuente lo da, el comprador agresivo (impacto y lambda de Kyle).
 """
 import asyncio
 import logging
@@ -21,6 +26,7 @@ import logging
 import aiohttp
 
 from ..core.redact import redact
+from ..decision.barriers import barriers, sigma_1m, walk
 
 log = logging.getLogger("tradingagent.labeler")
 BINANCE_URL = "https://data-api.binance.vision/api/v3/klines"
@@ -30,8 +36,11 @@ HORIZONS = (1, 5, 15, 60)
 READY_AFTER_S = 62 * 60
 MAX_PUB_LAG_S = 3 * 3600
 MERGE_GAP_MIN = 60                  # dos rangos del mismo par a menos de 1 h se piden juntos
+SIGMA_MIN = 60                      # minutos antes de t0 para medir σ
+TB_HORIZON_MIN = 60
 
-Candles = dict[int, tuple[float, float, float, float]]          # apertura (ms) → (open, high, low, close)
+# apertura (ms) → (open, high, low, close, volumen USDT, compra agresiva USDT o None)
+Candles = dict[int, tuple]
 
 
 class LabelError(Exception):
@@ -59,7 +68,8 @@ async def binance(session, symbol: str, start_ms: int, end_ms: int, *, url: str 
                                f"binance {symbol}")
         try:
             for k in data:
-                out[int(k[0])] = (float(k[1]), float(k[2]), float(k[3]), float(k[4]))
+                out[int(k[0])] = (float(k[1]), float(k[2]), float(k[3]), float(k[4]),
+                                  float(k[7]) if len(k) > 7 else None, float(k[10]) if len(k) > 10 else None)
         except (TypeError, ValueError, IndexError, KeyError) as e:
             raise LabelError(f"binance {symbol}: velas con formato inesperado") from e
         t = chunk_end + MIN
@@ -79,7 +89,8 @@ async def coinbase(session, symbol: str, start_ms: int, end_ms: int, *, url: str
                                timeout_s, f"coinbase {product}")
         try:
             for k in data:
-                out[int(k[0]) * 1000] = (float(k[3]), float(k[2]), float(k[1]), float(k[4]))
+                out[int(k[0]) * 1000] = (float(k[3]), float(k[2]), float(k[1]), float(k[4]),
+                                         float(k[5]) * float(k[4]) if len(k) > 5 else None, None)
         except (TypeError, ValueError, IndexError, KeyError) as e:
             raise LabelError(f"coinbase {product}: velas con formato inesperado") from e
         t = chunk_end + MIN
@@ -102,9 +113,9 @@ def basis(event: dict) -> tuple[float, str]:
 
 
 def window(event: dict) -> tuple[int, int]:
-    """Velas necesarias (ms, inclusive): de 10 min antes de t0 a 60 min después de la llegada."""
+    """Velas necesarias (ms, inclusive): de la hora antes de t0 (σ) a 61 min después de la llegada."""
     t0, _ = basis(event)
-    return minute(t0) - 10 * MIN, minute(float(event["received_at"])) + 60 * MIN
+    return minute(t0) - (SIGMA_MIN + 10) * MIN, minute(float(event["received_at"])) + (TB_HORIZON_MIN + 1) * MIN
 
 
 def merge(ranges: list[tuple[int, int]], gap_min: int = MERGE_GAP_MIN) -> list[tuple[int, int]]:
@@ -140,6 +151,29 @@ def reaction(candles: Candles, t0_s: float, t_recv_s: float | None = None) -> di
     for k in (15, 60):
         c = candles.get(mr + k * MIN)
         out[f"r_recv_{k}m"] = round(c[0] / cr[0] - 1, 6) if c and cr else None
+    out.update(triple_barrier(candles, m0, mr))
+    return out
+
+
+def triple_barrier(candles: Candles, m0: int, m_recv: int, horizon_min: int = TB_HORIZON_MIN) -> dict:
+    """Etiquetas de triple barrera para un largo y un corto que entran a la apertura del minuto siguiente a la
+    llegada (sin mirar el futuro), con σ de la hora previa a la noticia."""
+    sig = sigma_1m(candles, m0, SIGMA_MIN)
+    entry_m = m_recv + MIN
+    first = candles.get(entry_m)
+    if sig is None or first is None or first[0] <= 0:
+        return {"sigma_1m": None if sig is None else round(sig, 7)}
+    sl, tp = barriers(sig, horizon_min)
+    out = {"sigma_1m": round(sig, 7), "tb_sl": round(sl, 6), "tb_tp": round(tp, 6)}
+    entry, until = first[0], entry_m + horizon_min * MIN
+    for side, name in ((1, "largo"), (-1, "corto")):
+        stop, take = entry * (1 - side * sl), entry * (1 + side * tp)
+        hit = walk(candles, side=side, stop=stop, tp=take, start_ms=entry_m, end_ms=until, until_ms=until)
+        if hit is None:                                        # faltan velas al final: sin etiqueta
+            continue
+        kind, price, _ = hit
+        out[f"tb_{name}"] = {"tp": 1, "sl": -1, "exp": 0}[kind]
+        out[f"tb_{name}_r"] = round(side * (price / entry - 1), 6)
     return out
 
 

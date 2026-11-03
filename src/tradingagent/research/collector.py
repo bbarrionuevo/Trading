@@ -374,7 +374,7 @@ async def collect(data_dir, cfg: dict, env, *, clock=None, sources=None, telegra
                                                    telegram=tg if telegram is not None else None,
                                                    capital=float(paper.get("capital", 120.0)), urls=paper_urls,
                                                    candle_urls=candle_urls, rearm=bool(paper.get("rearm")),
-                                                   disabled=tuple(learned["apagadas"]))
+                                                   disabled=tuple(learned["apagadas"]), learned=learned)
             except Exception as e:                                     # el paper nunca rompe la corrida
                 log.exception("el operador paper falló")
                 paper_out = {"error": f"{type(e).__name__}: {redact(e)[:160]}"}

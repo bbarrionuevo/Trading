@@ -1,5 +1,5 @@
 """Servidor HTTP real que imita los endpoints públicos de Binance spot que usa el operador paper:
-/api/v3/klines, /api/v3/depth, /api/v3/exchangeInfo y /api/v3/ticker/price, más las velas de Coinbase
+/api/v3/klines, /api/v3/depth, /api/v3/exchangeInfo y /api/v3/ticker/24hr, más las velas de Coinbase
 (respaldo del etiquetador) para que ningún test salga a internet.
 
 El precio de cada par es una función del minuto (`price(sym, minuto_ms) -> apertura`), y el libro se arma
@@ -31,6 +31,7 @@ class FakeBinance:
         self.overrides: dict[tuple[str, int], tuple[float, float, float, float]] = {}   # (par, minuto): OHLC
         self.down: set[str] = set()                 # endpoints caídos: klines | depth | info | ticker
         self.last: dict[str, float] = {}            # último precio operado distinto del medio (divergencia)
+        self.adv = 5e8                              # volumen de 24 h en USDT
         self.requests: list[tuple[str, str]] = []
 
     def kline(self, sym: str, m: int) -> tuple[float, float, float, float]:
@@ -91,7 +92,8 @@ class FakeBinance:
         self.requests.append(("ticker", sym))
         if "ticker" in self.down:
             return web.json_response({"code": 0, "msg": "down"}, status=503)
-        return web.json_response({"symbol": sym, "price": str(self.last.get(sym, self.now_price(sym)))})
+        last = self.last.get(sym, self.now_price(sym))
+        return web.json_response({"symbol": sym, "lastPrice": str(last), "quoteVolume": str(self.adv)})
 
     async def coinbase(self, request):
         return web.json_response({"message": "NotFound"}, status=404)
@@ -101,14 +103,14 @@ class FakeBinance:
         a.router.add_get("/api/v3/klines", self.klines)
         a.router.add_get("/api/v3/depth", self.depth)
         a.router.add_get("/api/v3/exchangeInfo", self.exchange_info)
-        a.router.add_get("/api/v3/ticker/price", self.ticker)
+        a.router.add_get("/api/v3/ticker/24hr", self.ticker)
         a.router.add_get("/products/{product}/candles", self.coinbase)
         return a
 
     @staticmethod
     def urls(base: str) -> dict:
         return {"depth": base + "/api/v3/depth", "info": base + "/api/v3/exchangeInfo",
-                "ticker": base + "/api/v3/ticker/price"}
+                "ticker": base + "/api/v3/ticker/24hr"}
 
     @staticmethod
     def candle_urls(base: str) -> dict:

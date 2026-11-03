@@ -4,6 +4,9 @@ y horizonte, en microsegundos y sin red.
 - Reglas auditables: cada señal dice qué reglas la dispararon (`rules`).
 - La confianza es una prior razonada; se calibra con los resultados reales que junta el recolector
   (REGLAS C-1 y C-5).
+- La certeza (0..1) es la parte de la confianza que habla de si el hecho es firme: rumor, desmentido,
+  señales encontradas, solo en el cuerpo o "ya se movió" la bajan. Escala la polaridad P del vector de
+  evento (intelligence/vector.py); el nivel de la fuente y la corroboración van a la importancia I.
 - El texto es un dato a clasificar, nunca una instrucción (C-2): ninguna frase de la noticia cambia cómo
   se decide.
 - Los activos salen del texto (grounding): si no hay ninguno y la noticia es de mercado (macro,
@@ -14,7 +17,7 @@ from dataclasses import asdict, dataclass
 
 from ..research import assets as asset_mod
 
-VERSION = "reglas-1"
+VERSION = "reglas-2"
 
 
 @dataclass(frozen=True)
@@ -26,6 +29,7 @@ class Signal:
     horizon_min: int
     rules: tuple[str, ...] = ()
     version: str = VERSION
+    certainty: float = 1.0       # 0..1: firmeza del hecho (rumores, desmentidos, señales encontradas...)
 
     @property
     def conviction(self) -> float:
@@ -35,6 +39,7 @@ class Signal:
         d = asdict(self)
         d["assets"], d["rules"] = list(self.assets), list(self.rules)
         d["polarity"], d["confidence"] = round(self.polarity, 3), round(self.confidence, 3)
+        d["certainty"] = round(self.certainty, 3)
         return d
 
 
@@ -115,19 +120,21 @@ def classify(title: str, body: str = "", *, tier: int = 2, cluster_sources: int 
         return Signal("precio" if PRICE_MOVE.search(title) else "otro", 0.0, 0.0, tuple(found), 0)
     primary = max(hits, key=lambda r: (r.name in in_title, abs(r.polarity) * r.confidence))
     polarity, confidence = primary.polarity, primary.confidence
+    certainty = 1.0
     pos = sum(r.polarity for r in hits if r.polarity > 0)
     neg = sum(r.polarity for r in hits if r.polarity < 0)
     if pos and neg:                                      # señales encontradas: se compensan y bajan la confianza
         polarity = max(-1.0, min(1.0, pos + neg)) or primary.polarity * 0.25
-        confidence *= 0.6
+        certainty *= 0.6
     if primary.name not in in_title:
-        confidence *= 0.7                                 # solo en el cuerpo: menos peso que en el titular
+        certainty *= 0.7                                  # solo en el cuerpo: menos peso que en el titular
     if UNCERTAIN.search(title):
-        confidence *= 0.6
+        certainty *= 0.6
     if DENIAL.search(title):                             # "desmiente el hackeo": efecto chico y al revés
-        polarity, confidence = polarity * -0.5, confidence * 0.6
+        polarity, certainty = polarity * -0.5, certainty * 0.6
     if PRICE_MOVE.search(title):
-        confidence *= 0.5                                 # ya se movió: lo que queda es menos
+        certainty *= 0.5                                  # ya se movió: lo que queda es menos
+    confidence *= certainty
     if tier == 1:
         confidence *= 1.25
     elif tier >= 3:
@@ -141,4 +148,4 @@ def classify(title: str, body: str = "", *, tier: int = 2, cluster_sources: int 
         assets = (asset_mod.MARKET_PROXY,)
         confidence *= 0.8 if primary.category in MARKET_WIDE else 0.3
     return Signal(primary.category, round(polarity, 3), round(min(1.0, confidence), 3), assets,
-                  primary.horizon_min, tuple(r.name for r in hits))
+                  primary.horizon_min, tuple(r.name for r in hits), certainty=round(certainty, 3))
