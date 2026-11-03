@@ -1,0 +1,77 @@
+{
+ "mercado": "binance-spot",
+ "initial": "120.0",
+ "cash": "120.0",
+ "positions": {},
+ "risk": {
+  "day": "2026-11-03",
+  "day_start": 120.0,
+  "week": "2026-W45",
+  "week_start": 120.0,
+  "peak": 120.0,
+  "losses_in_row": 0,
+  "cooldown_until": 0.0,
+  "halted": "",
+  "alerted": []
+ },
+ "clusters": [],
+ "instruments": {
+  "BTCUSDT": {
+   "base": "BTC",
+   "quote": "USDT",
+   "tick": "0.01000000",
+   "step": "0.00001000",
+   "min_qty": "0.00001000",
+   "min_notional": "5.00000000",
+   "trading": true,
+   "ts": 1793670084
+  },
+  "ETHUSDT": {
+   "base": "ETH",
+   "quote": "USDT",
+   "tick": "0.01000000",
+   "step": "0.00010000",
+   "min_qty": "0.00010000",
+   "min_notional": "5.00000000",
+   "trading": true,
+   "ts": 1793670084
+  },
+  "SOLUSDT": {
+   "base": "SOL",
+   "quote": "USDT",
+   "tick": "0.01000000",
+   "step": "0.00100000",
+   "min_qty": "0.00100000",
+   "min_notional": "5.00000000",
+   "trading": true,
+   "ts": 1793670084
+  }
+ },
+ "spreads": {
+  "ETHUSDT": {
+   "mean": 0.044315,
+   "var": 0.0,
+   "n": 1,
+   "ts": 1793670083.678581
+  },
+  "SOLUSDT": {
+   "mean": 1.084422,
+   "var": 0.0,
+   "n": 1,
+   "ts": 1793670083.678581
+  }
+ },
+ "last_check": 1793670083.6785815,
+ "created_at": 1793670084,
+ "strategy_tag": "reglas-2+riesgo-2",
+ "stats": {
+  "operaciones": 0,
+  "ganadas": 0,
+  "perdidas": 0,
+  "pnl_neto": "0"
+ },
+ "fees": "0",
+ "realized": "0",
+ "equity": "120.000000",
+ "updated_at": 1793670084
+}
