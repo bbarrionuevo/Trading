@@ -362,6 +362,8 @@ def test_el_bucle_arranca_agente_tablero_tests_y_revisa(tmp_path, gh, monkeypatc
     assert sup.tests_runs == 1 and sup.child is None                            # al salir, el agente cerró
     st = paths.read_json(sup.state_file, {})
     assert st["ultima_revision"]["resultado"] == "al_dia" and st["publicacion"]["resultado"] == "sin_token"
+    assert st["tablero"].startswith("http://127.0.0.1:")                       # la dirección real, anotada
+    assert st["tablero"] in (sup.home / "tablero.html").read_text(encoding="utf-8")
 
 
 def test_borra_aunque_haya_solo_lectura_y_guardar_nunca_lo_tumba(tmp_path, gh, monkeypatch):

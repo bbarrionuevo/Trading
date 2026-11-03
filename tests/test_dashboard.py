@@ -180,3 +180,27 @@ def test_leer_no_traba_al_agente_que_guarda(tmp_path, monkeypatch):
         log.rename(tmp_path / "agent.log.1")             # la rotación del log tampoco se traba
     assert dashboard.read_json(f, None) == {"v": 3} and dashboard.read_json(tmp_path / "no.json", "x") == "x"
     assert dashboard.read_text(tmp_path / "no.txt") is None
+
+
+def test_nunca_usa_un_puerto_que_ya_usa_otro_programa(tmp_path):
+    import socket
+
+    other = socket.socket()
+    other.bind(("0.0.0.0", 0))                          # otro programa del dueño (como el que usa el 8765)
+    other.listen()
+    busy = other.getsockname()[1]
+    try:
+        srv = dashboard.start_free(tmp_path, busy, tries=5)
+        try:
+            assert srv.server_address[1] != busy           # no lo comparte: toma el siguiente libre
+            u = dashboard.announce(tmp_path, srv)
+            assert json.loads((tmp_path / "state" / "tablero.json").read_text(encoding="utf-8"))["url"] == u
+            assert f"url={u}" in (tmp_path / "tablero.html").read_text(encoding="utf-8")
+            assert dashboard.is_ours(u)
+            assert not dashboard.is_ours(f"http://127.0.0.1:{busy}/", timeout=0.5)   # el otro no es el tablero
+        finally:
+            srv.shutdown()
+            srv.server_close()
+    finally:
+        other.close()
+    assert dashboard.PORT != 8765

@@ -1,7 +1,7 @@
 # Instala (o actualiza) la tarea programada "trading-agente": el supervisor de TRADING 24/7 en esta PC.
 #   - Corre "python -m tradingagent supervisar": mantiene al agente vivo (lo relanza al instante si se
 #     cae), lo actualiza solo cuando main tiene una version nueva con CI verde (y vuelve atras si no
-#     arranca) y sirve el tablero en http://127.0.0.1:8765 (REGLAS G-7).
+#     arranca) y sirve el tablero en http://127.0.0.1:18765 o el siguiente puerto libre (REGLAS G-7).
 #   - Arranca con Windows, al iniciar sesion y, por las dudas, cada minuto: si ya corre no se duplica.
 #     Asi vuelve solo si el supervisor se actualiza a si mismo (sale con codigo 75) o si algo lo corta.
 #   - Corre sin pedir contrasena (S4U) y con permisos normales (no administrador).
@@ -65,7 +65,7 @@ $Marca = @{ cada_minuto = $CadaMinuto; instalada = (Get-Date).ToUniversalTime().
 if ($SinIniciar) { Write-Host "Tarea '$TaskName' registrada (sin iniciar)."; exit 0 }
 Start-ScheduledTask -TaskName $TaskName
 Write-Host "Listo: la tarea '$TaskName' quedo instalada y arrancando. Te llega por Telegram 'Agente iniciado'."
-Write-Host "Tablero:     http://127.0.0.1:8765"
+Write-Host "Tablero:     acceso directo 'TRADING tablero' (por defecto http://127.0.0.1:18765)"
 Write-Host "Ver estado:  Get-ScheduledTask -TaskName $TaskName | Get-ScheduledTaskInfo"
 Write-Host "Logs:        $env:LOCALAPPDATA\TRADING\logs (agent.log, supervisor.log, agente-salida.log)"
 Write-Host "Pausa:       crear el archivo vacio $env:LOCALAPPDATA\TRADING\KILL (salir siempre se puede)"

@@ -43,7 +43,8 @@ correrlo no rompe nada (sirve para cargar una clave nueva).
 
 ## Tablero
 
-**http://127.0.0.1:8765** (acceso directo **TRADING tablero** en el escritorio). Se actualiza cada 5
+Acceso directo **TRADING tablero** en el escritorio (por defecto **http://127.0.0.1:18765**; si otro
+programa usa ese puerto, el supervisor toma el siguiente libre y el acceso directo lo sigue). Se actualiza cada 5
 segundos y muestra: si el agente está listo para operar, la cuenta paper (equity, PnL, operaciones,
 acierto, evidencia para dinero real), la curva de equity, las posiciones abiertas con su stop y
 take-profit, las últimas operaciones y decisiones (y **por qué no entra**), la salud (fuentes, noticias,
@@ -175,7 +176,7 @@ comisiones públicas y funding, y si las claves leen la cuenta. Nunca muestra sa
 - **Pausa (KILL):** creá un archivo vacío `%LOCALAPPDATA%\TRADING\KILL`. Con ese archivo no se abren
   posiciones. Para reanudar, borralo.
 - **Diario:** `.\.venv\Scripts\python -m tradingagent journal-verify` dice si alguien lo alteró.
-- **Estado:** el tablero (http://127.0.0.1:8765) o `%LOCALAPPDATA%\TRADING\state\heartbeat.json`. Logs en
+- **Estado:** el tablero (acceso directo **TRADING tablero**) o `%LOCALAPPDATA%\TRADING\state\heartbeat.json`. Logs en
   `%LOCALAPPDATA%\TRADING\logs`.
 
 ## Entrenamiento en la nube (GitHub Actions, sin la PC)

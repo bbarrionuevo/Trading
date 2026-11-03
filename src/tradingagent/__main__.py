@@ -2,7 +2,7 @@
 
   python -m tradingagent run                 agente completo en paper (Ctrl+C para cerrar)
   python -m tradingagent supervisar          el agente 24/7: lo relanza, lo actualiza solo y sirve el tablero
-  python -m tradingagent tablero [--abrir]   tablero local en http://127.0.0.1:8765 (solo lectura)
+  python -m tradingagent tablero [--abrir]   tablero local en http://127.0.0.1:18765 (solo lectura)
   python -m tradingagent telegram-test       verifica TELEGRAM_BOT_TOKEN/CHAT_ID y manda un mensaje de prueba
   python -m tradingagent telegram-chats      lista los chats que le escribieron al bot (para el CHAT_ID)
   python -m tradingagent telegram-chats --avisar   el bot le manda a cada chat que le escribió /id su número
@@ -95,7 +95,9 @@ def cmd_supervisar(args) -> int:
 
     signal.signal(signal.SIGTERM, graceful)
     try:
-        return Supervisor(home=home, port=args.puerto or None).run()
+        from . import dashboard
+        port = None if args.puerto == 0 else (args.puerto or dashboard.PORT)
+        return Supervisor(home=home, port=port).run()
     except KeyboardInterrupt:
         return 0
     finally:
@@ -107,15 +109,14 @@ def cmd_tablero(args) -> int:
     import webbrowser
 
     from . import dashboard
-    try:
-        srv = dashboard.start(paths.home(), args.puerto)
-    except OSError:
-        url = f"http://127.0.0.1:{args.puerto}"
-        print(f"El tablero ya está abierto (lo sirve el supervisor): {url}")
+    known = paths.read_json(paths.state("tablero.json"), {}).get("url")
+    if known and dashboard.is_ours(known):
+        print(f"El tablero ya está abierto (lo sirve el supervisor): {known}")
         if args.abrir:
-            webbrowser.open(url)
+            webbrowser.open(known)
         return 0
-    url = dashboard.url(srv)
+    srv = dashboard.start_free(paths.home(), args.puerto or dashboard.PORT)
+    url = dashboard.announce(paths.home(), srv)
     print(f"Tablero en {url} (Ctrl+C para cerrar)")
     if args.abrir:
         webbrowser.open(url)
@@ -377,9 +378,10 @@ def main(argv=None) -> int:
     r.add_argument("--config")
     r.add_argument("--seconds", type=float, help="cerrar solo después de N segundos")
     sv = sub.add_parser("supervisar")
-    sv.add_argument("--puerto", type=int, default=8765, help="puerto del tablero (0 = sin tablero)")
+    sv.add_argument("--puerto", type=int, help="puerto base del tablero, si está ocupado usa el siguiente libre "
+                    "(0 = sin tablero)")
     tb = sub.add_parser("tablero")
-    tb.add_argument("--puerto", type=int, default=8765)
+    tb.add_argument("--puerto", type=int)
     tb.add_argument("--abrir", action="store_true", help="abrirlo en el navegador")
     sub.add_parser("telegram-test")
     tc = sub.add_parser("telegram-chats")

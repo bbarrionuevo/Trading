@@ -1,7 +1,7 @@
 """Supervisor del agente en la PC (lo corre la tarea programada `trading-agente`): mantiene al agente vivo,
 lo actualiza solo, sirve el tablero y publica el estado para que Claude lo vea.
 
-  python -m tradingagent supervisar [--puerto 8765]
+  python -m tradingagent supervisar [--puerto 18765]
 
 - **Siempre listo:** corre `python -m tradingagent run` como proceso hijo y lo relanza apenas termina (con
   espera creciente si se cae seguido; si se cae 3 veces en 10 minutos, avisa por Telegram). En Windows el
@@ -15,7 +15,8 @@ lo actualiza solo, sirve el tablero y publica el estado para que Claude lo vea.
   reintenta ese commit. Si cambió el propio supervisor, sale con código 75 y la tarea lo relanza en un
   minuto con el código nuevo. Después corre todos los tests en segundo plano, con prioridad baja, sin
   claves y en una carpeta aparte: el resultado (pruebas reales en Windows) queda en `logs/tests.txt`.
-- **Tablero:** http://127.0.0.1:8765 (dashboard.py), solo lectura y solo desde esta PC.
+- **Tablero:** http://127.0.0.1:18765 o el siguiente puerto libre (dashboard.py; nunca comparte un puerto
+  con otro programa), solo lectura y solo desde esta PC. El acceso directo abre `tablero.html`.
 - **Claude puede ver cómo va (REGLAS G-8):** cada 15 minutos publica en la rama `pc` del repo un único
   commit (la rama no crece) con el tablero en JSON, el latido, la cuenta paper, operaciones, decisiones
   recientes, el supervisor, los tests y los últimos avisos del log. Nunca el `.env`, secretos ni saldos
@@ -515,10 +516,11 @@ class Supervisor:
         if self.port is None:                          # None = sin tablero; 0 = puerto libre (tests)
             return
         try:
-            self.board = dashboard.start(self.home, self.port)
-            log.info("tablero en %s", dashboard.url(self.board))
+            self.board = dashboard.start_free(self.home, self.port)
+            self.state["tablero"] = dashboard.announce(self.home, self.board)
+            log.info("tablero en %s", self.state["tablero"])
         except OSError as e:
-            log.warning("no pude abrir el tablero en el puerto %s: %s", self.port, e)
+            log.warning("no pude abrir el tablero desde el puerto %s: %s", self.port, e)
 
     def run(self, *, max_loops: int | None = None, tick_s: float = 1.0) -> int:
         log.info("supervisor %s en %s (versión %s)", __version__, self.repo, self.version[:7])
