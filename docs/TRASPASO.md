@@ -118,6 +118,10 @@ Binance) y la PC del dueño (instalador completo, Telegram, tarea `trading-agent
   TRADING cada 2 horas" (8 a 24). Sin conector de GitHub: dejan las correcciones en una rama.
 - Para ver la cuenta real y actuar en el momento: Remote Control de la carpeta `%USERPROFILE%\TRADING` en la
   PC (docs/OPERACION.md, "Vigilancia de Claude").
+- **Prueba de red desde la PC** (`research/probe.py`): una vez por día el agente prueba fuentes candidatas
+  (avisos de Upbit y Bybit, mercados de Upbit, Bithumb, la API de Binance, Coinbase, Kraken, el CPI de la BLS) y
+  el supervisor publica `red.json` en la rama `pc`. Desde la nube Upbit/Bybit/Binance bloquean por país: con ese
+  archivo se ve qué sirve desde Argentina antes de sumar una fuente.
 
 ## Próximo: aprender de la historia y reaccionar más rápido (pedido del dueño, 3-nov)
 

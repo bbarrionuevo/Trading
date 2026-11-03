@@ -504,6 +504,9 @@ class Supervisor:
         tests = read(self.home / "logs" / "tests.txt")
         if tests is not None:
             self._put(dest / "tests.txt", tests[-20000:])
+        net = read(self.home / "logs" / "red.json")                  # qué fuentes se leen desde la PC
+        if net is not None:
+            self._put(dest / "red.json", net)
         lines = dashboard._tail(self.home / "logs" / "agent.log", 3_000_000)
         warn = [x for x in lines if '"WARNING"' in x or '"ERROR"' in x]
         self._put(dest / "errores.jsonl", "\n".join(warn[-200:]) + "\n")

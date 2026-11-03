@@ -152,6 +152,25 @@ class Agent:
         except Exception:                                    # una noticia mal procesada no tira el agente
             log.exception("falló la evaluación de %s", ev.item.id)
 
+    async def _probe_loop(self, session, first_s: float = 90.0) -> None:
+        """Una vez por día: qué fuentes candidatas se pueden leer desde esta PC (research/probe.py). El resultado
+        (`logs/red.json`) lo publica el supervisor para que Claude sume fuentes que de verdad funcionan acá."""
+        from .research.probe import EVERY_S, probe
+        out = paths.home() / "logs" / "red.json"
+        delay = first_s
+        while not self.stop_event.is_set():
+            try:
+                await asyncio.wait_for(self.stop_event.wait(), timeout=delay)
+                return
+            except TimeoutError:
+                pass
+            try:
+                rep = await probe(session)
+                await asyncio.to_thread(paths.write_json_atomic, out, rep)
+            except Exception:                                        # la prueba nunca frena al agente
+                log.warning("falló la prueba de red", exc_info=True)
+            delay = EVERY_S
+
     def _build_trader(self, session, lim):
         from .intelligence.llm import LlmClassifier, api_key
         from .live import LiveTrader
@@ -286,6 +305,7 @@ class Agent:
                           asyncio.create_task(hb.run(self.stop_event), name="latido"),
                           asyncio.create_task(self._print_accepted(), name="consola"),
                           asyncio.create_task(self._watch_stop_file(stop_file), name="parada")]
+                tasks.append(asyncio.create_task(self._probe_loop(session), name="red"))
                 if self.trader is not None:
                     from .live import learn_loop
                     tasks.append(asyncio.create_task(self.trader.watch(self.stop_event), name="vigilancia"))
@@ -305,7 +325,7 @@ class Agent:
                     if self.news_tasks:                   # una noticia a medio operar se termina y se guarda
                         await asyncio.wait(set(self.news_tasks), timeout=10)
                     for t in tasks:
-                        if t.get_name() in ("lag", "consola", "aprendizaje") or t.get_name().startswith("fuente-"):
+                        if t.get_name() in ("lag", "consola", "aprendizaje", "red") or t.get_name().startswith("fuente-"):
                             t.cancel()
                     await asyncio.wait(tasks, timeout=15)
                     if webhook:
