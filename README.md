@@ -13,9 +13,9 @@ Es un proyecto aparte de nexus: carpeta, datos y claves propias. Ver [docs/OPERA
 | Etapa | Qué | Estado |
 |---|---|---|
 | 1 | Ingesta (RSS/Atom, webhook, dedup semántica-léxica, ruido, staleness) · paper trading riguroso · Telegram fail-safe · diario encadenado · latido · reglas v2 | ✅ |
-| 1½ | **Recolector de entrenamiento** en GitHub Actions: noticias + reacción del precio cada 15 min, en la rama `data` ([cómo activarlo](docs/OPERACION.md#entrenamiento-en-la-nube-github-actions-sin-la-pc)) | ✅ 99 tests (3.11 y 3.13) |
-| 2 | Inteligencia: entidades, categoría, polaridad y convicción, con grounding y calibración | Siguiente |
-| 3 | Decisión y riesgo: tamaño por ATR y convicción, brackets, circuit breakers, validación de mercado | — |
+| 1½ | **Recolector de entrenamiento** en GitHub Actions: noticias + reacción del precio, en la rama `data` ([cómo activarlo](docs/OPERACION.md#entrenamiento-en-la-nube-github-actions-sin-la-pc)) | ✅ |
+| 2 | Inteligencia: clasificador determinista + Claude Haiku 5.5 para lo dudoso, vector de evento y alfa con decaimiento, meta-modelo | En marcha: falta calibrar con datos |
+| 3 | Decisión y riesgo: triple barrera, ¼-Kelly, microestructura, costos, frenos que cierran todo, DSR; paper por corridas y **en vivo en la PC 24/7** (futuros de MEXC) | En marcha: falta la evidencia de F-3 |
 | 4 | Conector real (CEX) con conciliación y armado local | — |
 | 5-6 | Tablero, comandos de Telegram, promoción a real por evidencia | — |
 
@@ -32,7 +32,7 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python -m pytest                          # todo verde
 .\.venv\Scripts\python -m tradingagent telegram-test      # con el .env en %LOCALAPPDATA%\TRADING
 .\.venv\Scripts\python -m tradingagent sources --check    # lee cada fuente una vez
-.\.venv\Scripts\python -m tradingagent run                # agente completo en paper
+.\.venv\Scripts\python -m tradingagent run                # agente completo en paper (opera en vivo)
 .\.venv\Scripts\python -m tradingagent paper-sim examples\escenario_noticia.jsonl
 .\.venv\Scripts\python -m tradingagent collect           # una pasada del recolector de entrenamiento
 ```
@@ -47,11 +47,15 @@ src/tradingagent/
   execution/    órdenes, instrumentos, venue paper, cartera, servicio de ejecución, harness
   alerts/       Telegram: modelo, cliente de la Bot API, despachador en hilo propio
   telemetry/    diario encadenado, latido, logs
-  research/     recolector de entrenamiento: activos mencionados, reacción del precio, corridas con estado
+  intelligence/ clasificador, Claude Haiku (dudosas), vector de evento y alfa, meta-modelo
+  decision/     política (noticia → evento → plan → libro), triple barrera, frenos de riesgo
+  research/     recolector, etiquetas, paper por corridas (Binance spot, MEXC futuros), aprendizaje, DSR
+  live.py       operador paper en vivo (PC 24/7)
   limits.py     sobre de riesgo (protegido)      safety.py   núcleo de seguridad (protegido)
 config/limits.yaml   el sobre (protegido)        config/agent.example.yaml   ejemplo de configuración
 tools/               chequeos del CI (protegidos)
-tests/               99 tests, entre ellos los de las reglas (test_rules.py, protegido)
+deploy/windows/      tarea programada trading-agente (PC 24/7)
+tests/               161 tests, entre ellos los de las reglas (test_rules.py, protegido)
 ```
 
 ## Desarrollo

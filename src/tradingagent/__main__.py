@@ -5,6 +5,9 @@
   python -m tradingagent telegram-chats      lista los chats que le escribieron al bot (para el CHAT_ID)
   python -m tradingagent telegram-chats --avisar   el bot le manda a cada chat que le escribió /id su número
   python -m tradingagent collect [--data DIR]       una pasada del recolector de datos de entrenamiento
+  python -m tradingagent collect --paper [--capital 120] [--rearm] [--mercados binance-spot,mexc-futuros]
+                                             ...y del operador paper (rearme tras un halt)
+  python -m tradingagent mexc-check          prueba la API de futuros de MEXC (y las claves de lectura, si hay)
   python -m tradingagent sources [--check]   fuentes y su estado; --check lee cada una una vez
   python -m tradingagent journal-verify      verifica la cadena de hashes del diario
   python -m tradingagent paper-sim ESCENARIO reproduce libros + órdenes de un escenario JSONL
@@ -146,16 +149,70 @@ def cmd_collect(args) -> int:
         print("Telegram apagado: falta TELEGRAM_BOT_TOKEN y/o TELEGRAM_CHAT_ID (los datos se juntan igual).",
               file=sys.stderr)
 
+    paper = None
+    if args.paper:
+        mexc_keys = (os.environ.get("MEXC_ACCESS_KEY"), os.environ.get("MEXC_SECRET_KEY"))
+        paper = {"capital": args.capital, "rearm": args.rearm, "mercados": [m for m in args.mercados.split(",") if m],
+                 "mexc_keys": mexc_keys if all(mexc_keys) else None}
+    from . import limits as limits_mod
+    from .intelligence.llm import LlmClassifier, api_key
+    key = api_key(os.environ)
+    if not key:
+        print("IA apagada: falta ANTHROPIC_API_KEY (decide solo el clasificador local).", file=sys.stderr)
+
     async def main():
         t = TelegramTransport(token, chat, base_url=api_base(os.environ)) if use_tg else None
+        llm = LlmClassifier(key, limit_usd=float(limits_mod.load()["ai"]["max_llm_usd_per_day"])) if key else None
         try:
-            return await collect(args.data or paths.home() / "datos", cfg, os.environ, telegram=t)
+            return await collect(args.data or paths.home() / "datos", cfg, os.environ, telegram=t, paper=paper,
+                                 llm=llm)
         finally:
             if t is not None:
                 await t.close()
+            if llm is not None:
+                await llm.close()
 
     print(json.dumps(asyncio.run(main()), ensure_ascii=False, sort_keys=True))
     return 0
+
+
+def cmd_mexc_check(args) -> int:
+    """Diagnóstico de MEXC futuros. Imprime solo datos públicos y si las claves leen la cuenta (nunca saldos)."""
+    _setup("WARNING")
+    import aiohttp
+
+    from .marketdata import mexc
+    access, secret = os.environ.get("MEXC_ACCESS_KEY"), os.environ.get("MEXC_SECRET_KEY")
+
+    async def main():
+        bad = 0
+        async with aiohttp.ClientSession() as session:
+            for sym in ("BTC_USDT", "ETH_USDT", "SOL_USDT"):
+                try:
+                    d = await mexc.detail(session, sym)
+                    t = await mexc.ticker(session, sym)
+                    f = await mexc.funding(session, sym)
+                    print(f"OK   {sym}: contrato {d['contract_size']} · tick {d['tick']} · comisión pública "
+                          f"{float(d['maker']) * 100:.3f}%/{float(d['taker']) * 100:.3f}% · último {t['last']} · "
+                          f"funding {f['rate'] * 100:+.4f}% cada {f['cycle_h']} h")
+                except mexc.MarketDataError as e:
+                    bad += 1
+                    print(f"MAL  {sym}: {e}")
+            if not (access and secret):
+                print("Claves de lectura: no configuradas (MEXC_ACCESS_KEY / MEXC_SECRET_KEY).")
+                return 1 if bad else 0
+            ro = mexc.ReadOnlyClient(session, access, secret)
+            try:
+                ok = await ro.account_ok()
+                fees = await ro.fee_rates("BTC_USDT")
+                print(f"Claves de lectura: {'OK' if ok else 'respuesta rara'} · comisión de la cuenta BTC_USDT "
+                      f"{fees['maker'] * 100:.3f}%/{fees['taker'] * 100:.3f}%")
+            except mexc.MarketDataError as e:
+                bad += 1
+                print(f"Claves de lectura: no funcionan ({e})")
+        return 1 if bad else 0
+
+    return asyncio.run(main())
 
 
 def cmd_sources(args) -> int:
@@ -226,6 +283,11 @@ def main(argv=None) -> int:
     c.add_argument("--data", help="carpeta de datos (por defecto TRADING_HOME/datos)")
     c.add_argument("--config")
     c.add_argument("--no-telegram", action="store_true")
+    c.add_argument("--paper", action="store_true", help="operar en paper las noticias de la corrida")
+    c.add_argument("--capital", type=float, default=120.0, help="USDT simulados al crear la cuenta paper")
+    c.add_argument("--rearm", action="store_true", help="rearme humano tras un halt por drawdown (REGLAS A-4)")
+    c.add_argument("--mercados", default="binance-spot,mexc-futuros", help="cuentas paper, separadas por comas")
+    sub.add_parser("mexc-check")
     s = sub.add_parser("sources")
     s.add_argument("--check", action="store_true")
     s.add_argument("--config")
@@ -236,7 +298,7 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     handlers = {"run": cmd_run, "telegram-test": cmd_telegram_test, "telegram-chats": cmd_telegram_chats,
                 "sources": cmd_sources, "journal-verify": cmd_journal_verify, "paper-sim": cmd_paper_sim,
-                "collect": cmd_collect}
+                "collect": cmd_collect, "mexc-check": cmd_mexc_check}
     if args.cmd not in handlers:
         ap.print_help()
         return 2

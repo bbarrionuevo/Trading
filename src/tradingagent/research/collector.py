@@ -1,11 +1,12 @@
-"""Recolector de datos de entrenamiento: una pasada corta (GitHub Actions cada 15 min, o en la PC).
+"""Recolector de datos de entrenamiento: una pasada corta (GitHub Actions cada pocos minutos, o en la PC).
 
-  python -m tradingagent collect --data DIR [--no-telegram]
+  python -m tradingagent collect --data DIR [--no-telegram] [--paper [--capital 120] [--rearm]]
 
 1. Lee todas las fuentes a la vez, con el ETag y lo ya visto de la corrida anterior (estado.json).
 2. Evalúa con el mismo motor de ingesta, en orden de publicación. La deduplicación se reconstruye con
    los eventos de las últimas horas. Lo de la primera lectura de cada fuente es historia y no se guarda.
-3. Guarda en eventos/AAAA-MM.jsonl cada noticia nueva de hasta 3 horas, con los activos detectados.
+3. Guarda en eventos/AAAA-MM.jsonl cada noticia nueva de hasta 3 horas, con los activos detectados y la
+   clasificación determinista (`nlp`: categoría, polaridad, confianza, activos, horizonte y reglas).
    También guarda las copias de otras fuentes (corroboración) y lo que el filtro marca como ruido,
    cada una marcada, para entrenar la confianza y medir el filtro. La ventana es más amplia que la de
    operar (REGLAS B-2 rige para operar, no para juntar datos), y `age_s` guarda la edad de cada una.
@@ -17,8 +18,13 @@
    - un resumen por día;
    - un aviso, una sola vez, si todas las fuentes o todas las velas fallan, y otro al volver.
    Nunca imprime ni guarda secretos.
-Todo se escribe al final de la corrida: si algo falla a mitad de camino, no queda nada a medias.
-Sin claves de exchange: solo datos públicos (REGLAS G-1 y G-6).
+6. Si hay clave de Anthropic, las noticias originales que la capa rápida no resuelve sola se consultan a
+   Claude Haiku 5.5 (intelligence/llm.py): la respuesta validada queda en `nlp_llm` y es la que usa el
+   paper; el gasto del día va al estado (`llm`) y nunca pasa del sobre (REGLAS C-4).
+7. Con `--paper`, el operador paper (shadow.py) opera las noticias originales de esta corrida contra
+   los libros reales, con llenados simulados, y el resumen diario suma una línea de paper.
+Todo se escribe al final de la corrida: si algo falla a mitad de camino, no queda nada a medias. Si el
+paper falla, los datos del recolector ya quedaron guardados.
 """
 import asyncio
 import calendar
@@ -31,6 +37,7 @@ from pathlib import Path
 import aiohttp
 
 from .. import __version__, paths
+from .. import limits as limits_mod
 from ..alerts.model import Alert, Priority, esc
 from ..core.bus import EventBus
 from ..core.clock import SystemClock
@@ -40,7 +47,9 @@ from ..ingestion.dedup import DedupIndex
 from ..ingestion.engine import IngestionEngine
 from ..ingestion.noise import NoiseConfig, NoiseFilter
 from ..ingestion.sources import PollingSource
-from . import assets
+from ..intelligence import llm as llm_mod
+from ..intelligence.classifier import classify
+from . import assets, learn, shadow
 from .labeler import READY_AFTER_S, CandleStore, window
 
 log = logging.getLogger("tradingagent.collector")
@@ -59,13 +68,16 @@ LEEME = """# Datos de entrenamiento de TRADING (rama `data`)
 Los escribe el recolector (`.github/workflows/recoleccion.yml`) cada 15 minutos. Solo datos públicos.
 
 - `eventos/AAAA-MM.jsonl`: una noticia por línea: titular, fragmento, fuente y nivel, horas de
-  publicación y llegada, activos detectados, si es la original o una copia (`dedup`, `cluster`) y si
-  el filtro la marcó como ruido.
+  publicación y llegada, activos detectados, si es la original o una copia (`dedup`, `cluster`), si
+  el filtro la marcó como ruido y la clasificación determinista (`nlp`).
 - `reacciones/AAAA-MM.jsonl`: la reacción del precio a cada noticia original, por par (velas públicas
   de 1 minuto): retornos a 1, 5, 15 y 60 minutos desde la publicación, extremos de la hora y lo que
   quedaba por capturar desde la llegada (`r_recv_*`).
 - `estado.json`: lo ya visto por fuente, lo pendiente de etiquetar, la salud de las fuentes y los
   conteos por día.
+- `paper/`: el operador paper (dinero simulado contra libros reales): `estado.json`,
+  `operaciones/AAAA-MM.jsonl` (cada entrada y salida) y `decisiones/AAAA-MM.jsonl` (cada noticia
+  evaluada, con el motivo de entrar o no). Un archivo `KILL` en la raíz frena las entradas.
 
 No se edita a mano: el recolector agrega líneas y reescribe el estado en cada corrida.
 """
@@ -141,8 +153,12 @@ class _Telegram:
         self.sent += r.ok
         return r.ok
 
+    async def send_alert(self, alert: Alert) -> bool:
+        """Una alerta ya armada (HTML escapado) del operador paper, con el mismo cuidado que `send`."""
+        return await self.send(alert.text, silent=alert.silent)
 
-def digest(day: str, events: list[dict], reactions: list[dict], health: dict) -> str:
+
+def digest(day: str, events: list[dict], reactions: list[dict], health: dict, paper: str = "") -> str:
     """Resumen de un día UTC: noticias por fuente, corroboradas y los mayores movimientos a 15 minutos."""
     evs = [e for e in events if _day(e["received_at"]) == day]
     orig = [e for e in evs if e.get("dedup") == "new" and not e.get("is_noise")]
@@ -164,7 +180,30 @@ def digest(day: str, events: list[dict], reactions: list[dict], health: dict) ->
         lines.append("Fuentes con error en la última corrida: " + ", ".join(esc(s) for s in bad))
     if not orig:
         lines.append("Sin noticias nuevas ese día (o las fuentes no respondieron: ver estado.json).")
+    if paper:
+        lines.append(paper)
     return "\n".join(lines)
+
+
+MARKETS = ("binance-spot", "mexc-futuros")
+
+
+def markets(paper: dict, session, paper_urls: dict | None, candle_urls: dict | None) -> list:
+    """Los mercados paper pedidos: Binance spot (datos públicos) y MEXC futuros (públicos + lectura de la cuenta
+    si hay claves de solo lectura)."""
+    from ..marketdata import mexc
+    from .futures import MexcFutures
+    out = []
+    for name in paper.get("mercados", MARKETS):
+        if name == "binance-spot":
+            out.append(shadow.BinanceSpot(paper_urls, candle_urls))
+        elif name == "mexc-futuros":
+            keys = paper.get("mexc_keys") or (None, None)
+            ro = mexc.ReadOnlyClient(session, *keys, base=paper.get("mexc_base", mexc.BASE)) if all(keys) else None
+            out.append(MexcFutures(base=paper.get("mexc_base", mexc.BASE), readonly=ro))
+        else:
+            log.warning("mercado paper desconocido: %s", name)
+    return out
 
 
 def _load(data: Path, now: float, ttl_s: float) -> tuple[dict, list[dict]]:
@@ -184,8 +223,9 @@ def _digest_inputs(data: Path, day: str, now: float) -> tuple[list[dict], list[d
 def _save(data: Path, state: dict, new_events: list[dict], reactions: list[dict]) -> None:
     _append_monthly(data, EVENTS, new_events, "received_at")
     _append_monthly(data, REACTIONS, reactions, "t_recv")
-    if not (data / README).exists():
-        (data / README).write_text(LEEME, encoding="utf-8", newline="\n")
+    readme = data / README
+    if not readme.exists() or readme.read_text(encoding="utf-8") != LEEME:
+        readme.write_text(LEEME, encoding="utf-8", newline="\n")
     paths.write_json_atomic(data / STATE, state)
 
 
@@ -201,9 +241,14 @@ async def _poll(spec, session, clock, src_state: dict):
 
 async def collect(data_dir, cfg: dict, env, *, clock=None, sources=None, telegram=None,
                   candle_urls: dict | None = None, limits: dict | None = None,
-                  session: aiohttp.ClientSession | None = None, send_gap_s: float = 1.1) -> dict:
+                  session: aiohttp.ClientSession | None = None, send_gap_s: float = 1.1,
+                  paper: dict | None = None, paper_urls: dict | None = None,
+                  llm: "llm_mod.LlmClassifier | None" = None) -> dict:
+    """Una pasada. `paper` = {"capital": USDT, "rearm": bool} activa el operador paper (None = solo datos);
+    `llm` consulta a Claude las noticias dudosas (None = solo la capa rápida)."""
     from ..app import build_sources  # import tardío: evita el ciclo app ↔ research
     clock = clock or SystemClock()
+    limits = limits if limits is not None else limits_mod.load()
     data = Path(data_dir)
     now = clock.time()
     ing = cfg["ingestion"]
@@ -220,7 +265,7 @@ async def collect(data_dir, cfg: dict, env, *, clock=None, sources=None, telegra
     own_session = session is None
     session = session or aiohttp.ClientSession()
     counts: Counter = Counter()
-    new_events, official, health = [], [], {}
+    new_events, official, health, bodies = [], [], {}, {}
     src_state = dict(state.get("sources", {}))
     try:
         polled = await asyncio.gather(*(_poll(s, session, clock, src_state) for s in specs))
@@ -251,11 +296,44 @@ async def collect(data_dir, cfg: dict, env, *, clock=None, sources=None, telegra
                    "is_noise": ev.noise.is_noise, "noise_reasons": list(ev.noise.reasons), "assets": found,
                    "symbols": assets.symbols_for(found, it.assets_hint)}
             new_events.append(rec)
+            bodies[it.id] = (it.body, it.assets_hint)
             counts["nuevas" if ev.dedup.kind == "new" else "copias"] += 1
             counts["ruido"] += ev.noise.is_noise
             if (ev.dedup.kind == "new" and not ev.noise.is_noise and it.tier == TIER_OFFICIAL
                     and spec.category in ALERT_CATEGORIES):
                 official.append(rec)
+
+        # -- clasificación (capa rápida, determinista) ------------------------------------------
+        corroborated = Counter()
+        for e in new_events:                                          # copias vistas en esta misma corrida
+            corroborated[e["cluster"]] = max(corroborated[e["cluster"]], e["cluster_sources"])
+        signals = {}
+        for e in new_events:
+            body, hint = bodies[e["id"]]
+            sig = classify(e["title"], body, tier=e["tier"], cluster_sources=corroborated[e["cluster"]],
+                           hint_assets=hint)
+            e["nlp"], signals[e["id"]] = sig.as_dict(), sig
+            if e["dedup"] == "new" and not e["is_noise"]:
+                counts[f"nlp_{sig.category}"] += 1
+        llm_out = {"consultas": 0, "usadas": 0, "usd": 0.0, "errores": Counter()}
+        if llm is not None and llm.enabled:
+            llm.budget = llm_mod.Budget.from_dict(state.get("llm"))
+            originals = [e for e in new_events if e["dedup"] == "new" and not e["is_noise"]]
+            results = await llm_mod.refine(llm, [(e["title"], bodies[e["id"]][0], signals[e["id"]]) for e in originals])
+            for e, res in zip(originals, results, strict=True):
+                if res is None:
+                    continue
+                llm_out["consultas"] += 1
+                llm_out["usd"] += res.usd
+                if res.signal is None:
+                    llm_out["errores"][res.error] += 1
+                    e["nlp_llm"] = {"error": res.error}
+                    continue
+                llm_out["usadas"] += 1
+                e["nlp_llm"] = {**res.signal.as_dict(), "motivo": (res.raw or {}).get("reason", "")[:200],
+                                "latencia_ms": round(res.latency_ms)}
+                signals[e["id"]] = res.signal                         # la IA propone; el núcleo decide (C-3)
+            state["llm"] = llm.budget.as_dict()
 
         # -- etiquetado -----------------------------------------------------------------------
         pending = state.get("pending", []) + [
@@ -314,7 +392,9 @@ async def collect(data_dir, cfg: dict, env, *, clock=None, sources=None, telegra
         if last is not None and last != day and telegram is not None:   # primera corrida de un día nuevo
             try:
                 evs, reac = await asyncio.to_thread(_digest_inputs, data, last, now)
-                text = digest(last, evs, reac + reactions, health)
+                lines = [await asyncio.to_thread(shadow.paper_line, data, last, m)
+                         for m in (paper or {}).get("mercados", MARKETS)] if paper is not None else []
+                text = digest(last, evs, reac + reactions, health, "\n".join(x for x in lines if x))
             except Exception:                                      # el resumen nunca frena la recolección
                 log.exception("no se pudo armar el resumen de %s", last)
             else:
@@ -327,13 +407,43 @@ async def collect(data_dir, cfg: dict, env, *, clock=None, sources=None, telegra
         state.update(sources=src_state, health=health, counts=dict(sorted(by_day.items())[-14:]),
                      updated_at=round(now), version=__version__, schema=SCHEMA)
         await asyncio.to_thread(_save, data, state, new_events, reactions)
+
+        # -- paper (después de guardar: si falla, los datos ya están) --------------------------
+        paper_out = None
+        if paper is not None:
+            items = [(e, signals[e["id"]]) for e in new_events if e["dedup"] == "new" and not e["is_noise"]]
+            paper_out = {}
+            try:
+                learned, newly = await asyncio.to_thread(learn.update, data, now)
+                for key in newly:
+                    await tg.send(f"🧠 <b>Aprendizaje</b>: apago {esc(learn.describe(learned, key))}. Evidencia "
+                                  "negativa neta de comisiones: el paper deja de operar esa categoría de ese lado.")
+            except Exception as e:                                     # sin aprendizaje se opera con los valores por
+                log.exception("el aprendizaje falló")                  # defecto (que el dueño ya aprobó)
+                learned = {"apagadas": [], "error": f"{type(e).__name__}"}
+            for market in markets(paper, session, paper_urls, candle_urls):
+                try:                                                   # un mercado que falla no frena a los otros
+                    paper_out[market.name] = await shadow.run_paper(
+                        data, items, clock=clock, session=session, limits=limits,
+                        telegram=tg if telegram is not None else None, capital=float(paper.get("capital", 120.0)),
+                        market=market, rearm=bool(paper.get("rearm")), disabled=tuple(learned["apagadas"]),
+                        learned=learned)
+                except Exception as e:                                 # el paper nunca rompe la corrida
+                    log.exception("el operador paper de %s falló", market.name)
+                    paper_out[market.name] = {"error": f"{type(e).__name__}: {redact(e)[:160]}"}
     finally:
         if own_session:
             await session.close()
-    return {"nuevas": counts["nuevas"], "copias": counts["copias"], "ruido": counts["ruido"],
+    out = {"nuevas": counts["nuevas"], "copias": counts["copias"], "ruido": counts["ruido"],
             "etiquetadas": counts["etiquetadas"], "pendientes": len(state["pending"]),
             "fuentes_ok": sum(h["ok"] for h in health.values()), "fuentes": len(health),
             "descartes": {k: v for k, v in sorted(counts.items())
-                          if v and k not in ("nuevas", "copias", "ruido", "etiquetadas")},
+                          if v and k not in ("nuevas", "copias", "ruido", "etiquetadas") and not k.startswith("nlp_")},
+            "categorias": {k.removeprefix("nlp_"): v for k, v in sorted(counts.items()) if k.startswith("nlp_")},
             "velas": {"pedidos": store.requests, **Counter(store.source.values()), "error": len(store.errors)},
             "telegram": tg.sent}
+    if llm_out["consultas"]:
+        out["llm"] = {**llm_out, "usd": round(llm_out["usd"], 6), "errores": dict(llm_out["errores"])}
+    if paper_out is not None:
+        out["paper"] = paper_out
+    return out

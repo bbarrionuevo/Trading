@@ -1,10 +1,10 @@
 # Arquitectura
 
 ```
- fuentes ──► INGESTA ──news.accepted──► INTELIGENCIA ──señal──► RIESGO ──OrderIntent──► EJECUCIÓN ──► venue
- (RSS,       normaliza · dedup ·         (etapa 2)               (etapa 3)  cola acotada   (paper hoy,
-  webhook,   frescura · ruido                                               + núcleo de    real en la
-  replay)        │                                                          seguridad      etapa 4)
+ fuentes ──► INGESTA ──news.accepted──► INTELIGENCIA ──señal──► DECISIÓN Y RIESGO ──OrderIntent──► EJECUCIÓN ──► venue
+ (RSS,       normaliza · dedup ·         clasificador (µs)       vector y alfa · meta-   cola acotada   (paper hoy:
+  webhook,   frescura · ruido            + Claude Haiku si       modelo · triple barrera + núcleo de    MEXC futuros
+  replay)        │                       duda (C-1..C-4)         · ¼-Kelly · libro real  seguridad      y Binance spot)
                  └─news.rejected / news.corroboration                                         │
                                                                                      orders (bus)
    DIARIO encadenado ◄──────────── todo lo anterior ──────────────────────────────────────────┤
@@ -20,11 +20,14 @@
 |---|---|---|
 | `core/` | Reloj inyectable, bus con colas acotadas, medidor de lag, eventos, redacción de secretos | `clock`, `bus`, `looplag`, `events`, `redact` |
 | `ingestion/` | Fuentes y evaluación de cada noticia | `feeds` (parser seguro), `sources` (sondeo), `webhook`, `replay`, `normalize`, `dedup`, `noise`, `catalog`, `engine` |
-| `marketdata/` | Libros L2 y proveedores (estático, grabado, REST público) | `book`, `providers` |
-| `execution/` | Intenciones de orden, venue paper, cartera, servicio, harness | `orders`, `instruments`, `paper`, `portfolio`, `service`, `harness` |
+| `marketdata/` | Libros L2 y proveedores (estático, grabado, REST público), MEXC futuros (público + lectura firmada, sin órdenes), liquidez (spread z, L3, divergencia, Kyle) | `book`, `providers`, `mexc`, `liquidity` |
+| `execution/` | Intenciones de orden, venue paper, cartera, servicio, harness, costos (raíz cuadrada y Almgren-Chriss) | `orders`, `instruments`, `paper`, `portfolio`, `service`, `harness`, `costs` |
 | `alerts/` | Telegram fail-safe | `model`, `telegram`, `dispatcher` |
 | `telemetry/` | Diario, latido, logs | `journal`, `heartbeat`, `logs` |
-| `research/` | Recolector de datos de entrenamiento: activos mencionados, reacción del precio con velas públicas, corridas cortas con estado | `assets`, `labeler`, `collector` |
+| `intelligence/` | Señal de cada noticia: capa rápida determinista, capa lenta con Claude Haiku 5.5 (esquema, grounding, presupuesto), vector C/P/I/M/D con decaimiento del alfa, meta-modelo p = P(TP antes que SL) | `classifier`, `llm`, `vector`, `meta` |
+| `decision/` | Núcleo de decisión determinista (la IA no decide, C-3) y frenos con estado | `policy` (noticia → evento → plan → libro), `barriers` (triple barrera), `risk` (A-4) |
+| `research/` | Recolector de datos de entrenamiento, operador paper por corridas, aprendizaje y evaluación | `assets`, `labeler` (reacciones y triple barrera), `collector`, `shadow` (paper por corridas, un adaptador por mercado), `futures` (MEXC), `learn` (solo reduce riesgo), `evaluation` (PSR/DSR) |
+| `live.py` | Operador paper en vivo para la PC 24/7: el mismo núcleo, reaccionando en segundos y vigilando barreras cada segundo | `LiveTrader`, `learn_loop` |
 | `limits.py` · `safety.py` | **Sobre de riesgo y núcleo de seguridad** (rutas protegidas) | |
 | `config.py` · `paths.py` · `app.py` · `__main__.py` | Configuración, carpeta privada, ensamblado, CLI | |
 
@@ -51,12 +54,22 @@
   - tamaños acotados;
   - el texto de una noticia nunca es una instrucción (C-2).
 
+## Dónde corre
+
+| | PC del dueño (24/7) | GitHub Actions (respaldo) |
+|---|---|---|
+| Qué | `tradingagent run`: ingesta continua + operador en vivo (`live.py`) + recolector cada 15 min | `collect --paper` cada pocos minutos: datos, etiquetas, aprendizaje y paper por corridas |
+| Latencia noticia → decisión | segundos (sondeo de 30-60 s o webhook) | minutos (cron) |
+| Para qué sirve | Capturar el alfa (vida media de 120 s) | Medir y aprender aunque la PC esté apagada; datos públicos en la rama `data` |
+| Estado | `%LOCALAPPDATA%\TRADING\paper-vivo\<mercado>\` | `paper/<mercado>/` en la rama `data` |
+
 ## Presupuesto de latencia (objetivo, etapas 2-3)
 
 | Paso | Objetivo |
 |---|---|
 | Llegada → evaluación de ingesta | < 1 ms por noticia (medido: p99 < 5 ms con 1.000 seguidas) |
-| Capa rápida de NLP | < 5 ms |
+| Capa rápida de NLP | < 5 ms (medido: p95 < 5 ms con 1.000 titulares) |
+| Capa lenta (Claude Haiku 5.5, solo noticias dudosas) | ~1-2 s, tope 8 s; si no responde, decide la rápida |
 | Riesgo + validación de mercado | < 10 ms (libro en caché ≤ 250 ms) |
 | Envío al venue | latencia de red del exchange (paper: lognormal, mediana 80 ms) |
 

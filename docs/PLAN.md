@@ -30,7 +30,14 @@ Cada etapa se cierra con criterios verificables (tests, métricas), no con "est�
 - **Pendiente en la PC:** enviar el mensaje de prueba con tu bot real y leer las fuentes reales
   (`sources --check`). Desde la nube, esos hosts están bloqueados por la política de red.
 
-## Etapa 2 · Inteligencia (NLP y eventos)
+## Etapa 2 · Inteligencia (NLP y eventos) — en marcha (3-nov-2026)
+
+**Hecho:** capa rápida determinista con certeza (`intelligence/classifier.py`), capa lenta con Claude
+Haiku 5.5 solo para lo dudoso (`llm.py`: esquema, grounding, presupuesto, sin reintentos), vector de
+evento C/P/I/M/D con decaimiento del alfa (`vector.py`) y meta-modelo calibrable que solo baja
+(`meta.py`). El recolector guarda `nlp` y `nlp_llm` de cada noticia y la triple barrera de cada reacción.
+**Falta:** el conjunto etiquetado a mano para medir la exactitud (≥ 85 %) y calibrar la confianza con
+semanas de datos.
 
 Para cada noticia aceptada, el pipeline:
 
@@ -63,7 +70,14 @@ cuánto ya se movió antes de publicarse (`pre_10m`) y cuánto queda por captura
 - Latencia p95 de la capa rápida < 5 ms.
 - El modelo nunca recibe ni devuelve órdenes.
 
-## Etapa 3 · Motor de decisión y riesgo
+## Etapa 3 · Motor de decisión y riesgo — en marcha (3-nov-2026)
+
+**Hecho:** `decision/policy.py` (noticia → evento → plan → libro), triple barrera por σ, ¼-Kelly con b neto
+de costos y paridad de volatilidad, microestructura (spread z, L3, divergencia, Kyle), costos (raíz
+cuadrada y Almgren-Chriss con urgencia), frenos con estado que cierran todo (diario y halt), PSR/DSR por
+versión, operador paper por corridas (Binance spot y MEXC futuros, con funding y liquidación) y en vivo
+para la PC (`live.py`). **Falta:** la reproducción de 30 días de noticias grabadas con informe de
+resultado neto, y la evidencia de F-3 (60 operaciones, 21 días, DSR ≥ 0,95).
 
 - **Señal a intención:** solo si convicción × impacto esperado supera el umbral y la noticia sigue fresca.
 - **Validación de mercado (B-4):** spread, profundidad y movimiento ya ocurrido. Si el precio ya se

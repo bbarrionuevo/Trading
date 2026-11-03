@@ -34,6 +34,8 @@ DEFAULTS = {
         "seed": 0,
     },
     "execution": {"max_orders_per_min": 30, "max_queue": 100},
+    # operador paper en vivo (live.py): reacciona a cada noticia y vigila las barreras cada segundo
+    "trader": {"enabled": True, "mercado": "mexc-futuros", "capital_usdt": 120, "llm": True, "aprender": True},
     "alerts": {"telegram": True, "rate_per_s": 1.0, "burst": 3, "max_queue": 500},
 }
 
@@ -52,6 +54,7 @@ RANGES = {
     ("paper", "stop_slippage_bps"): (1, 500),
     ("execution", "max_orders_per_min"): (1, 120),
     ("alerts", "rate_per_s"): (0.05, 30),
+    ("trader", "capital_usdt"): (10, 10_000_000),
 }
 
 
@@ -85,6 +88,8 @@ def validate(cfg: dict) -> list[str]:
             errs.append(f"ingestion.extra_sources[{i}]: necesita id y url http(s)")
     if not cfg["paper"].get("symbols"):
         errs.append("paper.symbols: vacío")
+    if cfg["trader"].get("mercado") not in ("mexc-futuros", "binance-spot"):
+        errs.append("trader.mercado: tiene que ser mexc-futuros o binance-spot")
     return errs
 
 

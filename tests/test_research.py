@@ -5,9 +5,6 @@ import contextlib
 import copy
 import json
 import time
-from collections import Counter
-from datetime import UTC, datetime
-from email.utils import format_datetime
 
 import aiohttp
 import pytest
@@ -15,13 +12,13 @@ import yaml
 from aiohttp import web
 
 from conftest import serve
+from fake_feeds import Feeds, specs
 from fake_telegram import TOKEN, FakeTelegram
 from tradingagent import config
 from tradingagent.__main__ import main as cli
 from tradingagent.alerts.telegram import TelegramTransport
 from tradingagent.core.clock import ManualClock
 from tradingagent.ingestion.catalog import DEFAULT_SOURCES
-from tradingagent.ingestion.sources import SourceSpec
 from tradingagent.research import assets
 from tradingagent.research.collector import collect, read_shards
 from tradingagent.research.labeler import MIN, CandleStore, basis, merge, minute, reaction
@@ -149,46 +146,6 @@ async def test_velas_por_rango_combinado_bloques_de_1000_y_respaldo_coinbase():
     assert len(btc) == 2 and all(r[3] <= 1000 and r[2] - r[1] <= 999 * MIN for r in btc)   # nunca más de 1000 velas
     assert len(store.candles["ETHUSDT"]) == 91
     assert "XYZUSDT" in store.errors and "HTTP 400" in store.errors["XYZUSDT"]
-
-
-class Feeds:
-    """Servidor RSS con ETag: cada fuente tiene su lista de entradas, la más nueva primero."""
-
-    def __init__(self):
-        self.entries: dict[str, list[tuple]] = {"media": [], "copia": [], "fed": []}
-        self.version: Counter = Counter()
-        self.requests: list[tuple[str, str | None]] = []
-        self.down = False
-
-    def add(self, name, guid, title, published, body=""):
-        self.entries[name].insert(0, (guid, title, published, body))
-        self.version[name] += 1
-
-    async def handler(self, request):
-        name = request.match_info["name"]
-        self.requests.append((name, request.headers.get("If-None-Match")))
-        if self.down:
-            return web.Response(status=503)
-        etag = f'"{name}-{self.version[name]}"'
-        if request.headers.get("If-None-Match") == etag:
-            return web.Response(status=304)
-        items = "".join(
-            f"<item><guid>{g}</guid><title>{t}</title><link>https://ex.com/{name}/{g}</link>"
-            f"<pubDate>{format_datetime(datetime.fromtimestamp(p, UTC), usegmt=True)}</pubDate>"
-            f"<description>{b}</description></item>" for g, t, p, b in self.entries[name])
-        return web.Response(body=f"<rss><channel>{items}</channel></rss>".encode(), headers={"ETag": etag},
-                            content_type="application/rss+xml")
-
-    def app(self):
-        a = web.Application()
-        a.router.add_get("/{name}", self.handler)
-        return a
-
-
-def specs(base):
-    return [SourceSpec("media", base + "/media", category="cripto"),
-            SourceSpec("copia", base + "/copia", category="cripto"),
-            SourceSpec("fed.monetary", base + "/fed", tier=1, category="macro", assets=("BTC", "ETH"))]
 
 
 @pytest.fixture

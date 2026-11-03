@@ -99,6 +99,7 @@ async def test_agente_completo_arranca_avisa_lee_opera_late_y_cierra(tmp_path, c
         cfg["heartbeat_s"] = 2
         env = {"TELEGRAM_BOT_TOKEN": TOKEN, "TELEGRAM_CHAT_ID": "777"}
         lines = []
+        cfg["trader"]["enabled"] = False                         # sin mercado real en este test
         agent = Agent(cfg, env, sources=[SourceSpec("prueba", rss_url + "/rss", interval_s=0.3, max_age_s=300)],
                       book_provider=FreshBooks(), telegram_base_url=tg_url, printer=lines.append)
         run = asyncio.create_task(agent.run())
@@ -165,6 +166,7 @@ def test_harness_de_escenario_ejemplo():
 
 async def test_cancelar_al_agente_como_ctrl_c_en_windows_cierra_en_orden():
     cfg = config.load(None)
+    cfg["trader"]["enabled"] = False
     agent = Agent(cfg, {}, sources=[], book_provider=FreshBooks(), printer=lambda *_: None)
     run = asyncio.create_task(agent.run())
     for _ in range(200):

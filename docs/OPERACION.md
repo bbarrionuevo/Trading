@@ -63,18 +63,68 @@ propias, intervalos y apagados van en `%LOCALAPPDATA%\TRADING\config.yaml`; hay 
 
 Al arrancar:
 
-- Llega por Telegram "✅ Agente iniciado · modo PAPER · N/M fuentes activas".
+- Llega por Telegram "✅ Agente iniciado · modo PAPER · N/M fuentes activas", y la primera vez
+  "🧪 Operador paper EN VIVO · mexc-futuros · 120 USDT simulados".
 - Cada 15 s aparece en consola el latido (♥ …).
-- Cada noticia nueva que pasa los filtros aparece como 📰.
+- Cada noticia nueva que pasa los filtros aparece como 📰 y se evalúa en el momento.
 
 Ctrl+C cierra en orden.
 
-Mientras no exista la etapa 2 (inteligencia), el agente lee, filtra y registra, pero no genera órdenes
-solo. El paper se puede ejercitar con el harness:
+**Qué hace solo** (`live.py`, el mismo núcleo que usa GitHub Actions):
+
+1. Clasifica cada noticia en microsegundos. Si la noticia es dudosa y hay clave de Claude, le pregunta a
+   Claude Haiku 5.5 (máximo 8 s y 5 USD por día).
+2. Calcula el vector de evento y el alfa, que vale la mitad cada 120 s, y el meta-modelo (p ≥ 0,60).
+3. Calcula la triple barrera por volatilidad y los costos, y el tamaño por ¼-Kelly.
+4. Revisa el libro real: spread y su z-score, profundidad, L3, divergencia y lambda de Kyle.
+5. Abre en paper: largo o corto en futuros de MEXC a 1x. Si algo falla, no entra, y el motivo queda
+   registrado.
+6. Cada segundo vigila stop, take-profit y expiración contra el libro real. Sale también si llega una
+   noticia en contra.
+7. Frenos: si pierde 2 % en el día o cae 8 % desde el máximo, cierra todo. Tres pérdidas seguidas: una
+   hora de pausa.
+8. Cada 15 min, en segundo plano, mide la reacción del precio y aprende. El aprendizaje solo apaga lo
+   que pierde: nunca agranda nada.
+
+Todo queda en `%LOCALAPPDATA%\TRADING\paper-vivo\mexc-futuros\`, con `estado.json`, `operaciones/`
+y `decisiones/` (cada noticia con su análisis y su motivo). Un reinicio no borra nada.
+
+El paper también se puede ejercitar con el harness:
 
 ```powershell
 .\.venv\Scripts\python -m tradingagent paper-sim examples\escenario_noticia.jsonl
 ```
+
+## 24/7 en la PC (recomendado: es lo que captura el alfa)
+
+Con el cron de GitHub la noticia llega minutos tarde y el alfa ya se fue. En la PC, prendida y conectada,
+el agente reacciona en segundos. Para que arranque solo con Windows y se reinicie si se cae:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\TRADING\deploy\windows\instalar-agente.ps1"
+```
+
+Correlo una vez, en PowerShell **como administrador**. Instala la tarea programada `trading-agente`
+(nunca `nexus-*`), que arranca con Windows y al iniciar sesión y se reinicia al minuto si se cae. Para
+quitarla: `deploy\windows\quitar-agente.ps1`.
+
+**Claves en `%LOCALAPPDATA%\TRADING\.env`** (plantilla en `.env.example`):
+
+| Clave | Para qué | Obligatoria |
+|---|---|---|
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Avisos | Sí, para enterarte |
+| `ANTHROPIC_API_KEY` | Claude para las noticias dudosas | No (sin ella decide el clasificador local) |
+| `MEXC_ACCESS_KEY`, `MEXC_SECRET_KEY` | Leer las comisiones reales de tu cuenta (D-5) | No (sin ellas usa las públicas) |
+
+Las claves de MEXC tienen que ser **de solo lectura**: en MEXC, al crear la API, sin permiso de trading
+ni de retiro. El programa no tiene código para mandar órdenes ni retirar: el test `test_a3` lo verifica
+en cada cambio.
+
+**Cambiar de mercado:** en `%LOCALAPPDATA%\TRADING\config.yaml` poné `trader: {mercado: binance-spot}`
+(o `enabled: false` para que solo lea y registre).
+
+**Diagnóstico de MEXC:** `.\.venv\Scripts\python -m tradingagent mexc-check` muestra contratos,
+comisiones públicas y funding, y si las claves leen la cuenta. Nunca muestra saldos.
 
 ## Parada de emergencia y verificación
 
@@ -85,9 +135,10 @@ solo. El paper se puede ejercitar con el harness:
 
 ## Entrenamiento en la nube (GitHub Actions, sin la PC)
 
-Mientras el agente no corre en la PC, un workflow junta los datos con los que se entrena la etapa 2
-(`.github/workflows/recoleccion.yml`). Corre cada 15 minutos, a los :04, :19, :34 y :49 (GitHub a veces
-lo demora unos minutos), y en cada corrida:
+Un workflow junta los datos con los que aprende el agente (`.github/workflows/recoleccion.yml`). Es el
+respaldo de la PC: aunque la PC esté apagada, los datos se siguen juntando y el paper por corridas se
+sigue midiendo. GitHub a veces demora el cron (el 2-nov tardó horas en dar la primera corrida
+programada). En cada corrida:
 
 1. Lee las fuentes y guarda las noticias nuevas de hasta 3 horas en la rama `data`. Las copias de otras
    fuentes y lo que parece ruido también quedan, marcados.
