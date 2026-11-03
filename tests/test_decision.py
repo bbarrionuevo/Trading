@@ -59,10 +59,36 @@ def test_modificadores_de_confianza():
 
 
 def test_grounding_sin_activos_inventados():
-    s = classify("Exchange hacked, millions drained")                       # no nombra activo: referencia BTC
-    assert s.assets == ("BTC",) and s.confidence < classify("Exchange hacked, millions in SOL drained").confidence
-    assert classify("New token XYZ will list on Binance", hint_assets=("XYZ", "NOEXISTE")).assets == ("BTC",)
+    s = classify("SEC sues crypto exchange over unregistered securities")    # de mercado, sin activo: BTC de referencia
+    assert s.assets == ("BTC",) and s.confidence < classify("SEC sues Binance over BNB sales").confidence
+    assert classify("Exchange hacked, millions drained").assets == ()       # un hackeo cualquiera: nada que operar
+    assert classify("New token XYZ will list on Binance", hint_assets=("XYZ", "NOEXISTE")).assets == ()
     assert classify("Listing update", hint_assets=("ETH",)).assets == ("ETH",)              # de la fuente, si existe
+    halt = classify("Exchange halts withdrawals after hack")                # un hackeo que también es quiebra: mercado
+    assert halt.assets == ("BTC",)
+
+
+@pytest.mark.parametrize("title", [                                         # noticias reales de la PC, 3-nov
+    "Ferrari raises full-year guidance as Q4 assumptions include personalization",
+    "3M authorizes $7.5B share buyback",
+    "Earnings call transcript: Fibra Mty tops Q3 2026 forecasts on acquisitions",
+    "Epidemic of Hacked Freezers Spreads Across Europe",
+    "Perma-Pipe subsidiary to acquire 51% stake in Indian coating venture",
+    "LTC reports strong Q3 earnings on SHOP acquisitions; 2026 guidance fails to impress",
+    "LTC Properties FFO of $0.73 beats by $0.03, revenue of $115.25M beats",
+])
+def test_empresas_y_hechos_ajenos_no_caen_en_una_cripto(title):
+    s = classify(title)
+    assert not ({"BTC", "LTC"} & set(s.assets)), s
+    assert s.conviction == 0 or not s.assets
+
+
+def test_resultados_son_de_empresas_no_de_criptos():
+    s = classify("Bitcoin miner beats Q3 estimates as BTC production rises")
+    assert s.category == "resultados" and s.assets == ()
+    assert classify("Ethereum ETF inflows top estimates").category == "etf"        # no son resultados: ETH queda
+    assert classify("Ethereum ETF inflows top estimates").assets == ("ETH",)
+    assert classify("ETH Zurich researchers find flaw in wallets").assets == ()
 
 
 def test_c2_el_texto_nunca_es_una_instruccion():

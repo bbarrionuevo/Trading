@@ -72,6 +72,7 @@ class LiveTrader:
         st = await asyncio.to_thread(paths.read_json, self.base / shadow.STATE, None)
         self.first = st is None
         self.st = st or shadow.new_state(self.capital, now, self.market)
+        self.st["strategy_tag"] = shadow.STRATEGY_TAG     # el tablero muestra la evidencia de la versión que corre
         if self.llm is not None and not self.real:     # el tope diario de la IA sobrevive a reinicios (C-4); lo
             self.llm.budget = llm_mod.Budget.from_dict(self.st.get("llm"))   # lleva la cuenta de práctica
         self.pf = shadow._portfolio(self.st, self.market)

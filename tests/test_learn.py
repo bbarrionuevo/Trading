@@ -88,6 +88,24 @@ def test_update_cada_hora_y_avisa_lo_recien_apagado(tmp_path):
     assert saved["apagadas"] == ["listado:largo"] and saved["calculado"] == T0 + 7200
 
 
+def test_solo_aprende_de_lo_que_se_habria_operado():
+    """3-nov en la PC: 46 de 47 muestras del meta-modelo eran noticias que nunca se iban a operar (BTC de
+    referencia en noticias ajenas, alfas casi cero). Con expiración casi nunca tocan el TP: κ quedó en 0 y frenó
+    todo. Esas no cuentan, ni para el meta-modelo ni para apagar categorías."""
+    junk, re_junk = make(40, "Epidemic of hacked freezers spreads across Europe", -0.01, sym="BTCUSDT")
+    for e in junk:
+        e["nlp"].update(category="hack", polarity=-0.8)                         # clasificación vieja: BTC de referencia
+    stale, re_stale = make(35, "Binance will list SOL", 0.0, sym="SOLUSDT", seed=4, start=100)
+    for e in stale:
+        e["published_at"] = e["received_at"] - 290                           # alfa casi vencido al entrar
+    for r in re_junk + re_stale:
+        r["tb_corto"] = r["tb_largo"] = 0                                     # expiró sin tocar nada
+    res = learn.evaluate(junk + stale, re_junk + re_stale)
+    assert "hack:corto" not in res["categorias"] and res["apagadas"] == []
+    assert "global" not in res["meta"]                                        # nada que se hubiera operado: κ = 1
+    assert learn.meta.MetaModel(res["meta"]).kappa("listado", "largo") == 1.0
+
+
 def test_meta_modelo_aprende_de_la_triple_barrera_y_solo_baja():
     events, reactions = make(60, "Binance will list SOL", 0.0)
     for e in events:

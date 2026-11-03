@@ -22,6 +22,9 @@ def test_solo_se_consulta_lo_que_la_capa_rapida_no_resuelve():
     for t in ("Something strange is going on with Solana", "Will Bitcoin hit $200k this year?",
               "Bitcoin price analysis: what to expect", "Weekly podcast"):           # vago, pregunta, opinión
         assert not llm.needs_llm(classify(t), t), t                                 # o sin activo: no se paga
+    for t in ("Ferrari reportedly may raise full-year guidance",                   # una empresa fuera del universo
+              "Crypto docs host reportedly hacked, users urged to rotate keys"):    # un hackeo sin activo
+        assert not llm.needs_llm(classify(t), t), t                                 # la IA tampoco hallaría activo
     assert llm.api_key({"CLAUDE_API_KEY": "k"}) == "k" and llm.api_key({}) is None
 
 

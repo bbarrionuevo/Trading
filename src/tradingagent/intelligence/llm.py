@@ -125,8 +125,11 @@ def needs_llm(sig: Signal, title: str) -> bool:
     no reconoce sobre un activo conocido. Preguntas, opiniones y titulares sin un hecho: no."""
     if title.rstrip().endswith("?"):
         return False
-    if sig.category in NOT_TRADABLE:
-        return bool(asset_mod.detect(title)) and bool(EVENT_CUES.search(title))
+    if sig.category in NOT_TRADABLE:                # (los activos que la capa rápida descartó, como LTC en los
+        named = set(asset_mod.detect(title)) & set(sig.assets)     # resultados de LTC Properties, no cuentan)
+        return bool(named) and bool(EVENT_CUES.search(title))
+    if not sig.assets:              # el hecho de algo que no está en el universo: la IA tampoco encontraría activo
+        return False
     return sig.certainty < 0.999
 
 

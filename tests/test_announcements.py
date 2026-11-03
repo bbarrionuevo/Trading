@@ -83,6 +83,14 @@ def test_universo_con_monedas_chicas_solo_por_su_ticker_escrito():
     assert assets.detect("Mars mission launches") == []
 
 
+def test_un_ticker_sin_letras_no_es_un_monto_en_dolares():
+    assets.register([Entry("4", "4_USDT", "cripto", 114_534, liquid=False), Entry("FOO", "FOO_USDT", "cripto", 5e6)])
+    for t in ("Cvr Energy plans $4.2B Marathon refinery deal",                # 3-nov en la PC: eran la moneda "4"
+              "Comscore GAAP EPS of -$4.26 misses by $3.70", "Comscore earnings missed by $4.46"):
+        assert "4" not in assets.detect(t), t
+    assert assets.known("4") and assets.detect("Binance will list FOO (FOO)") == ["FOO"]
+
+
 async def test_prueba_de_red_informa_que_fuentes_se_leen_desde_la_pc():
     from tradingagent.research.probe import probe
 

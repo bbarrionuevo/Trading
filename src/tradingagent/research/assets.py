@@ -40,10 +40,11 @@ _TICKER_RE = {a: re.compile(r"(?<![A-Za-z0-9])\$?(" + "|".join(tickers) + r")(?!
 
 
 # Nombres de empresas, productos u otras monedas que contienen el nombre de un activo y NO son ese activo
-# (en la PC, el 3-nov, "Mercado Bitcoin", un exchange de Brasil, abrió un corto en BTC).
+# (en la PC, el 3-nov, "Mercado Bitcoin", un exchange de Brasil, abrió un corto en BTC; "LTC Properties", una
+# inmobiliaria, se tomó como Litecoin; ETH Zurich es una universidad).
 _NOT_ASSET = re.compile(
     r"(?i)\b(mercado bitcoin|bitcoin (cash|sv|gold|depot|suisse|magazine|well|group)|bitcoin\.com|"
-    r"ethereum (classic|name service|pow))\b|"
+    r"ethereum (classic|name service|pow)|ltc properties|eth z(u|ü)rich)\b|"
     r"\([A-Z, ]*마켓\)")                                  # Upbit: "(KRW, BTC, USDT 마켓)" son mercados, no la moneda
 
 
@@ -67,10 +68,13 @@ def register(entries) -> int:
     for e in extra:
         if e.names:
             _EXTRA_NAME_RE[e.key] = re.compile(r"\b(" + "|".join(map(re.escape, e.names)) + r")\b", re.IGNORECASE)
-    if not _EXTRA:
+    # Un ticker sin letras no se puede reconocer en un texto: la moneda "4" de MEXC aparecía en "$4.2B" o en
+    # "EPS of -$4.26" (3-nov). Sigue en el universo (la IA puede nombrarla), pero el texto no la detecta.
+    tickers = [k for k in _EXTRA if any(c.isalpha() for c in k)]
+    if not tickers:
         _EXTRA_TICKER_RE = None
-        return 0
-    alt = "|".join(map(re.escape, sorted(_EXTRA, key=len, reverse=True)))
+        return len(_EXTRA)
+    alt = "|".join(map(re.escape, sorted(tickers, key=len, reverse=True)))
     _EXTRA_TICKER_RE = re.compile(
         rf"\$({alt})(?![A-Za-z0-9])|\(({alt})\)|(?<![A-Za-z0-9])({alt})(?=\s+(?:shares|stock|stocks|token|tokens|coin|"
         rf"futures)\b)|(?:NASDAQ|NYSE|Nasdaq|Nyse)\s*:\s*({alt})(?![A-Za-z0-9])|(?<![A-Za-z0-9])({alt})/USDT?\b")
