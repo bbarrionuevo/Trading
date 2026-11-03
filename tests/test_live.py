@@ -219,6 +219,32 @@ async def test_opera_la_accion_que_mueve_la_noticia_con_el_universo_de_mexc(tmp_
             await llm.close()
 
 
+async def test_el_universo_se_mira_cada_10_minutos_no_en_cada_vuelta(tmp_path):
+    """3-nov en la PC: releerlo cada 30 s costaba ~17 ms del bucle por cuenta y llenaba el log."""
+    from tradingagent import live
+
+    clock = ManualClock(T0 + 600)
+    mk = FakeMexc(lambda sym, m: {"BTC_USDT": 100_000.0, "ETH_USDT": 4_000.0, "SOL_USDT": 150.0}[sym], clock)
+    home, alerts = tmp_path / "home", Alerts()
+    async with serve(mk.app()) as url, aiohttp.ClientSession() as session:
+        t = await make(session, url, clock, home, alerts)                       # al arrancar, se carga
+        calls = []
+        real = t.market.load_universe
+
+        async def counting(*a, **kw):
+            calls.append(clock.time())
+            return await real(*a, **kw)
+
+        t.market.load_universe = counting
+        for _ in range(3):
+            await t.housekeeping()                                              # vueltas de 30 s: no se relee
+            clock.advance(30)
+        assert calls == []
+        clock.advance(live.UNIVERSE_EVERY_S)
+        await t.housekeeping()
+        assert len(calls) == 1
+
+
 async def test_no_corre_detras_del_precio_si_la_noticia_ya_se_movio(tmp_path):
     """Si desde la publicación el precio ya recorrió el objetivo, la ganancia ya la tomaron otros; si fue en
     contra más que el stop, el mercado no le cree a la noticia. En los dos casos no se entra."""

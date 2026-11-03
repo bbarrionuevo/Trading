@@ -391,3 +391,40 @@ async def test_estudio_de_listados_mide_la_reaccion_en_mexc():
     assert kinds["listado_spot"]["simbolo_mexc"] == "BTC_USDT"
     assert kinds["listado_spot"]["reaccion"]["r60"] > 0.15                  # subió 20 % después del anuncio
     assert rep["resumen"]["listado_spot"]["r60"]["positivos"] == 1
+
+
+async def test_estudio_de_listados_de_bybit():
+    import json as _json
+
+    from fake_mexc import FakeMexc
+    from tradingagent.research.history import listing_study
+
+    t_ann = 1793700000
+    clock = ManualClock(t_ann + 6 * 3600)
+    mk = FakeMexc(lambda sym, m: 100.0 * (1.1 if m >= (t_ann + 300) * 1000 else 1.0), clock)
+    ms = t_ann * 1000
+    arts = [{"title": "Bybit to List KOR Protocol (BTC) on Spot", "publishTime": ms},          # formato real, 3-nov
+            {"title": "BTC Token Splash: Grab a share of the prize pool", "publishTime": ms + 9},
+            {"title": "Bybit to List KOR Protocol (BTC) on Spot", "publishTime": ms + 3600_000},  # repetido: el primero
+            {"title": "New listing: Listing of ETHUSDT on Bybit Perpetual on Oct 16, 2026", "publishTime": ms},
+            {"title": "New listing: AXISUSDT Perpetual Contract in Innovation Zone", "publishTime": ms},
+            {"title": "New listing: Listing of PFEUSDT on Bybit TradFi Perpetual on Nov 3", "publishTime": ms},
+            {"title": "Bybit to List Old (OLD) on Spot", "publishTime": (t_ann - 40 * 86400) * 1000}]   # fuera de fecha
+    more = [{"title": "Bybit to  List GROVE (SOL) on Spot", "publishTime": ms - 86400_000},      # doble espacio, real
+            {"title": "[Selected regions only] New listing: XRP/USDT | Grab a share of the prize", "publishTime": ms}]
+    pages = {"1": arts, "2": more}                                  # la vieja de la página 1 no corta la búsqueda
+
+    async def page(request):
+        body = {"retCode": 0, "result": {"list": pages.get(request.query.get("page"), [])}}
+        return web.Response(text=_json.dumps(body), content_type="application/json")
+
+    app = mk.app()
+    app.router.add_get("/bybit", page)
+    async with serve(app) as url, aiohttp.ClientSession() as s:
+        rep = await listing_study(s, days=30, now=clock.time(), page_url=url + "/bybit?page={page}", base=url,
+                                  exchange="bybit")
+    got = sorted((e["tipo"], e["ticker"]) for e in rep["eventos"])
+    assert got == [("futuros", "AXIS"), ("futuros", "ETH"), ("listado_spot", "BTC"), ("listado_spot", "SOL"),
+                   ("listado_spot", "XRP")]                                                 # sin TradFi ni promos
+    spot = next(e for e in rep["eventos"] if e["ticker"] == "BTC")
+    assert spot["t"] == t_ann and spot["reaccion"]["r60"] > 0.05 and rep["exchange"] == "bybit"

@@ -359,16 +359,18 @@ def cmd_estudio_listados(args) -> int:
 
     async def main():
         async with aiohttp.ClientSession(trust_env=True) as session:          # respeta un proxy si lo hay
-            return await listing_study(session, days=args.dias)
+            return await listing_study(session, days=args.dias, exchange=args.exchange)
 
     try:
         rep = asyncio.run(main())
     except Exception as e:                                               # noqa: BLE001 (sin red, se avisa claro)
         print(f"No pude hacer el estudio (¿hay internet?): {type(e).__name__}: {str(e)[:160]}")
         return 1
-    out = paths.home() / "datos" / "estudios" / "listados.json"
+    name = "Binance" if args.exchange == "binance" else "Bybit"
+    out = paths.home() / "datos" / "estudios" / ("listados.json" if args.exchange == "binance"
+                                                 else f"listados-{args.exchange}.json")
     paths.write_json_atomic(out, rep)
-    names = {"listado_spot": "Listados spot de Binance", "futuros": "Lanzamientos de futuros de Binance"}
+    names = {"listado_spot": f"Listados spot de {name}", "futuros": f"Lanzamientos de futuros de {name}"}
     for kind, stats in rep["resumen"].items():
         cells = " · ".join(f"{k[1:]} min {v['mediana'] * 100:+.1f} % ({v['positivos']}/{v['n']} suben)"
                            for k, v in stats.items() if k.startswith("r"))
@@ -561,6 +563,8 @@ def main(argv=None) -> int:
                     "precios reales de MEXC, ninguna orden (capital hasta el tope del sobre, hasta 30 días)")
     es = sub.add_parser("estudio-listados")
     es.add_argument("--dias", type=int, default=180)
+    es.add_argument("--exchange", choices=("binance", "bybit"), default="binance",
+                    help="de quién son los avisos (Bybit solo responde desde la PC)")
     ct = sub.add_parser("cerrar-todo")
     ct.add_argument("--simbolos", default="BTC_USDT,ETH_USDT,SOL_USDT")
     sub.add_parser("llm-check")

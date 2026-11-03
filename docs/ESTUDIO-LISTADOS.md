@@ -43,6 +43,25 @@ mercado". Se repite en la PC con `python -m tradingagent estudio-listados` (deja
 Listados spot de OKX con contrato en MEXC (n = 4): mediana +0,2 % a 5 min, −0,2 % a 15 min y −0,3 % a 60 min:
 **no mueven el precio**. Los anuncios de Bitget son casi todos de acciones. Las dos fuentes quedan apagadas.
 
+### Bybit (3-nov, desde la PC)
+
+Su API de avisos solo responde desde la PC (desde la nube está bloqueada). Se repite con
+`python -m tradingagent estudio-listados --exchange bybit` (detalle en `datos\estudios\listados-bybit.json`).
+Últimos 180 días, leyendo todos los avisos (1.831, no vienen en orden estricto):
+
+| | Avisos | Con futuro en MEXC | 5 min | 15 min | 60 min | 4 h | pico en 4 h |
+|---|---|---|---|---|---|---|---|
+| Listado spot ("Bybit to List Foo (FOO) on Spot") | 10 | 4 | +0,4 % (4/4 suben) | +0,0 % (2/4) | +0,7 % (3/4) | −5,5 % (1/4) | +3,1 % |
+| Perpetuo de una cripto (sin los "TradFi", que son acciones) | 192 | 48 | +0,03 % (26/48) | +0,05 % (26/48) | +0,2 % (28/48) | −0,0 % (24/48) | +2,5 % |
+
+(medianas)
+
+- Spot: FOGO +0,1 %, Billions +0,3 %, Arcium +0,5 % (−15,7 % a la hora) y Pons +1,4 % a 5 minutos. Las otras 6
+  monedas ni cotizaban en MEXC futuros: no se podrían operar.
+- Perpetuos: sin efecto; el pico en 4 h es la volatilidad normal de una moneda chica.
+- **Conclusión: Bybit no mueve el precio como Binance (+12,6 % a 5 min). No se suma como fuente**, igual que
+  OKX. La prueba de red de la PC lo sigue leyendo por si cambia.
+
 ## Qué cambió en el sistema
 
 1. **Los listados no se frenan por "ya recorrió el objetivo"** (`policy.DRIFT`): el impulso sigue alrededor de
@@ -63,5 +82,5 @@ Listados spot de OKX con contrato en MEXC (n = 4): mediana +0,2 % a 5 min, −0,
   midiendo cada operación y apaga una categoría si la evidencia sale en contra.
 - Las monedas chicas tienen libros finos: el stop puede ejecutarse peor. El riesgo por operación sigue siendo
   1 % del saldo al stop, y los frenos del día y del drawdown siguen iguales.
-- Falta: Upbit y Bithumb (bloquean por país desde la nube; quizá desde la PC sí) y los datos macro (Reserva
-  Federal, inflación).
+- Falta: Bithumb (bloquea por país desde la nube; quizá desde la PC sí), un estudio de Upbit (ya es fuente
+  desde el PR #22) y los datos macro (Reserva Federal, inflación).
