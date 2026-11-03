@@ -194,7 +194,8 @@ class LiveTrader:
         sig = classify(ev["title"], ev["body"], tier=ev["tier"], cluster_sources=ev["cluster_sources"],
                        hint_assets=tuple(ev["assets_hint"]))
         ai_on = self.llm is not None and self.llm.enabled
-        if ai_on and (llm_mod.needs_llm(sig, ev["title"]) or self.rules_would_enter(ev, sig)):
+        rules_in = self.rules_would_enter(ev, sig)                    # ¿las reglas solas abrirían algo?
+        if ai_on and (llm_mod.needs_llm(sig, ev["title"]) or rules_in):
             skip = self.worth_asking(ev, sig)
             if skip:                                                   # no cambiaría nada: no se paga
                 self.counts["ia_evitada"] = self.counts.get("ia_evitada", 0) + 1
@@ -205,8 +206,9 @@ class LiveTrader:
                 else:
                     self.counts["ia_sin_respuesta"] = self.counts.get("ia_sin_respuesta", 0) + 1
         # Ninguna entrada sin que la IA haya leído la noticia: si hay IA, siempre; con dinero real, sin IA no se
-        # abre nada (las reglas solas leyeron mal 3 de 3 noticias el 3-nov). Salir siempre se puede.
-        confirm = ai_on or self.real
+        # abre nada (las reglas solas leyeron mal 3 de 3 noticias el 3-nov). Salir siempre se puede. Si las reglas
+        # igual la descartaban, el motivo que queda registrado es el de ellas (relevancia, alfa...), no la IA.
+        confirm = (ai_on or self.real) and rules_in
         async with self.lock:
             run = self.run()
             now = run.now
