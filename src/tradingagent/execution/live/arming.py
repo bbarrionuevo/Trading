@@ -11,9 +11,10 @@
 - La prueba sin riesgo con órdenes tiene que haber pasado con esa misma clave hace menos de 30 días:
   `state/verificacion_binance.json` (`binance-real-check`, Binance, desde el 4-nov-2026) o
   `state/verificacion_real.json` (`mexc-real-check`, MEXC).
-- Simulacro (`armar-real --simulacro`): el operador real completo con un saldo de mentira y sin plata en juego, sin
-  frase ni prueba con órdenes. En Binance va contra la DEMO (plata ficticia, claves `BINANCE_API_KEY_TEST`); en
-  MEXC, contra un exchange simulado sobre el libro real (dryrun.py).
+- Simulacro (`armar-real --simulacro`): el operador real completo sin plata en juego, sin frase ni prueba con
+  órdenes. En Binance, por defecto LOCAL: precios y libro de producción, órdenes simuladas en la PC
+  (binance_dryrun.py, modo "local"); con `--demo`, contra la DEMO de Binance (claves `BINANCE_API_KEY_TEST`, modo
+  "demo"). En MEXC, contra un exchange simulado sobre el libro real (dryrun.py).
 - Vencido, revocado (`armar-real --desarmar`) o con KILL: no se abre nada nuevo. Las posiciones abiertas
   salen normal: salir siempre se puede.
 """
@@ -53,13 +54,15 @@ def venue_of(data: dict) -> str:
 
 def arm(home: Path, days: int, access_key: str, typed: str, *, assets: tuple = DEFAULT_ASSETS,
         simulacro: bool = False, capital: float | None = None, now: float | None = None,
-        venue: str = "mexc-futuros") -> dict:
+        venue: str = "mexc-futuros", mode: str | None = None) -> dict:
     """Arma el dinero real (todo el saldo de la cuenta) o, con `simulacro=True`, el simulacro con `capital` USDT
     de mentira: el operador real corre completo pero NUNCA manda órdenes (no pide frase ni prueba con órdenes)."""
     if not 1 <= int(days) <= MAX_DAYS:
         raise ValueError(f"el armado vence en 1 a {MAX_DAYS} días")
     if venue not in VENUES:
         raise ValueError(f"exchange desconocido: {venue}")
+    if mode not in (None, "local", "demo") or (mode and not simulacro):
+        raise ValueError("el modo es solo del simulacro: local o demo")
     if simulacro:
         if capital is None or not float(capital) > 0:
             raise ValueError("el simulacro necesita un saldo de mentira mayor que 0 (--capital)")
@@ -68,7 +71,7 @@ def arm(home: Path, days: int, access_key: str, typed: str, *, assets: tuple = D
     now = now if now is not None else time.time()
     data = {"capital_usdt": float(capital) if simulacro else ALL, "activos": sorted(a.upper() for a in assets),
             "venues": [venue], "simulacro": bool(simulacro), "clave": fingerprint(access_key),
-            "armado_en": round(now), "vence": round(now + int(days) * 86400)}
+            "armado_en": round(now), "vence": round(now + int(days) * 86400), **({"modo": mode} if mode else {})}
     paths.write_json_atomic(Path(home) / ARM_FILE, data)
     return data
 
