@@ -62,6 +62,29 @@ async def test_firma_y_lista_cerrada_de_operaciones():
     assert allowed("GET", "/api/v1/private/order/get/123") and not allowed("GET", "/api/v1/private/order/get/1/../x")
 
 
+async def test_la_api_de_futuros_va_a_la_direccion_nueva_y_un_bloqueo_se_reconoce():
+    """4-nov en la PC: contract.mexc.com bloqueaba en la entrada el envío de órdenes ("Access Denied", HTTP 403 en
+    HTML) y mexc-real-check falló sin crear nada. La API de futuros está en api.mexc.com desde enero de 2026."""
+    from aiohttp import web
+
+    async with aiohttp.ClientSession() as s:
+        assert TradingClient(s, ACCESS, SECRET).base == "https://api.mexc.com"
+
+    async def denied(request):
+        return web.Response(status=403, text="<HTML><HEAD><TITLE>Access Denied</TITLE></HEAD></HTML>",
+                            content_type="text/html")
+
+    app = web.Application()
+    app.router.add_post("/api/v1/private/order/create", denied)
+    async with serve(app) as url, aiohttp.ClientSession() as s:
+        c = TradingClient(s, ACCESS, SECRET, base=url)
+        with pytest.raises(Exception) as err:
+            await c.submit(symbol="BTC_USDT", side=OPEN_LONG, vol=1, price=90_000, leverage=1, order_type=POST_ONLY,
+                           external_oid="t1")
+    assert "HTTP 403" in str(err.value) and "Access Denied" in str(err.value)
+    assert ACCESS not in str(err.value) and SECRET not in str(err.value)
+
+
 async def test_prueba_sin_riesgo_y_detecta_un_exchange_que_entiende_otro_lado():
     clock = ManualClock(T0)
     fake = market(clock)

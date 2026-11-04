@@ -35,7 +35,7 @@ Lo que pidió, en sus palabras:
 | PC | Al día. El supervisor la actualiza sola desde `main` con el CI en verde. Tests en Windows OK |
 | Cuenta de práctica (paper) | 120 USDT simulados en futuros MEXC; 3 operaciones el 3-nov (−0,20 USDT, cortos mal leídos por las reglas antes de que la IA confirmara cada entrada) |
 | Simulacro del real | Armado el 3-nov con 100 USDT de mentira, 2 días. Mismo operador real, sin mandar órdenes |
-| **Dinero real** | **Arranca el 4-nov con 100 USDT** en la cuenta de futuros de MEXC. El dueño corre `mexc-real-check` y después `armar-real` (frase `ARMO DINERO REAL CON TODO EL SALDO POR 30 DIAS`). Al armar el real, se reemplaza el simulacro. Leído el 3-nov a las 20 h (solo lectura): la cuenta ya está en modo Cobertura, sin posiciones ni órdenes, y **el saldo de futuros es 0**: el dueño pasa los 100 USDT a Futuros el 4-nov antes de la prueba |
+| **Dinero real** | **Arranca el 4-nov con 100 USDT** en la cuenta de futuros de MEXC. El dueño corre `mexc-real-check` y después `armar-real` (frase `ARMO DINERO REAL CON TODO EL SALDO POR 30 DIAS`). Al armar el real, se reemplaza el simulacro. **4-nov, 7:07:** con la plata ya en Futuros y el modo Cobertura, la prueba falló con HTTP 403 al mandar la orden: el programa usaba la dirección vieja de MEXC (`contract.mexc.com`), que bloquea en la entrada el envío y la cancelación de órdenes. No se creó nada. El arreglo (dirección `api.mexc.com` y ruta `order/create`, sección 11) es ruta protegida: lo fusiona el dueño y después repite la prueba |
 | Aprendizaje | **Arreglado el 3-nov (PR #23).** El meta-modelo había quedado en κ = 0 con 47 muestras, 37 de ellas noticias ajenas con BTC "de referencia" (Ferrari, 3M, "heladeras hackeadas"): p = 1/3 en todo y ninguna entrada posible, listados incluidos, desde la tarde del 3-nov. Ahora solo aprende de lo que se habría operado (sección 9) |
 | Fuentes | 14: Fed; medios cripto; CNBC, Seeking Alpha, Investing; anuncios oficiales de Binance (10 s) y Upbit (10 s, PR #22). OKX y Bitget apagados (sin efecto medido). SEC apagada (falta `SEC_USER_AGENT`) |
 | IA | Claude Haiku 5.5. Lee toda noticia que las reglas abrirían. Unos 0,002 USD por día. Techo de seguridad: 5 USD por día |
@@ -232,11 +232,12 @@ dueño qué hiciste y por qué.
 
 ## 10. Pendiente (en orden)
 
-1. **4-nov, dinero real.** Acompañar el armado del dueño: primero pasa los 100 USDT a Futuros (el 3-nov el saldo
-   de futuros era 0; el modo Cobertura ya está). `mexc-real-check` tiene que dar todo OK. Después vigilar las
-   primeras operaciones reales: llenado, deslizamiento, stop de emergencia en MEXC (la prueba no manda
-   `stopLossPrice`: confirmarlo en la primera entrada real, en la web de MEXC o leyendo la orden), conciliación y
-   avisos. Antes de armar, confirmar que el aprendizaje recalculado dejó `meta` sin κ = 0.
+1. **4-nov, dinero real.** La plata ya está en Futuros, con el modo Cobertura. La primera prueba falló por
+   la dirección vieja de MEXC (sección 11). Falta: el dueño fusiona el PR protegido de la dirección nueva, la PC se
+   actualiza (aviso "🔄 Actualicé TRADING") y repite `mexc-real-check`, que tiene que dar todo OK. Después
+   `armar-real` y vigilar las primeras operaciones reales: llenado, deslizamiento, stop de emergencia en MEXC (la
+   prueba no manda `stopLossPrice`: confirmarlo en la primera entrada real, leyendo la orden o en la web de MEXC),
+   conciliación y avisos.
 2. **Upbit** (PR #22). La fuente `upbit.avisos` lee bien con el almacén de Windows (3-nov: 20 avisos de historia,
    sin fallas). Falta ver que un listado en wones ("신규 거래지원") se reconozca y opere.
 3. ~~Bybit~~ **Estudiado el 3-nov desde la PC** (`estudio-listados --exchange bybit`, `docs/ESTUDIO-LISTADOS.md`):
@@ -256,6 +257,9 @@ dueño qué hiciste y por qué.
 9. **La etiqueta del meta-modelo** (triple barrera del etiquetador) expira a los 60 min, y el prior supone un
    paseo sin vencimiento (1/3 con α = 0). Con entradas reales, revisar si hay que calibrar el prior con la
    expiración. Hoy no frena: solo cuentan las apuestas que se habrían hecho.
+10. **Datos públicos de MEXC en la dirección nueva:** `marketdata/mexc.py` (`BASE`) todavía lee precios, libros,
+    velas y el saldo de solo lectura en `contract.mexc.com`. Hoy anda (las lecturas no están bloqueadas), pero
+    conviene pasarlo a `api.mexc.com`, que sirve todo lo mismo (verificado el 4-nov), antes de que MEXC lo corte.
 
 ## 11. Detalles que muerden (Windows y MEXC)
 
@@ -270,7 +274,12 @@ dueño qué hiciste y por qué.
   - lados 1 abrir largo, 2 cerrar corto, 3 abrir corto, 4 cerrar largo; tipo 3 = IOC; `openType` 1 = aislado;
   - bandas de precio de ±10 %;
   - las acciones se llaman distinto (TSLA → `TESLA_USDT`, AAPL → `AAPLSTOCK_USDT`): usá el universo;
-  - la API de trading por API abrió el 31-mar-2026 para cuentas con KYC.
+  - la API de trading por API abrió el 31-mar-2026 para cuentas con KYC;
+  - **la API de futuros está en `https://api.mexc.com` desde el 19-ene-2026** y la orden va a
+    `POST /api/v1/private/order/create` (documentación oficial). `contract.mexc.com` sigue contestando lecturas
+    pero bloquea en la entrada (Akamai, "Access Denied", HTTP 403 en HTML) todo envío y cancelación de órdenes,
+    con o sin clave: así falló la primera prueba real el 4-nov. Un 403 en HTML es un bloqueo de la entrada, no de
+    la clave; un error de la clave llega en JSON.
 - **Binance:** la API (`api.binance.com`) anda desde Argentina y no desde la nube; los anuncios
   (`www.binance.com/bapi`) andan desde los dos.
 - **Upbit:** solo con `truststore` (la cadena del certificado viene incompleta).
