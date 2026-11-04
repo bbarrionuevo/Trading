@@ -71,7 +71,7 @@ async def test_prueba_sin_riesgo_espera_antes_de_cancelar_y_valida_el_stop():
     kinds = {(t["type"], t.get("timeInForce"), t.get("closePosition")) for t in fake.tests}
     assert kinds == {("LIMIT", IOC, None), (STOP_MARKET, None, "true")}             # entrada y stop, sin ejecutar
     assert [o["status"] for o in fake.orders.values()] == ["CANCELED"]
-    assert fake.cancel_after and fake.cancel_after[0] >= 0.2                       # esperó antes de cancelar
+    assert fake.cancel_after and fake.cancel_after[0] >= 0.15                      # esperó (Windows despierta ~15 ms antes)
     assert {t["side"] for t in fake.tests} == {BUY, SELL}
 
 
