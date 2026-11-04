@@ -313,7 +313,7 @@ def cmd_binance_real_check(args) -> int:
     report = asyncio.run(main())
     paths.write_json_atomic(paths.home() / "state" / "verificacion_binance.json",
                             {"ok": bool(report["ok"]), "clave": arming.fingerprint(key), "ts": round(time.time()),
-                             "simbolo": report.get("simbolo"), "pasos": report["pasos"]})
+                             "simbolo": report.get("simbolo"), "pasos": report["pasos"], "stop": report.get("stop")})
     for st in report["pasos"]:
         print(f"{'OK ' if st['ok'] else 'MAL'}  {st['paso']}" + (f": {st['detalle']}" if st["detalle"] else ""))
     if report["ok"]:

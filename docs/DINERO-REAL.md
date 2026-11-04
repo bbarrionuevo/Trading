@@ -1,5 +1,9 @@
 # Camino a dinero real (futuros de MEXC)
 
+> **4-nov-2026: MEXC quedó descartado** (la cuenta no puede abrir posiciones) y la ejecución pasa a **Binance
+> Futures USDⓈ-M**. Las etapas y los frenos de este documento siguen valiendo; lo propio de MEXC (modo
+> Cobertura, `mexc-real-check`, universo y comisiones) no. El estado al día está en `docs/TRASPASO.md`.
+
 Pedido del dueño (3-nov-2026): "Quiero poder invertir con dinero real lo más pronto posible [...] La idea es
 que también puedo usar fondo futuro para el apalancamiento ya que mi inversión no va a ser muy grande."
 

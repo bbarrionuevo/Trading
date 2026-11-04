@@ -11,7 +11,9 @@ programa las pide, sin abrir ninguna posición:
    rechaza). Y UN stop STOP_MARKET por el servicio de órdenes Algo (el del stop de emergencia: la ruta común lo
    rechaza desde dic-2025) que solo compraría si el precio subiera 50 %. Verifica cómo los entendió Binance,
    **espera 6 s** (las reglas cuantitativas cuentan como "cancelación inválida" la que se cancela antes de 5 s) y
-   los cancela.
+   los cancela. El servicio Algo muestra la cancelación con demora (en la PC, el 4-nov, medio segundo después
+   todavía no decía CANCELED; minutos después, sí): consulta el stop hasta 10 s antes de darlo por no cancelado y
+   guarda los estados que vio y cuánto tardó.
 6. Verifica que no apareció ninguna posición. Si algo sale mal, cancela las órdenes de ese contrato. Nunca cierra
    posiciones por su cuenta: si apareciera una (no debería), lo dice para que el dueño la cierre.
 
@@ -29,6 +31,9 @@ DISTANCE = Decimal("0.03")
 CAP = Decimal("0.003")                # tope de precio de la entrada validada
 ALGO_DISTANCE = Decimal("0.5")      # el stop de prueba: compra solo si sube 50 % (no puede en 6 s)
 WAIT_BEFORE_CANCEL_S = 6.0
+CANCELED = ("CANCELED", "CANCELLED")
+STOP_CONFIRM_S = 10.0                 # cuánto esperar a que Binance muestre el stop cancelado (4-nov: más de 0,5 s)
+STOP_POLL_S = 0.5
 
 
 def _round(x: Decimal, unit: Decimal, up: bool) -> Decimal:
@@ -44,14 +49,39 @@ def _locked(status: dict) -> list[str]:
     return out
 
 
-async def real_check(client: BinanceClient, symbol: str = SYMBOL, *, pause_s: float = WAIT_BEFORE_CANCEL_S) -> dict:
+async def _stop_after_cancel(client: BinanceClient, sid: str, *, since: float, wait_s: float,
+                             poll_s: float) -> tuple[str, list[str], float]:
+    """Consulta el stop recién cancelado hasta que Binance lo muestre cancelado o pasen `wait_s` segundos desde
+    `since`. El servicio Algo lo muestra con demora: en la PC, el 4-nov, la consulta medio segundo después de
+    cancelar todavía no decía CANCELED, y minutos después sí (la cancelación había entrado). Devuelve el último
+    estado, los estados vistos y los segundos que tardó, para aprender cuánto demora."""
+    seen: list[str] = []
+    while True:
+        try:
+            st = await client.stop(sid)
+            status = st.get("algoStatus") or f"sin estado ({st.get('msg') or st.get('code') or 'respuesta vacía'})"
+        except BinanceError as e:
+            if e.code in (418, 429):                  # límite de Binance: nunca insistir
+                raise
+            status = f"error ({e})"
+        status = str(status)[:120]
+        if not seen or seen[-1] != status:
+            seen.append(status)
+        took = time.monotonic() - since
+        if status in CANCELED or took >= wait_s:
+            return status, seen, took
+        await asyncio.sleep(poll_s)
+
+
+async def real_check(client: BinanceClient, symbol: str = SYMBOL, *, pause_s: float = WAIT_BEFORE_CANCEL_S,
+                     confirm_s: float = STOP_CONFIRM_S, poll_s: float = STOP_POLL_S) -> dict:
     steps: list[dict] = []
 
     def step(name: str, ok: bool, detail: str = "") -> bool:
         steps.append({"paso": name, "ok": bool(ok), "detalle": "" if ok else detail})   # la ayuda, solo si falla
         return ok
 
-    placed = False
+    placed, stop_seen = False, None
     try:
         await client.sync_time()
         money = await client.usdt()
@@ -122,10 +152,13 @@ async def real_check(client: BinanceClient, symbol: str = SYMBOL, *, pause_s: fl
         await asyncio.sleep(pause_s)                  # nunca cancelar antes de 5 s (reglas cuantitativas)
         await client.cancel(symbol, cid)
         await client.cancel_stop(sid)
+        canceled_at = time.monotonic()
         if (await client.order(symbol, cid)).get("status") != "CANCELED":
             problems.append("no quedó cancelada")
-        if (await client.stop(sid)).get("algoStatus") not in ("CANCELED", "CANCELLED"):
-            stop_problems.append("no quedó cancelado")
+        status, seen, took = await _stop_after_cancel(client, sid, since=canceled_at, wait_s=confirm_s, poll_s=poll_s)
+        stop_seen = {"estados": seen, "segundos": round(took, 2)}
+        if status not in CANCELED:
+            stop_problems.append(f"no quedó cancelado (Binance dice {status} {took:.0f} s después de cancelarlo)")
         step("orden de prueba solo maker", not problems, "; ".join(problems))
         step("stop de emergencia por el servicio Algo de Binance", not stop_problems, "; ".join(stop_problems))
         after = await client.positions(symbol)
@@ -135,9 +168,12 @@ async def real_check(client: BinanceClient, symbol: str = SYMBOL, *, pause_s: fl
         step("error", False, redact(str(e))[:300])
     ok = len(steps) >= 10 and all(s["ok"] for s in steps)
     if not ok and placed:
-        try:
-            await client.cancel_all(symbol)           # nada colgado (nunca cierra posiciones solo)
-            await client.cancel_all_stops(symbol)
-        except (BinanceError, PermissionError):
-            pass
-    return {"ok": ok, "simbolo": symbol, "pasos": steps}
+        for cleanup in (client.cancel_all, client.cancel_all_stops):    # nada colgado (nunca cierra posiciones)
+            try:                                      # cada una por separado: si falla una, igual va la otra
+                await cleanup(symbol)
+            except (BinanceError, PermissionError):
+                pass
+    out = {"ok": ok, "simbolo": symbol, "pasos": steps}
+    if stop_seen:
+        out["stop"] = stop_seen                       # cómo y cuándo Binance mostró el stop cancelado
+    return out

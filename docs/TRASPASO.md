@@ -28,16 +28,16 @@ Lo que pidió, en sus palabras:
 - "voy a necesitar que estés conectado prácticamente de forma sincrónica con mi PC para vigilar cómo está
   actuando el programa y poder realizar modificaciones rápidas de ser necesario".
 
-## 2. Estado al 3-nov-2026 (noche)
+## 2. Estado al 4-nov-2026
 
 | Qué | Estado |
 |---|---|
 | PC | Al día. El supervisor la actualiza sola desde `main` con el CI en verde. Tests en Windows OK |
 | Cuenta de práctica (paper) | 120 USDT simulados en futuros MEXC; 3 operaciones el 3-nov (−0,20 USDT, cortos mal leídos por las reglas antes de que la IA confirmara cada entrada) |
 | Simulacro del real | Armado el 3-nov con 100 USDT de mentira, 2 días. Mismo operador real, sin mandar órdenes |
-| **Dinero real** | **Arranca el 4-nov con 100 USDT** en la cuenta de futuros de MEXC. El dueño corre `mexc-real-check` y después `armar-real` (frase `ARMO DINERO REAL CON TODO EL SALDO POR 30 DIAS`). Al armar el real, se reemplaza el simulacro. **4-nov, 7:07:** con la plata ya en Futuros y el modo Cobertura, la prueba falló con HTTP 403 al mandar la orden: el programa usaba la dirección vieja de MEXC (`contract.mexc.com`), que bloquea en la entrada el envío y la cancelación de órdenes. No se creó nada. El arreglo (dirección `api.mexc.com` y ruta `order/create`, sección 11) es ruta protegida: lo fusiona el dueño y después repite la prueba |
+| **Dinero real** | **No arranca hasta que el dueño lo confirme** (4-nov: "debemos estar seguros de que todo funciona"). Va por fases: primero la prueba sin riesgo y el simulacro en Binance; después poca plata con vigilancia constante y actuar de inmediato ante cualquier falla; la última fase, cuando esté comprobado que todo funciona y gana. El armado lo hace siempre el dueño (`armar-real` con la frase). Historia: el 4-nov la prueba de MEXC falló primero por la dirección vieja (403) y después por la restricción de la cuenta (fila siguiente) |
 | **MEXC** | **Descartado (4-nov).** Con la dirección nueva, la prueba llegó a MEXC y respondió código 6002 (la cuenta no puede abrir posiciones), y el dueño informó una restricción permanente de la cuenta. El dueño decidió pasar la ejecución a **Binance Futures USDT-M**: falta el conector (ruta protegida, lo fusiona el dueño). Mientras tanto, la práctica y el simulacro siguen con los precios públicos de MEXC, sin órdenes |
-| **Binance Futures** | **Nuevo lugar de ejecución (4-nov).** Paso 1 (PR protegido): cliente `execution/live/binance_futures.py` con lista cerrada y prueba sin riesgo `binance-real-check` (contrato XRPUSDT, mínimo 5 USDT). Faltan: el venue real con stop de emergencia STOP_MARKET aparte, los precios y el universo de Binance para la práctica y el simulacro, el armado y el simulacro de Binance. Antes de operar: cuenta en modo unidireccional y de un solo activo, y clave solo con lectura y futuros |
+| **Binance Futures** | **Nuevo lugar de ejecución (4-nov).** Paso 1 (fusionado, PR #29 y #32): cliente `execution/live/binance_futures.py` con lista cerrada, stop de emergencia por el servicio Algo y prueba sin riesgo `binance-real-check` (contrato XRPUSDT, mínimo 5 USDT). **Prueba en la PC, 4-nov:** cuenta, modos, reglas cuantitativas, validación y orden de prueba OK; el stop se puso bien y se canceló (Binance lo muestra CANCELED), pero la prueba lo dio por no cancelado porque lo consultó enseguida (~0,5 s) y Binance todavía no lo mostraba. Arreglo en PR protegido (consulta hasta 10 s); después el dueño repite la prueba. Faltan: el venue real con stop de emergencia STOP_MARKET aparte, los precios y el universo de Binance para la práctica y el simulacro, el armado y el simulacro de Binance. Antes de operar: cuenta en modo unidireccional y de un solo activo, y clave solo con lectura y futuros |
 | Aprendizaje | **Arreglado el 3-nov (PR #23).** El meta-modelo había quedado en κ = 0 con 47 muestras, 37 de ellas noticias ajenas con BTC "de referencia" (Ferrari, 3M, "heladeras hackeadas"): p = 1/3 en todo y ninguna entrada posible, listados incluidos, desde la tarde del 3-nov. Ahora solo aprende de lo que se habría operado (sección 9) |
 | Fuentes | 14: Fed; medios cripto; CNBC, Seeking Alpha, Investing; anuncios oficiales de Binance (cada 3 s, rotando 72 formas de la URL para saltar la copia de ~120 s del CDN) y Upbit (cada 8 s: su límite es ~10 pedidos por minuto). OKX y Bybit apagados o sin sumar (sin efecto medido), Bitget apagado. SEC apagada (falta `SEC_USER_AGENT`). **Los medios llegan tarde para operar** (demora mediana de publicada a recibida, 4-nov: The Block 31 s, CoinDesk 56 s, Seeking Alpha 173 s, Investing 424 s, CNBC 592 s): solo sirven de contexto y para salir; lo que se opera son los avisos oficiales |
 | Velocidad (4-nov) | De recibida a decisión: 0,4 s sin IA y 3,8 s con IA (mediana). Las demoras largas (hasta 14 s) eran datos de mercado bajados para noticias que igual se descartaban, con el candado tomado: arreglado en el PR #26. Lo que más tarda ahora es la consulta a la IA (~3,4 s) |
@@ -259,12 +259,13 @@ dueño qué hiciste y por qué.
 
 ## 10. Pendiente (en orden)
 
-1. **4-nov, dinero real.** La plata ya está en Futuros, con el modo Cobertura. La primera prueba falló por
-   la dirección vieja de MEXC (sección 11). Falta: el dueño fusiona el PR protegido de la dirección nueva, la PC se
-   actualiza (aviso "🔄 Actualicé TRADING") y repite `mexc-real-check`, que tiene que dar todo OK. Después
-   `armar-real` y vigilar las primeras operaciones reales: llenado, deslizamiento, stop de emergencia en MEXC (la
-   prueba no manda `stopLossPrice`: confirmarlo en la primera entrada real, leyendo la orden o en la web de MEXC),
-   conciliación y avisos.
+1. **Binance (MEXC quedó descartado el 4-nov).** El dueño fusiona el PR protegido del stop (la cancelación se ve
+   con demora), la PC se actualiza (aviso "🔄 Actualicé TRADING") y repite `binance-real-check`, que tiene que dar
+   los 10 pasos OK. Después, paso 2 (ruta protegida): el venue real (entradas IOC con tope, salidas "solo
+   reducir", stop de emergencia Algo de cierre total puesto al llenarse la entrada y cancelado al salir,
+   confirmando la cancelación con consultas de unos segundos como la prueba, ejecuciones por `userTrades`,
+   conciliación y el 503 que puede haber entrado), precios y universo de Binance para la práctica y el simulacro,
+   armado, `cerrar-todo` y `/cerrar SI` para Binance. Simulacro en Binance, revisión, y el dueño decide la plata.
 2. **Upbit** (PR #22, estudiado el 4-nov: la señal más fuerte). Se lee cada 8 s. Con el próximo aviso, revisar en el
    simulacro la demora de punta a punta (publicado, recibido, decisión y orden) y el precio de entrada contra el
    precio del aviso.
@@ -316,6 +317,11 @@ dueño qué hiciste y por qué.
   - desde el 2-dic-2025 las órdenes condicionales (STOP_MARKET, TAKE_PROFIT...) van por el **servicio de órdenes
     Algo** (`/fapi/v1/algoOrder`); por la ruta común dan el código -4120 (visto en la PC el 4-nov). No tienen
     ruta de prueba: `binance-real-check` pone uno que solo se dispararía con +50 % y lo cancela a los 6 s;
+  - **la cancelación de un stop Algo se ve con demora:** el DELETE contesta "success", pero la consulta enseguida
+    (~0,5 s después) todavía no decía CANCELED (4-nov, en la PC; minutos después sí, y no había quedado nada
+    abierto). Hay que volver a consultar unos segundos antes de darlo por fallido: la prueba
+    consulta hasta 10 s y guarda en `state/verificacion_binance.json` los estados vistos y cuánto tardó. Desde la
+    PC, cada ida y vuelta a Binance tarda ~0,3 s (a veces 0,9 s);
   - `/fapi/v1/order/test` valida órdenes comunes sin mandarlas;
   - `aggTrades` históricos solo de los últimos 2 días (código -4166): para estudiar segundos, las velas de 1 s
     del spot (`/api/v3/klines?interval=1s`) tienen historia;

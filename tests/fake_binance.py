@@ -28,6 +28,9 @@ class FakeBinance:
         self.cancel_after: list[float] = []       # segundos entre crear y cancelar (reglas cuantitativas)
         self.margin, self.leverage = {}, {}
         self.algos: dict[str, dict] = {}         # stops del servicio Algo
+        self.algo_lag = 0                         # consultas que siguen diciendo NEW tras cancelar (el real tarda)
+        self.algo_stuck = False                   # el stop no se cancela de a uno (solo con "cancelar todos")
+        self.fail_cancel_all = False              # "cancelar todas las órdenes" da error
 
     def _check(self, request) -> bool:
         q = dict(request.query)
@@ -94,11 +97,15 @@ class FakeBinance:
             return web.json_response(a)
         if path == "/fapi/v1/algoOrder" and m == "GET":
             a = self.algos.get(q.get("clientAlgoId"))
+            if a and a.get("lag"):
+                a["lag"] -= 1
+                return web.json_response({**a, "algoStatus": "NEW"})      # todavía no muestra la cancelación
             return web.json_response(a) if a else web.json_response({"code": -2013, "msg": "Order does not exist."},
                                                                     status=400)
         if path == "/fapi/v1/algoOrder" and m == "DELETE":
             a = self.algos[q["clientAlgoId"]]
-            a["algoStatus"] = "CANCELED"
+            if not self.algo_stuck:
+                a["algoStatus"], a["lag"] = "CANCELED", self.algo_lag
             self.cancel_after.append(time.monotonic() - a["created"])
             return web.json_response({"algoId": a["algoId"], "clientAlgoId": a["clientAlgoId"], "code": "200",
                                       "msg": "success"})
@@ -128,6 +135,8 @@ class FakeBinance:
             self.cancel_after.append(time.monotonic() - o["created"])
             return web.json_response(o)
         if path == "/fapi/v1/allOpenOrders" and m == "DELETE":
+            if self.fail_cancel_all:
+                return web.json_response({"code": -1000, "msg": "An unknown error occured"}, status=400)
             for o in self.orders.values():
                 o["status"] = "CANCELED"
             return web.json_response({"code": 200, "msg": "The operation of cancel all open order is done."})
