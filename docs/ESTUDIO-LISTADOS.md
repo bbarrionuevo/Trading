@@ -67,7 +67,8 @@ es la de la primera publicación del aviso. Últimos 180 días, en MEXC futuros 
   próximo aviso.
 
 Qué cambió en el sistema:
-1. Upbit se lee cada **5 s** (antes 10). Cada 2 s, Upbit (Cloudflare) devolvía HTTP 429 en uno de cada tres pedidos.
+1. Upbit se lee cada **8 s** (antes 10). Su límite es de ~10 pedidos por minuto: cada 2 s devolvía HTTP 429 en uno
+   de cada tres pedidos y cada 5 s, uno por minuto.
    En Binance, entrar a los 10–20 s del aviso rinde igual o mejor que a los 5 s: el primer pico se devuelve.
 2. La advertencia levantada ya no se lee como deslistado (las reglas abrían un corto contra un +6 %), y la extendida
    no se opera (no es un hecho nuevo).
