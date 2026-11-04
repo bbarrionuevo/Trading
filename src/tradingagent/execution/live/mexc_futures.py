@@ -13,6 +13,11 @@ Códigos de la API v1 de contratos: lado 1 = abrir largo, 2 = cerrar corto, 3 = 
 largo; tipo 1 = límite, 2 = solo maker, 3 = IOC, 4 = FOK, 5 = mercado; estado 1 = sin informar,
 2 = abierta, 3 = completa, 4 = cancelada, 5 = inválida. `check.py` verifica en vivo, sin riesgo, que el
 exchange los interprete así antes de armar el modo real.
+
+**Dirección:** la API de futuros de MEXC está en `https://api.mexc.com` desde el 19-ene-2026 (registro de cambios
+oficial), y la orden se manda a `/api/v1/private/order/create`. La dirección vieja (`contract.mexc.com`) sigue
+contestando las lecturas, pero bloquea en la entrada todo envío y cancelación de órdenes ("Access Denied", HTTP 403
+en HTML): así falló `mexc-real-check` en la PC el 4-nov, sin llegar a crear ninguna orden.
 """
 import hashlib
 import hmac
@@ -23,12 +28,12 @@ from urllib.parse import quote
 import aiohttp
 
 from ...core.redact import redact
-from ...marketdata.mexc import BASE
 
+TRADING_BASE = "https://api.mexc.com"
 GET_PATHS = ("/api/v1/private/account/assets", "/api/v1/private/position/open_positions",
              "/api/v1/private/position/position_mode", "/api/v1/private/order/get/{}",
              "/api/v1/private/order/deal_details/{}", "/api/v1/private/order/list/open_orders/{}")
-POST_PATHS = ("/api/v1/private/order/submit", "/api/v1/private/order/cancel", "/api/v1/private/order/cancel_all",
+POST_PATHS = ("/api/v1/private/order/create", "/api/v1/private/order/cancel", "/api/v1/private/order/cancel_all",
               "/api/v1/private/position/change_leverage")
 OPEN_LONG, CLOSE_SHORT, OPEN_SHORT, CLOSE_LONG = 1, 2, 3, 4
 LIMIT, POST_ONLY, IOC, FOK, MARKET = 1, 2, 3, 4, 5
@@ -74,7 +79,7 @@ def _num(x) -> float:
 
 
 class TradingClient:
-    def __init__(self, session: aiohttp.ClientSession, access_key: str, secret: str, *, base: str = BASE,
+    def __init__(self, session: aiohttp.ClientSession, access_key: str, secret: str, *, base: str = TRADING_BASE,
                  clock=None, timeout_s: float = 8.0):
         if not access_key or not secret:
             raise ValueError("faltan las claves de MEXC")
@@ -105,7 +110,8 @@ class TradingClient:
         try:
             env = json.loads(text)
         except ValueError:
-            raise TradingError(f"{method} {path}: respuesta no JSON (HTTP {status})") from None
+            why = " · bloqueado en la entrada de MEXC (Access Denied)" if "Access Denied" in text else ""
+            raise TradingError(f"{method} {path}: respuesta no JSON (HTTP {status}){why}") from None
         if status != 200 or not isinstance(env, dict) or not env.get("success", False):
             code = env.get("code") if isinstance(env, dict) else None
             msg = env.get("message", "") if isinstance(env, dict) else ""
@@ -153,7 +159,7 @@ class TradingClient:
             body["stopLossPrice"] = _num(stop_loss)
         if position_id is not None:
             body["positionId"] = position_id
-        data = await self.request("POST", "/api/v1/private/order/submit", body=body)
+        data = await self.request("POST", "/api/v1/private/order/create", body=body)
         oid = data.get("orderId") if isinstance(data, dict) else data
         if oid in (None, ""):
             raise TradingError("el exchange no devolvió el número de orden")

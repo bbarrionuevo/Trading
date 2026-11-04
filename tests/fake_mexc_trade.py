@@ -123,7 +123,7 @@ class FakeMexcTrade(FakeMexc):
         if path.endswith("/position/open_positions"):
             sym = request.query.get("symbol")
             return ok([p for (s, _), p in self.positions.items() if p["holdVol"] > 0 and (not sym or s == sym)])
-        if path.endswith("/order/submit") and method == "POST":
+        if path.endswith("/order/create") and method == "POST":
             return await self.submit(data)
         if path.endswith("/order/cancel") and method == "POST":
             out = []

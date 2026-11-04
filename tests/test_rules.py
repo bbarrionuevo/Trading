@@ -93,9 +93,11 @@ def test_a3_ordenes_solo_en_el_modulo_real_y_nunca_retiros_ni_transferencias():
                             "/api/v1/private/position/position_mode",           # solo LEER el modo (cobertura)
                             "/api/v1/private/order/get/{}", "/api/v1/private/order/deal_details/{}",
                             "/api/v1/private/order/list/open_orders/{}")
-    assert mf.POST_PATHS == ("/api/v1/private/order/submit", "/api/v1/private/order/cancel",
+    assert mf.POST_PATHS == ("/api/v1/private/order/create", "/api/v1/private/order/cancel",
                              "/api/v1/private/order/cancel_all", "/api/v1/private/position/change_leverage")
     assert mf.ISOLATED == 1 and not mf.allowed("POST", "/api/v1/private/account/transfer")
+    assert not mf.allowed("POST", "/api/v1/private/order/submit")          # la ruta vieja ya no está en la lista
+    assert mf.TRADING_BASE == "https://api.mexc.com"                         # la dirección oficial desde ene-2026
 
 
 def test_a3_el_cliente_firmado_de_mexc_solo_lee():
