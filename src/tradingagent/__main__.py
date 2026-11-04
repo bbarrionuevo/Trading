@@ -333,6 +333,7 @@ def cmd_armar_real(args) -> int:
     """Armado local del dueño (REGLAS A-2): frase exacta, activos y vencimiento. Sin tope de capital: el real
     opera con todo el saldo de la cuenta de futuros. `--simulacro`: lo mismo sin mandar órdenes."""
     _setup("WARNING")
+    from . import limits as limits_mod
     from .execution.live import arming
     home = paths.home()
     if args.desarmar:
@@ -368,7 +369,8 @@ def cmd_armar_real(args) -> int:
         return 2
     want = arming.phrase(args.dias)
     print(f"Vas a armar DINERO REAL con TODO el saldo de tu cuenta de futuros de MEXC (y lo que se gane), activos "
-          f"{', '.join(assets)}, por {args.dias} días. Cada operación arriesga como mucho 1 % del saldo.\n"
+          f"{', '.join(assets)}, por {args.dias} días. Cada operación arriesga como mucho "
+          f"{limits_mod.load()['per_trade']['max_risk_pct']:g} % del saldo.\n"
           f"Para confirmar, escribí exactamente:  {want}")
     typed = input("> ")
     try:

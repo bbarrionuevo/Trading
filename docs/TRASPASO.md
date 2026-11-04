@@ -104,7 +104,11 @@ del dueño.
      precio de 50 bps; exento de "ya recorrió el objetivo" (`DRIFT`).
    - **macro:** solo con menos de 90 s.
 8. **Riesgo** (`decision/risk.py`, `config/limits.yaml`).
-   - 1 % del saldo por operación al stop; 40 % por posición; 80 % bruto; 30 % neto; 3 posiciones; 1x.
+   - **3 % del saldo por operación al stop** (el dueño, 4-nov; antes 1 %); 40 % por posición; 80 % bruto; 30 % neto;
+     3 posiciones; 1x. Con el stop de 10 % de los listados, la posición es ~30 % del saldo (el tope neto).
+   - Con 3 %, un stop completo pasa el freno del día (no abre hasta la noche) y tres pérdidas seguidas llegan al
+     halt del 8 % (vuelve con rearme del dueño). Simulación de la calibración: mes típico +8 %, mes malo −3 %,
+     caída máxima típica en un año ~10 % (`docs/ESTUDIO-LISTADOS.md`).
    - Frenos: 2 % por día y 4 % por semana; drawdown de 8 % = HALT. Tres pérdidas seguidas: 60 min de pausa.
 9. **Ejecución.**
    - Práctica: `execution/paper.py` contra el libro real.

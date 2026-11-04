@@ -17,7 +17,7 @@ BASELINE = {
     # Sin tope de capital en USDT (el dueño, 3-nov-2026): el real opera con todo el saldo de la cuenta de futuros.
     # Lo que acota el riesgo son los porcentajes de abajo, que crecen o se achican con ese saldo.
     ("capital", "todo_el_saldo"): ("eq", True),
-    ("per_trade", "max_risk_pct"): ("max", 1.0),
+    ("per_trade", "max_risk_pct"): ("max", 3.0),          # el dueño, 4-nov-2026 (antes 1,0)
     ("per_trade", "max_position_pct"): ("max", 40),
     ("per_trade", "max_leverage"): ("max", 1),
     ("per_trade", "max_slippage_bps"): ("max", 50),

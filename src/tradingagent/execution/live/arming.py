@@ -5,7 +5,7 @@
   a armar). El programa nunca lo crea solo.
 - **Sin tope de capital** (el dueño, 3-nov-2026: "elimina los topes, siempre se va a trabajar e invertir con
   todo el dinero disponible"): el operador real trabaja con TODO el saldo de la cuenta de futuros de MEXC y
-  crece con él. El riesgo lo acotan los porcentajes del sobre (1 % por operación, exposición, frenos del día,
+  crece con él. El riesgo lo acotan los porcentajes del sobre (riesgo por operación, exposición, frenos del día,
   la semana y el drawdown), que se escalan con el saldo.
 - Vence a los 30 días como máximo (A-2): se vuelve a armar con el mismo comando.
 - `state/verificacion_real.json`: la prueba sin riesgo (`check.py`) tiene que haber pasado con esa misma
