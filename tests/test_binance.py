@@ -77,7 +77,7 @@ async def test_prueba_sin_riesgo_espera_antes_de_cancelar_y_valida_el_stop():
     stop = next(iter(fake.algos.values()))                                         # el stop, por el servicio Algo
     assert stop["orderType"] == "STOP_MARKET" and stop["algoStatus"] == "CANCELED" and stop["side"] == BUY
     assert float(stop["triggerPrice"]) > float(fake.ask) * 1.49                    # solo con +50 %: no se dispara
-    assert len(fake.cancel_after) == 2 and min(fake.cancel_after) >= 0.2           # esperó antes de cancelar
+    assert len(fake.cancel_after) == 2 and min(fake.cancel_after) >= 0.15          # esperó (Windows despierta ~15 ms antes)
     assert all(p["detalle"] == "" for p in rep["pasos"])                         # sin ayudas si todo da bien
 
 
