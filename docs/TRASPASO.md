@@ -262,39 +262,38 @@ dueño qué hiciste y por qué.
 
 ## 10. Pendiente (en orden)
 
-1. **Binance (MEXC quedó descartado el 4-nov).** Hecho: cliente, prueba sin riesgo (10 OK en la demo), práctica
-   con los precios de Binance (cripto y TradFi) y el operador real probado de punta a punta en la demo. Falta, en
-   orden: (a) el dueño fusiona el PR protegido del operador; (b) el dueño acepta el acuerdo TradFi en la demo y en
-   la cuenta real (hecho el 4-nov; Tesla probada en la demo); (b2) el dueño crea una clave de Binance de solo
-   lectura para el canal de anuncios y la carga como `BINANCE_LECTURA_KEY` / `BINANCE_LECTURA_SECRET`;
-   (c) `armar-real --simulacro` (en la demo) y vigilar unos días: entradas, stops, salidas,
-   conciliación y avisos; (d) con eso, el dueño corre `binance-real-check` en la cuenta real y decide si arma el
-   dinero real (`armar-real`), por fases.
-2. **Upbit** (PR #22, estudiado el 4-nov: la señal más fuerte). Se lee cada 8 s. Con el próximo aviso, revisar en el
-   simulacro la demora de punta a punta (publicado, recibido, decisión y orden) y el precio de entrada contra el
-   precio del aviso.
-2b. **Ser más rápidos con la IA** (lo que más tarda: ~3,4 s de 3,8 s). Probar caché del prompt y respuesta más corta
-   (leer la guía de la API antes), y bajar datos de mercado en paralelo a la consulta. Medir antes y después.
-3. ~~Bybit~~ **Estudiado el 3-nov desde la PC** (`estudio-listados --exchange bybit`, `docs/ESTUDIO-LISTADOS.md`):
-   en 180 días sus listados spot dieron +0,4 % a 5 min (n = 4 con futuro en MEXC; 6 de 10 ni cotizaban) y sus
-   perpetuos +0,03 % (n = 48). No mueve el precio como Binance: **no se suma como fuente**.
-4. **Proteger la ganancia del stop móvil en el exchange** (si se apaga la PC, hoy el stop de emergencia queda en
-   el lugar inicial). Necesita sumar un endpoint de órdenes de stop a la lista de A-3: es ruta protegida, lo
-   aprueba el dueño.
-5. **Dato de inflación (CPI):** la BLS da 403 desde la PC y desde la nube. Buscar otra fuente rápida.
-6. **Tareas programadas con conector de GitHub:** para que abran y fusionen PRs solas, el dueño se lo agrega en
-   claude.ai → Rutinas.
-7. **Más evidencia:** que el aprendizaje junte operaciones reales y de práctica (F-3: 60 operaciones con DSR ≥
+1. **Simulacro local en Binance** (armado el 4-nov por 7 días, 100 USDT de mentira): vigilarlo y calibrar con
+   `informe-simulacro` (acierto, ganancia por categoría, de la noticia a la entrada, deslizamiento). Hecho antes: el
+   cliente, la prueba sin riesgo (10 OK en la demo), el operador real probado en la demo (SOL, XRP y Tesla), el
+   acuerdo TradFi aceptado, la clave de solo lectura y el canal de anuncios. Con evidencia del simulacro, el dueño
+   corre `binance-real-check` en la cuenta real y decide si arma el dinero real (`armar-real`), por fases.
+2. **Upbit** (la señal más fuerte; se lee cada 8 s por su límite de ~10 pedidos por minuto, así que un aviso llega
+   en promedio ~4 s después de publicado más la red). Con el próximo aviso, revisar en el simulacro la demora de
+   punta a punta y el precio de entrada contra el del aviso. Probar un segundo camino a los avisos sin pasar el
+   límite, midiendo con cuidado (un exceso bloquea la IP de la PC).
+2b. **IA:** medido el 4-nov, ~1,9 s por consulta (esfuerzo bajo; sin razonamiento da lo mismo: Haiku 5.5 ya no
+   razona con esfuerzo bajo), ~5.200 tokens de entrada y ~130 de salida. **No es el cuello de botella** (lo son las
+   fuentes). Si hiciera falta: caché del sistema (mínimo cacheable de Haiku 5.5: 512 tokens; dura 5 min, o 1 h
+   pagando el doble de escritura) y un "reason" más corto (~0,2 s).
+3. **Resultados de empresas en los TradFi de Binance** (Tesla, Nvidia, Apple... operan las 24 h): hoy llegan por
+   CNBC y Seeking Alpha con 2 a 3 min de demora. Estudiar primero si el perpetuo de Binance tarda en seguir al
+   after-hours (velas de 1 minuto de los últimos resultados contra la hora del comunicado). Si tarda, sumar las
+   agencias de comunicados (GlobeNewswire, Business Wire, PR Newswire) y el 8-K ítem 2.02.
+4. **Listados de Coinbase:** la PC llega a su API de productos (prueba de red); estudiar si un listado nuevo mueve
+   el precio en Binance antes de sumarlo. Bithumb bloquea la PC (403): no se puede.
+5. **Capital chico:** en Binance BTC pide al menos 50 USDT por orden (ETH 20, lo demás 5). Con ~100 USDT y 3 % de
+   riesgo, muchas entradas de BTC no entran; las altcoins y los TradFi, sí.
+6. **Proteger la ganancia del stop móvil en el exchange** (si se apaga la PC, el stop de emergencia queda donde se
+   puso). En Binance se puede reemplazar el stop Algo: ruta protegida, lo aprueba el dueño.
+7. **Dato de inflación (CPI):** la BLS da 403 desde la PC y desde la nube. Buscar otra fuente rápida.
+8. **Más evidencia:** que el aprendizaje junte operaciones reales y de práctica (F-3: 60 operaciones con DSR ≥
    0,95 da una medida seria). Revisar el meta-modelo con ellas.
-8. **El aprendizaje mide la lectura de las reglas, no la de la IA**, que es la que decide cada entrada (las reglas
-   leen mal: "Mercado Bitcoin", "Roundup settlement" de Bayer como regulatorio cripto). Guardar con cada noticia
-   la lectura de la IA cuando la hubo y aprender con esa.
-9. **La etiqueta del meta-modelo** (triple barrera del etiquetador) expira a los 60 min, y el prior supone un
-   paseo sin vencimiento (1/3 con α = 0). Con entradas reales, revisar si hay que calibrar el prior con la
-   expiración. Hoy no frena: solo cuentan las apuestas que se habrían hecho.
-10. **Datos públicos de MEXC en la dirección nueva:** `marketdata/mexc.py` (`BASE`) todavía lee precios, libros,
-    velas y el saldo de solo lectura en `contract.mexc.com`. Hoy anda (las lecturas no están bloqueadas), pero
-    conviene pasarlo a `api.mexc.com`, que sirve todo lo mismo (verificado el 4-nov), antes de que MEXC lo corte.
+9. **El aprendizaje mide la lectura de las reglas, no la de la IA**, que es la que decide cada entrada. Guardar con
+   cada noticia la lectura de la IA cuando la hubo y aprender con esa.
+10. **La etiqueta del meta-modelo** (triple barrera del etiquetador) expira a los 60 min, y el prior supone un
+    paseo sin vencimiento (1/3 con α = 0). Con entradas reales, revisar si hay que calibrar el prior.
+11. **Tareas programadas:** las de la nube no ven la PC ni tienen conector de GitHub. Una vigilancia programada en
+    la app de la PC sí ve todo (la decide el dueño).
 
 ## 11. Detalles que muerden (Windows y MEXC)
 
