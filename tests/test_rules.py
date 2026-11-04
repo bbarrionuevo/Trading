@@ -76,18 +76,31 @@ def test_a2_dinero_real_solo_con_el_armado_del_dueno(tmp_path):
 
 
 def test_a3_ordenes_solo_en_el_modulo_real_y_nunca_retiros_ni_transferencias():
-    everywhere = [r"capital/withdraw", r"\bwithdraw(al)?s?\s*\(", r"/withdraw", r"/transfer", r"X-MBX-APIKEY",
-                  r"X-MEXC-APIKEY", r"\bccxt\b", r"/api/v3/order\b", r"/fapi/v\d/order", r"\bnewOrder\b",
-                  r"\bplaceOrder\b", r"change_margin", r"change_position_mode", r"/private/(plan|stop)order"]
+    everywhere = [r"capital/withdraw", r"\bwithdraw(al)?s?\s*\(", r"/withdraw", r"/transfer", r"X-MEXC-APIKEY",
+                  r"\bccxt\b", r"/api/v3/order\b", r"\bnewOrder\b", r"\bplaceOrder\b", r"change_margin",
+                  r"change_position_mode", r"/private/(plan|stop)order", r"/fapi/v\d/(batchOrders|listenKey)"]
     only_live = [r"/private/order", r"change_leverage", r"/private/position/(?!open_positions)"]
+    only_binance = [r"X-MBX-APIKEY", r"/fapi/v\d/order", r"/fapi/v\d/(leverage|marginType|allOpenOrders)"]
     live = SRC / "execution" / "live" / "mexc_futures.py"
+    binance = SRC / "execution" / "live" / "binance_futures.py"
     hits = []
     for f in code_files():
         text = f.read_text(encoding="utf-8")
         hits += [f"{f.relative_to(ROOT)}: {b}" for b in everywhere if re.search(b, text)]
         if f != live:
             hits += [f"{f.relative_to(ROOT)}: {b}" for b in only_live if re.search(b, text)]
+        if f != binance:                                 # órdenes de Binance: solo en su cliente (4-nov, el dueño)
+            hits += [f"{f.relative_to(ROOT)}: {b}" for b in only_binance if re.search(b, text)]
     assert hits == []
+    from tradingagent.execution.live import binance_futures as bf
+    assert bf.GET_PATHS == ("/fapi/v2/balance", "/fapi/v2/positionRisk", "/fapi/v1/positionSide/dual",
+                            "/fapi/v1/multiAssetsMargin", "/fapi/v1/order", "/fapi/v1/openOrders", "/fapi/v1/userTrades",
+                            "/fapi/v1/apiTradingStatus", "/fapi/v1/commissionRate")
+    assert bf.POST_PATHS == ("/fapi/v1/order", "/fapi/v1/order/test", "/fapi/v1/leverage", "/fapi/v1/marginType")
+    assert bf.DELETE_PATHS == ("/fapi/v1/order", "/fapi/v1/allOpenOrders")
+    for path in ("/sapi/v1/asset/transfer", "/sapi/v1/futures/transfer", "/sapi/v1/capital/withdraw/apply",
+                 "/fapi/v1/batchOrders", "/fapi/v1/positionSide/dual", "/fapi/v1/multiAssetsMargin"):
+        assert not bf.allowed("POST", path), path                          # ni mover plata ni cambiar el modo
     from tradingagent.execution.live import mexc_futures as mf
     assert mf.GET_PATHS == ("/api/v1/private/account/assets", "/api/v1/private/position/open_positions",
                             "/api/v1/private/position/position_mode",           # solo LEER el modo (cobertura)
