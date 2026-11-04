@@ -366,11 +366,13 @@ def cmd_estudio_listados(args) -> int:
     except Exception as e:                                               # noqa: BLE001 (sin red, se avisa claro)
         print(f"No pude hacer el estudio (¿hay internet?): {type(e).__name__}: {str(e)[:160]}")
         return 1
-    name = "Binance" if args.exchange == "binance" else "Bybit"
+    name = {"binance": "Binance", "bybit": "Bybit", "upbit": "Upbit"}[args.exchange]
     out = paths.home() / "datos" / "estudios" / ("listados.json" if args.exchange == "binance"
                                                  else f"listados-{args.exchange}.json")
     paths.write_json_atomic(out, rep)
-    names = {"listado_spot": f"Listados spot de {name}", "futuros": f"Lanzamientos de futuros de {name}"}
+    names = {"listado_spot": f"Listados spot de {name}", "futuros": f"Lanzamientos de futuros de {name}",
+             "listado_krw": f"Altas en el mercado en wones de {name}", "deslistado": f"Fin del soporte en {name}",
+             "alerta": f"Advertencias de {name}", "alerta_levantada": f"Advertencias levantadas en {name}"}
     for kind, stats in rep["resumen"].items():
         cells = " · ".join(f"{k[1:]} min {v['mediana'] * 100:+.1f} % ({v['positivos']}/{v['n']} suben)"
                            for k, v in stats.items() if k.startswith("r"))
@@ -563,8 +565,8 @@ def main(argv=None) -> int:
                     "precios reales de MEXC, ninguna orden (capital hasta el tope del sobre, hasta 30 días)")
     es = sub.add_parser("estudio-listados")
     es.add_argument("--dias", type=int, default=180)
-    es.add_argument("--exchange", choices=("binance", "bybit"), default="binance",
-                    help="de quién son los avisos (Bybit solo responde desde la PC)")
+    es.add_argument("--exchange", choices=("binance", "bybit", "upbit"), default="binance",
+                    help="de quién son los avisos (Bybit y Upbit solo responden desde la PC)")
     ct = sub.add_parser("cerrar-todo")
     ct.add_argument("--simbolos", default="BTC_USDT,ETH_USDT,SOL_USDT")
     sub.add_parser("llm-check")

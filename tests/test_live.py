@@ -304,3 +304,25 @@ async def test_listado_sale_con_stop_que_sigue_al_precio_y_cobra_la_suba(tmp_pat
         await t.watch_once()
         assert t.st["positions"] == {} and t.counts.get("stop_movil") == 1
         assert "salí con la ganancia asegurada" in alerts.texts()[-1] and "Gané" in alerts.texts()[-1]
+
+
+async def test_solo_baja_datos_de_mercado_para_lo_que_puede_entrar(tmp_path):
+    """Diario de la PC (3 y 4-nov): bajar contrato y 130 min de velas para cada noticia, con el candado tomado,
+    demoraba hasta 14 s a la siguiente. Ahora una noticia descartada por relevancia o alfa no pide nada a MEXC."""
+    clock = ManualClock(T0 + 600)
+    mk = FakeMexc(lambda sym, m: {"BTC_USDT": 100_000.0, "ETH_USDT": 4_000.0, "SOL_USDT": 150.0}[sym], clock)
+    home, alerts = tmp_path / "home", Alerts()
+    async with serve(mk.app()) as url, aiohttp.ClientSession() as session:
+        t = await make(session, url, clock, home, alerts)
+        calls = []
+        real = t.market.instruments
+
+        async def counting(*a, **kw):
+            calls.append(a[1])
+            return await real(*a, **kw)
+
+        t.market.instruments = counting
+        await t.on_news(news("w1", "SEC sues crypto exchange over unregistered securities", clock.time()))
+        assert calls == [] and t.st["positions"] == {}                   # se descartó sin pedir datos
+        await t.on_news(news("h1", HACK, clock.time()))                     # la que sí entra pide sus datos
+        assert calls and "BTC_USDT" in calls[-1] and "BTC_USDT" in t.st["positions"]

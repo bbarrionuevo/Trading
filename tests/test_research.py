@@ -428,3 +428,37 @@ async def test_estudio_de_listados_de_bybit():
                    ("listado_spot", "XRP")]                                                 # sin TradFi ni promos
     spot = next(e for e in rep["eventos"] if e["ticker"] == "BTC")
     assert spot["t"] == t_ann and spot["reaccion"]["r60"] > 0.05 and rep["exchange"] == "bybit"
+
+
+async def test_estudio_de_listados_de_upbit():
+    import json as _json
+
+    from fake_mexc import FakeMexc
+    from tradingagent.research.history import listing_study
+
+    t_ann = 1793700000
+    clock = ManualClock(t_ann + 6 * 3600)
+    mk = FakeMexc(lambda sym, m: 100.0 * (1.2 if m >= (t_ann + 300) * 1000 else 1.0), clock)
+    iso = "2026-11-03T19:00:00+09:00"                                       # = t_ann en hora de Corea
+    notes = [{"first_listed_at": iso, "listed_at": "2026-11-03T06:00:00+09:00", "title": "비트(BTC) 신규 거래지원 안내 (KRW, BTC, USDT 마켓)"},
+             {"first_listed_at": iso, "title": "이더(ETH) KRW 마켓 디지털 자산 추가"},
+             {"first_listed_at": iso, "title": "솔라나(SOL) 거래지원 종료 안내 (11/30 15:00)"},
+             {"first_listed_at": iso, "title": "인젝티브(BTC) 거래 유의 종목 지정 해제 안내"},
+             {"first_listed_at": iso, "title": "멀티버스엑스(ETH) 거래 유의 종목 지정 기간 연장 안내"},
+             {"first_listed_at": iso, "title": "왁스(SOL) 유의 촉구 안내"},
+             {"first_listed_at": iso, "title": "업비트 점검 안내"}]                  # sin moneda: no cuenta
+
+    async def page(request):
+        body = {"success": True, "data": {"notices": notes if request.query.get("page") == "1" else []}}
+        return web.Response(text=_json.dumps(body, ensure_ascii=False), content_type="application/json")
+
+    app = mk.app()
+    app.router.add_get("/upbit", page)
+    async with serve(app) as url, aiohttp.ClientSession() as s:
+        rep = await listing_study(s, days=30, now=clock.time(), page_url=url + "/upbit?page={page}", base=url,
+                                  exchange="upbit")
+    kinds = sorted((e["tipo"], e["ticker"]) for e in rep["eventos"])
+    assert kinds == [("alerta", "SOL"), ("alerta_extendida", "ETH"), ("alerta_levantada", "BTC"),
+                     ("deslistado", "SOL"), ("listado_krw", "ETH"), ("listado_spot", "BTC")]
+    spot = next(e for e in rep["eventos"] if e["tipo"] == "listado_spot")
+    assert spot["t"] == t_ann and spot["reaccion"]["r60"] > 0.15             # hora de la primera publicación

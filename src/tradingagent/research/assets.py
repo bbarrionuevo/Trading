@@ -45,7 +45,8 @@ _TICKER_RE = {a: re.compile(r"(?<![A-Za-z0-9])\$?(" + "|".join(tickers) + r")(?!
 _NOT_ASSET = re.compile(
     r"(?i)\b(mercado bitcoin|bitcoin (cash|sv|gold|depot|suisse|magazine|well|group)|bitcoin\.com|"
     r"ethereum (classic|name service|pow)|ltc properties|eth z(u|ü)rich)\b|"
-    r"\([A-Z, ]*마켓\)")                                  # Upbit: "(KRW, BTC, USDT 마켓)" son mercados, no la moneda
+    r"\([A-Z, ]*마켓\)|"                                  # Upbit: "(KRW, BTC, USDT 마켓)" son mercados, no la moneda
+    r"/(BTC|ETH)\b")                       # BTC o ETH como cotización de un par: "KAIA/BTC" es KAIA ("FOO/USDT" sigue)
 
 
 # El resto del universo de MEXC (acciones, índices, metales, petróleo y criptos fuera de las de arriba), que se

@@ -227,20 +227,25 @@ class LiveTrader:
             why = news_blocks(ev, sig, now, self.limits, set(self.st["clusters"]))
             await run.news_exits([(ev, sig, why)])
             learned = self.learned()
-            wanted = [a for a in sig.assets if not why]
-            if wanted:
-                syms = sorted({self.market.symbol(a) for a in wanted})
+            blocks = self.risk_blocks(run)
+            side = "largo" if sig.polarity > 0 else "corto"
+            off = ([f"categoria_apagada_por_evidencia:{sig.category}"]
+                   if f"{sig.category}:{side}" in learned.get("apagadas", []) else [])
+            if confirm and not llm_mod.by_ai(sig):
+                off.append("sin_confirmacion_ia")
+            # Datos de mercado (contrato y 130 min de velas) solo para lo que puede entrar. Antes se bajaban para toda
+            # noticia, con el candado tomado: una noticia que igual se descartaba por relevancia o alfa demoraba hasta
+            # 14 s a la siguiente (diario de la PC, 3 y 4-nov), y esa siguiente podía ser un listado.
+            ready = [] if (why or off or blocks) else [
+                a for a in sig.assets if not assess(ev, sig, a, now, run.cfg, run.meta,
+                                                    allows_short=self.market.allows_short).reasons]
+            if ready:
+                syms = sorted({self.market.symbol(a) for a in ready})
                 self.registry = await self.market.instruments(self.session, syms, self.st["instruments"], now)
                 run.reg = self.registry
                 self.venue.registry = self.registry
                 await run.store.load({s: [(minute(now) - 130 * MIN, minute(now))] for s in syms})
-            blocks = self.risk_blocks(run)
             for asset in sig.assets:
-                side = "largo" if sig.polarity > 0 else "corto"
-                off = ([f"categoria_apagada_por_evidencia:{sig.category}"]
-                       if f"{sig.category}:{side}" in learned.get("apagadas", []) else [])
-                if confirm and not llm_mod.by_ai(sig):
-                    off.append("sin_confirmacion_ia")
                 if why or off:
                     run.record(ev, sig, self.market.symbol(asset), "no_entrar", why + off)
                     continue

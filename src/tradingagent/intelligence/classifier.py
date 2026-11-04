@@ -71,7 +71,10 @@ RULES = (
         r"\b(hack(s|ed|er|ers)?|exploit(s|ed)?|drain(s|ed)?|stolen|breach(es|ed)?|compromised|rug[- ]?pull(s|ed)?)\b")),
     Rule("deslistado", "deslistado", -0.7, 0.6, 120, _r(
         r"\b(delist(s|ed|ing)?|will remove .{0,30}trading|suspend(s|ed)? (trading|deposits|withdrawals))\b|"
-        r"거래지원 종료|유의 종목 지정")),                       # Upbit: fin del soporte / designación de alerta
+        # Upbit: fin del soporte / designación de alerta. "지정 해제" es la alerta LEVANTADA: sube (+6 % a 5 min, 4 de
+        # 4, estudio del 4-nov), no es un deslistado. "지정 기간 연장" extiende una alerta que ya se conocía: no es un
+        # hecho nuevo (sin evidencia de efecto, no se opera).
+        r"거래지원 종료|유의 종목 지정(?!\s*(해제|기간))")),
     Rule("quiebra", "quiebra", -0.8, 0.6, 240, _r(
         r"\b(bankrupt(cy)?|insolven(t|cy)|chapter 11|(halt(s|ed)?|freez(e|es)|froze) withdrawals|collaps(e|es|ed))\b")),
     Rule("demanda", "regulatorio", -0.5, 0.5, 120, _r(

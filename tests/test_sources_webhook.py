@@ -132,3 +132,44 @@ async def test_webhook_firma_reloj_tamano_y_formato(clock):
         await wh.stop()
     assert len(received) == 1 and received[0].tier == 2 and received[0].assets_hint == ("ETH",)
     assert wh.counts["firma_invalida"] == 1 and wh.counts["reloj"] == 1 and wh.counts["malformados"] == 1
+
+
+async def test_rota_urls_equivalentes_para_saltar_el_cache_del_cdn():
+    """4-nov en la PC: CloudFront guarda la lista de anuncios de Binance ~120 s por URL exacta. Rotando formas
+    equivalentes de la URL, cada lectura llega al servidor y trae la lista fresca."""
+    seen = []
+
+    async def handler(request):
+        seen.append(request.query_string)
+        return web.Response(text=feed(2))
+
+    app = web.Application()
+    app.router.add_get("/feed", handler)
+    async with serve(app) as url, aiohttp.ClientSession() as session:
+        variants = tuple(f"{url}/feed?a=1&b={i}" for i in range(4))
+        got = []
+
+        async def on_items(spec, items, first):
+            got.append(len(items))
+
+        spec = SourceSpec("rota", url + "/feed", interval_s=1, timeout_s=2, url_variants=variants)
+        src = PollingSource(spec, session, SystemClock(), on_items, rng=random.Random(3))
+        for _ in range(8):
+            await src.step()
+    assert len(set(seen)) == 4 and all(seen.count(q) == 2 for q in set(seen))       # todas, por turno
+    assert seen[:4] != seen[4:] or len(set(seen[:4])) == 4
+    assert got[0] == 2 and sum(got[1:]) == 0                                       # nada repetido
+
+
+def test_binance_y_upbit_se_leen_rapido():
+    from tradingagent.ingestion.catalog import DEFAULT_SOURCES, binance_variants
+
+    specs = {s.id: s for s in DEFAULT_SOURCES}
+    b, u = specs["binance.listados"], specs["upbit.avisos"]
+    assert b.interval_s <= 3 and u.interval_s <= 2
+    v = binance_variants()
+    assert len(v) == len(set(v)) == 72 and b.url_variants == v
+    for x in v:                                             # solo los tamaños que CloudFront acepta (si no, HTTP 400)
+        q = dict(p.split("=") for p in x.split("?")[1].split("&"))
+        assert q["type"] == "1" and q["catalogId"] == "48" and q["pageNo"] == "1" and q["pageSize"] in {"10", "15", "20"}
+    assert len(v) * b.interval_s > 120 * 1.5                # cada forma vuelve recién con la copia del CDN vencida
