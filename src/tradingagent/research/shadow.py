@@ -488,7 +488,7 @@ def _save(base: Path, now: float, st: dict, trades: list[dict], decisions: list[
     paths.write_json_atomic(base / STATE, st)
 
 
-MARKET_ES = {"binance-spot": "Binance", "mexc-futuros": "futuros MEXC"}
+MARKET_ES = {"binance-spot": "Binance", "mexc-futuros": "futuros MEXC", "binance-futuros": "futuros Binance"}
 
 
 def day_stats(base: Path, day: str) -> dict:

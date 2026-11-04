@@ -1,5 +1,6 @@
-"""Universo operable en MEXC futuros: TODO lo que la noticia pueda mover (pedido del dueño, 3-nov: "operar con
-distintas monedas, cripto, acciones o lo que sea necesario según la noticia").
+"""Universo operable: TODO lo que la noticia pueda mover (pedido del dueño, 3-nov: "operar con distintas monedas,
+cripto, acciones o lo que sea necesario según la noticia"). Desde el 4-nov, en Binance Futures (`build_binance`:
+cripto y TradFi, con alias para lo que la noticia nombra distinto); lo de abajo es el de MEXC, que sigue disponible.
 
 MEXC tiene más de mil perpetuos USDT operables por API: criptos, acciones (Tesla, Nvidia, Apple...), índices
 (S&P 500, Nasdaq), metales y petróleo. Este módulo arma el catálogo con la API pública (`contract/detail` y
@@ -15,6 +16,7 @@ MEXC tiene más de mil perpetuos USDT operables por API: criptos, acciones (Tesl
 
 Se guarda en disco y se renueva cada `TTL_S` (la lista cambia con los listados nuevos).
 """
+import asyncio
 import logging
 import re
 import time
@@ -31,9 +33,15 @@ MIN_ADV_USDT = 1_000_000          # líquidos: se reconocen por nombre o ticker
 # Binance movían 0,1 a 0,9 M por día en MEXC. Antes de cada orden se revisan spread y profundidad igual.
 MIN_ADV_SMALL_USDT = 100_000
 TTL_S = 6 * 3600
-CRYPTO, STOCK, INDEX, COMMODITY = "cripto", "accion", "indice", "materia_prima"
+CRYPTO, STOCK, INDEX, COMMODITY, FX = "cripto", "accion", "indice", "materia_prima", "moneda"
 _TICKER = re.compile(r"^[A-Z0-9]{1,12}$")
 _PAREN = re.compile(r"\(.*?\)")
+# Binance antepone un multiplicador a las monedas de precio muy chico (1000PEPEUSDT, 1MBABYDOGEUSDT): la noticia
+# dice PEPE. El contrato se opera por su propio precio, así que el multiplicador no cambia nada más.
+_MULTIPLIER = re.compile(r"^(1000000|100000|10000|1000|100|1M)(?=[A-Z])")
+# TradFi de Binance que la noticia nombra distinto: la clave es la de la noticia (la de NAMES) y el ticker del
+# contrato queda como alias (también lo puede nombrar la IA).
+BINANCE_KEYS = {"XAG": "SILVER", "CL": "USOIL", "BZ": "UKOIL", "SPY": "SP500", "QQQ": "NAS100"}
 
 # Nombres que identifican a un activo en un titular (en minúsculas, palabra entera). Lo más noticiable de la
 # bolsa y las materias primas; las criptos usan research/assets.py y su ticker.
@@ -47,12 +55,14 @@ NAMES = {
     "COIN": ("coinbase global",), "HOOD": ("robinhood",), "UBER": ("uber",), "DIS": ("disney",),
     "XAU": ("gold prices", "gold price", "spot gold", "gold futures"), "SILVER": ("silver prices", "spot silver"),
     "USOIL": ("crude oil", "wti", "oil prices"), "UKOIL": ("brent",), "SP500": ("s&p 500", "s&p500"),
-    "NAS100": ("nasdaq 100", "nasdaq-100", "nasdaq composite"),
+    "NAS100": ("nasdaq 100", "nasdaq-100", "nasdaq composite"), "NATGAS": ("natural gas",),
+    "COPPER": ("copper prices", "copper futures"), "XPT": ("platinum",), "XPD": ("palladium",),
 }
 # No van nombres sueltos que en cripto significan otra cosa: "oracle" (los oráculos de precios), "gold"
 # ("digital gold"), "nasdaq" (la bolsa donde cotiza una empresa) o "meta" a secas.
 KIND_BY_KEY = {"XAU": COMMODITY, "XAUT": COMMODITY, "SILVER": COMMODITY, "USOIL": COMMODITY, "UKOIL": COMMODITY,
-               "SP500": INDEX, "NAS100": INDEX, "SPY": INDEX, "QQQ": INDEX}
+               "SP500": INDEX, "NAS100": INDEX, "SPY": INDEX, "QQQ": INDEX, "NATGAS": COMMODITY,
+               "COPPER": COMMODITY, "XPT": COMMODITY, "XPD": COMMODITY}
 
 
 @dataclass(frozen=True)
@@ -109,16 +119,66 @@ def build(details: list[dict], tickers: list[dict], min_adv: float = MIN_ADV_USD
     return Universe(entries.values())
 
 
+def binance_key(c: dict) -> str:
+    """La clave de la noticia para un contrato de Binance: el ticker sin multiplicador (1000PEPE → PEPE) o, en los
+    TradFi que la noticia nombra distinto, el nombre de NAMES (CL → USOIL, SPY → SP500)."""
+    base = str(c.get("base") or "").upper()
+    if (c.get("subyacente") or "COIN") == "COIN":
+        return _MULTIPLIER.sub("", base)
+    return BINANCE_KEYS.get(base, base)
+
+
+def _binance_kind(c: dict, key: str) -> str:
+    if key in KIND_BY_KEY:
+        return KIND_BY_KEY[key]
+    under = c.get("subyacente") or "COIN"
+    if under == "COIN":
+        return CRYPTO
+    if under == "COMMODITY":
+        return COMMODITY
+    if under == "FX":
+        return FX
+    return STOCK                                  # EQUITY, KR_EQUITY, HK_EQUITY, CN_EQUITY
+
+
+def build_binance(contracts: dict[str, dict], volumes: dict[str, float], min_adv: float = MIN_ADV_USDT,
+                  min_small: float = MIN_ADV_SMALL_USDT) -> "Universe":
+    """Del catálogo y los volúmenes públicos de Binance Futures (marketdata/binance_futures.py) al universo
+    operable: perpetuos en USDT activos, de cripto y TradFi, con volumen."""
+    from .binance_futures import SKIP_UNDERLYING
+    entries: dict[str, Entry] = {}
+    for sym, c in contracts.items():
+        if not c.get("trading") or (c.get("subyacente") or "COIN") in SKIP_UNDERLYING:
+            continue
+        adv = float(volumes.get(sym, 0) or 0)
+        if adv < min(min_adv, min_small):
+            continue
+        key = binance_key(c)
+        if not key:
+            continue
+        liquid = adv >= min_adv
+        e = Entry(key, sym, _binance_kind(c, key), round(adv), NAMES.get(key, ()) if liquid else (), liquid)
+        if key not in entries or e.adv > entries[key].adv:          # dos contratos del mismo activo: el líquido
+            entries[key] = e
+    aliases = {raw: key for raw, key in BINANCE_KEYS.items() if key in entries and raw not in entries}
+    return Universe(entries.values(), aliases=aliases)
+
+
 class Universe:
-    def __init__(self, entries=()):
+    def __init__(self, entries=(), aliases: dict[str, str] | None = None):
         self.by_key = {e.key: e for e in entries}
         self.by_symbol = {e.symbol: e for e in entries}
+        self.aliases = {str(k).upper(): str(v).upper() for k, v in (aliases or {}).items()}
 
     def __len__(self) -> int:
         return len(self.by_key)
 
+    def _entry(self, key: str) -> "Entry | None":
+        k = str(key).upper()
+        return self.by_key.get(k) or self.by_key.get(self.aliases.get(k, ""))
+
     def symbol(self, key: str) -> str | None:
-        e = self.by_key.get(str(key).upper())
+        e = self._entry(key)
         return e.symbol if e else None
 
     def key_of(self, symbol: str) -> str | None:
@@ -126,7 +186,7 @@ class Universe:
         return e.key if e else None
 
     def kind(self, key: str) -> str | None:
-        e = self.by_key.get(str(key).upper())
+        e = self._entry(key)
         return e.kind if e else None
 
     def keys(self) -> set[str]:
@@ -136,7 +196,8 @@ class Universe:
         return {k for k, e in self.by_key.items() if e.liquid}
 
     def as_dict(self) -> dict:
-        return {"entradas": [asdict(e) for e in self.by_key.values()]}
+        return {"entradas": [asdict(e) for e in self.by_key.values()], **({"alias": self.aliases} if self.aliases
+                                                                            else {})}
 
     @classmethod
     def from_dict(cls, d: dict | None) -> "Universe":
@@ -147,11 +208,11 @@ class Universe:
                                  bool(x.get("liquid", True))))
             except (KeyError, TypeError, ValueError):
                 continue
-        return cls(out)
+        aliases = (d or {}).get("alias")
+        return cls(out, aliases=aliases if isinstance(aliases, dict) else None)
 
 
-async def load(session, cache: Path | None = None, *, base: str = mexc.BASE, now: float | None = None,
-               min_adv: float = MIN_ADV_USDT) -> Universe:
+async def _cached(cache: Path | None, now: float | None, fetch, who: str) -> Universe:
     """El universo de la caché si tiene menos de `TTL_S`; si no, de la API pública (y se guarda). Sin red,
     la caché vieja; sin nada, vacío (se opera solo lo que ya conoce el programa)."""
     now = time.time() if now is None else now
@@ -159,13 +220,34 @@ async def load(session, cache: Path | None = None, *, base: str = mexc.BASE, now
     if isinstance(cached, dict) and now - float(cached.get("ts", 0)) < TTL_S:
         return Universe.from_dict(cached)
     try:
-        details = await mexc._get(session, f"{base}/api/v1/contract/detail", None, "catálogo de contratos")
-        tickers = await mexc._get(session, f"{base}/api/v1/contract/ticker", None, "tickers")
-        uni = build(details if isinstance(details, list) else [details],
-                    tickers if isinstance(tickers, list) else [tickers], min_adv)
+        uni = await fetch()
     except Exception as e:                                           # noqa: BLE001 (sin catálogo se sigue igual)
-        log.warning("no pude leer el catálogo de MEXC: %s", str(e)[:120])
+        log.warning("no pude leer el catálogo de %s: %s", who, str(e)[:120])
         return Universe.from_dict(cached)
     if cache and len(uni):
         paths.write_json_atomic(cache, {"ts": round(now), **uni.as_dict()})
     return uni
+
+
+async def load(session, cache: Path | None = None, *, base: str = mexc.BASE, now: float | None = None,
+               min_adv: float = MIN_ADV_USDT) -> Universe:
+    """Universo de MEXC futuros (ver `_cached`)."""
+    async def fetch():
+        details = await mexc._get(session, f"{base}/api/v1/contract/detail", None, "catálogo de contratos")
+        tickers = await mexc._get(session, f"{base}/api/v1/contract/ticker", None, "tickers")
+        return build(details if isinstance(details, list) else [details],
+                     tickers if isinstance(tickers, list) else [tickers], min_adv)
+
+    return await _cached(cache, now, fetch, "MEXC")
+
+
+async def load_binance(session, cache: Path | None = None, *, base: str | None = None, now: float | None = None,
+                       min_adv: float = MIN_ADV_USDT) -> Universe:
+    """Universo de Binance Futures USDⓈ-M, cripto y TradFi (ver `_cached`)."""
+    from . import binance_futures as bf
+
+    async def fetch():
+        contracts, vols = await asyncio.gather(bf.catalog(session, base or bf.BASE), bf.volumes(session, base or bf.BASE))
+        return build_binance(contracts, vols, min_adv)
+
+    return await _cached(cache, now, fetch, "Binance")

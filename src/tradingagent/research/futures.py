@@ -10,12 +10,15 @@
 Sin claves ni órdenes reales: los datos son públicos y la cuenta solo se lee (marketdata/mexc.py).
 """
 import logging
+import time
 from decimal import Decimal as D
 
 from ..execution.instruments import Instrument, InstrumentRegistry
+from ..marketdata import binance_futures as bfd
 from ..marketdata import mexc
 from ..marketdata import universe as universe_mod
 from ..marketdata.providers import MarketDataError
+from . import labeler
 from .labeler import MIN, CandleStore
 
 log = logging.getLogger("tradingagent.futures")
@@ -29,6 +32,7 @@ def liquidation_price(entry: float, side: int, leverage: float, mmr: float) -> f
 
 class MexcFutures:
     name, kind, allows_short, label = "mexc-futuros", "perp", True, "PAPER futuros MEXC"
+    venue_es, universe_file = "MEXC", "universo-mexc.json"
     maker_bps, taker_bps = D("2"), D("5")
 
     def __init__(self, base: str = mexc.BASE, readonly: "mexc.ReadOnlyClient | None" = None, max_leverage: int = 1):
@@ -98,8 +102,12 @@ class MexcFutures:
         una entrada de hoy recibía el "próximo cobro" de ayer (y se le cobraba funding de horas en que no estaba)."""
         f = self._funding.get(sym)
         if f is None or now_ms >= f["next_ms"] or now_ms - f["_leido"] > FUNDING_TTL_S * 1000:
-            f = self._funding[sym] = {**await mexc.funding(session, sym, self.base), "_leido": now_ms}
+            f = self._funding[sym] = {**await self._fetch_funding(session, sym), "_leido": now_ms}
         return f
+
+    async def _fetch_funding(self, session, sym: str) -> dict:
+        """{"rate", "next_ms", "cycle_h"} del exchange."""
+        return await mexc.funding(session, sym, self.base)
 
     def funding_cost(self, sym: str, rate: float | None, side: int, now: float, horizon_s: float) -> float:
         """Funding EN CONTRA (fracción del nominal) si la posición llega a su expiración después de uno o más
@@ -154,3 +162,88 @@ class MexcFutures:
                 meta["funding_rate"] = (await self._rate(run.session, sym, int(run.now * 1000)))["rate"]
             except MarketDataError:
                 pass
+
+
+class BinanceFutures(MexcFutures):
+    """Futuros perpetuos de Binance USDⓈ-M en paper: el lugar de ejecución desde el 4-nov-2026 (MEXC restringió la
+    cuenta). Criptos y TradFi (acciones, ETF, oro, petróleo...), las 24 h. Largos y cortos a 1x, con el mismo
+    funding y la misma liquidación que MEXC; los datos son los públicos de Binance (marketdata/binance_futures.py).
+
+    - Comisión: 0,02 % maker y 0,05 % taker (la estándar de USDⓈ-M, VIP 0), salvo que el contrato pida más.
+    - El catálogo entero viene en un pedido: se guarda en memoria 6 h y se vuelve a pedir antes si una noticia
+      nombra un contrato que no está (un listado nuevo), como mucho una vez por minuto.
+    """
+    name, label = "binance-futuros", "PAPER futuros Binance"
+    venue_es, universe_file = "Binance", "universo-binance.json"
+    CATALOG_TTL_S, CATALOG_RETRY_S, HOURS_TTL_S = 6 * 3600, 60, 6 * 3600
+
+    def __init__(self, base: str = bfd.BASE, max_leverage: int = 1):
+        super().__init__(base=base, readonly=None, max_leverage=max_leverage)
+        self._catalog: dict[str, dict] = {}
+        self._catalog_at = float("-inf")
+        self._hours: dict[str, int] = {}
+        self._hours_at = float("-inf")
+
+    def symbol(self, asset: str) -> str:
+        """El contrato de un activo: del universo de Binance (PEPE → 1000PEPEUSDT, SP500 → SPYUSDT) o ACTIVOUSDT."""
+        return self.universe.symbol(asset) or f"{str(asset).upper()}USDT"
+
+    async def load_universe(self, session, cache, now: float | None = None) -> int:
+        from ..research import assets as asset_mod
+        uni = await universe_mod.load_binance(session, cache, base=self.base, now=now)
+        if len(uni):
+            self.universe = uni
+            asset_mod.register(uni.by_key.values())
+        return len(self.universe)
+
+    async def _contracts(self, session, now: float, want: list[str]) -> dict[str, dict]:
+        age = now - self._catalog_at
+        missing = [s for s in want if s not in self._catalog]
+        if age > self.CATALOG_TTL_S or (missing and age > self.CATALOG_RETRY_S):
+            try:
+                self._catalog, self._catalog_at = await bfd.catalog(session, self.base), now
+            except MarketDataError as e:
+                log.warning("sin catálogo de Binance: %s", e)
+        return self._catalog
+
+    async def instruments(self, session, symbols, cache: dict, now: float) -> InstrumentRegistry:
+        stale = [s for s in symbols if not (s in cache and now - cache[s].get("ts", 0) < INFO_TTL_S)]
+        if stale:
+            contracts = await self._contracts(session, now, stale)
+            for sym in stale:
+                if sym in contracts and contracts[sym].get("subyacente") not in bfd.SKIP_UNDERLYING:
+                    cache[sym] = {**contracts[sym], "ts": round(now)}
+                elif sym not in cache:
+                    log.warning("sin especificación de %s en Binance", sym)
+        reg = InstrumentRegistry(())
+        for sym, f in cache.items():
+            if not f.get("trading", True) or "step" not in f:
+                continue
+            self.mmr[sym] = float(f.get("mmr", 0.005))
+            reg.add(Instrument(sym, "binance-futuros", f["base"], f["quote"], kind="perp", tick_size=D(f["tick"]),
+                               step_size=D(f["step"]), min_qty=D(f["min_qty"]),
+                               min_notional=D(str(f.get("min_notional", "5"))), maker_fee_bps=self.maker_bps,
+                               taker_fee_bps=self.taker_bps,
+                               max_leverage=D(min(self.max_leverage, int(f.get("max_leverage", 1))))))
+        return reg
+
+    def candle_store(self, session) -> CandleStore:
+        return CandleStore(session, providers=(("binance-futuros", labeler.binance, f"{self.base}/fapi/v1/klines"),))
+
+    def books(self, session, clock):
+        return bfd.books(session, clock, self.base)
+
+    async def ticker(self, session, sym: str) -> dict:
+        return await bfd.ticker(session, sym, self.base)
+
+    async def _fetch_funding(self, session, sym: str) -> dict:
+        now = time.time()
+        if now - self._hours_at > self.HOURS_TTL_S:
+            try:
+                self._hours, self._hours_at = await bfd.funding_hours(session, self.base), now
+            except MarketDataError as e:                           # sin el dato, el intervalo estándar
+                log.warning("sin intervalos de funding de Binance: %s", e)
+        p = await bfd.premium(session, sym, self.base)
+        hours = int(self._hours.get(sym, 8))
+        nxt = p["next_ms"] or (int(now * 1000) // (hours * 3600_000) + 1) * hours * 3600_000
+        return {"rate": p["rate"], "next_ms": nxt, "cycle_h": hours}

@@ -1,20 +1,50 @@
 """Binance Futures USDⓈ-M falso para el modo real: verifica la firma HMAC de la query, valida órdenes (prueba sin
 ejecutar), rechaza la "solo maker" (GTX) que cruzaría, lleva órdenes y posiciones, y programa fallas (límite 429,
-modo multi-activo, cobertura, bloqueo por reglas cuantitativas, otro lado)."""
+modo multi-activo, cobertura, bloqueo por reglas cuantitativas, otro lado).
+
+También sirve los datos públicos de mercado (catálogo con cripto y TradFi, libro, velas de 1 minuto, volumen,
+precio de marca y funding): el precio es una función del minuto, como en fake_mexc.py."""
 import hashlib
 import hmac
 import time
+from decimal import ROUND_CEILING, ROUND_FLOOR
 from decimal import Decimal as D
 from urllib.parse import urlencode
 
 from aiohttp import web
 
 KEY, SECRET = "clave-binance-de-prueba", "secreto-binance-de-prueba"
+MIN = 60_000
+# tick, paso, mínimo, nominal mínimo, tipo de contrato, subyacente, activo base
+SPECS = {
+    "XRPUSDT": ("0.0001", "0.1", "0.1", "5", "PERPETUAL", "COIN", "XRP"),
+    "BTCUSDT": ("0.1", "0.001", "0.001", "50", "PERPETUAL", "COIN", "BTC"),
+    "ETHUSDT": ("0.01", "0.001", "0.001", "20", "PERPETUAL", "COIN", "ETH"),
+    "SOLUSDT": ("0.01", "0.01", "0.01", "5", "PERPETUAL", "COIN", "SOL"),
+    "1000PEPEUSDT": ("0.0000001", "1", "1", "5", "PERPETUAL", "COIN", "1000PEPE"),
+    "SMALLUSDT": ("0.0001", "1", "1", "5", "PERPETUAL", "COIN", "SMALL"),
+    "TINYUSDT": ("0.0001", "1", "1", "5", "PERPETUAL", "COIN", "TINY"),
+    "TSLAUSDT": ("0.01", "0.01", "0.01", "5", "TRADIFI_PERPETUAL", "EQUITY", "TSLA"),
+    "XAUUSDT": ("0.01", "0.001", "0.001", "5", "TRADIFI_PERPETUAL", "COMMODITY", "XAU"),
+    "XAGUSDT": ("0.001", "0.01", "0.01", "5", "TRADIFI_PERPETUAL", "COMMODITY", "XAG"),
+    "SPYUSDT": ("0.01", "0.01", "0.01", "5", "TRADIFI_PERPETUAL", "EQUITY", "SPY"),
+    "OPENAIUSDT": ("0.01", "0.01", "0.01", "5", "TRADIFI_PERPETUAL", "PREMARKET", "OPENAI"),
+    "BTCDOMUSDT": ("0.1", "0.001", "0.001", "5", "PERPETUAL", "INDEX", "BTCDOM"),
+}
+PRICES = {"BTCUSDT": 100_000.0, "ETHUSDT": 4_000.0, "SOLUSDT": 150.0, "1000PEPEUSDT": 0.005, "SMALLUSDT": 1.0,
+          "TINYUSDT": 1.0, "TSLAUSDT": 400.0, "XAUUSDT": 4_000.0, "XAGUSDT": 50.0, "SPYUSDT": 650.0,
+          "OPENAIUSDT": 100.0, "BTCDOMUSDT": 6_000.0}
+VOLUMES = {"SMALLUSDT": 500_000.0, "TINYUSDT": 50_000.0}          # el resto, 2.000 M por día
 
 
 class FakeBinance:
-    def __init__(self, bid="0.5000", ask="0.5001"):
+    def __init__(self, bid="0.5000", ask="0.5001", *, price=None, clock=None, spread_bps: float = 2.0,
+                 level: float = 1_000.0):
         self.bid, self.ask = D(bid), D(ask)
+        self.price = price or (lambda sym, m: PRICES.get(sym))     # (contrato, minuto en ms) → precio
+        self.clock, self.spread_bps, self.level = clock, spread_bps, level
+        self.funding_rate = 0.0001
+        self.overrides: dict[tuple[str, int], tuple[float, float, float, float]] = {}   # (par, minuto): OHLC
         self.balance = D("50")
         self.dual = False
         self.multi_assets = False
@@ -51,10 +81,10 @@ class FakeBinance:
         if path == "/fapi/v1/time":
             return web.json_response({"serverTime": int(time.time() * 1000)})
         if path == "/fapi/v1/exchangeInfo":
-            return web.json_response({"symbols": [{"symbol": "XRPUSDT", "filters": [
-                {"filterType": "PRICE_FILTER", "tickSize": "0.0001"},
-                {"filterType": "LOT_SIZE", "stepSize": "0.1", "minQty": "0.1"},
-                {"filterType": "MIN_NOTIONAL", "notional": "5"}]}]})
+            return web.json_response({"symbols": [self._spec(sym) for sym in SPECS]})
+        if path in ("/fapi/v1/depth", "/fapi/v1/klines", "/fapi/v1/ticker/24hr", "/fapi/v1/premiumIndex",
+                    "/fapi/v1/fundingInfo"):
+            return self._public(path, dict(request.query))
         if path == "/fapi/v1/ticker/bookTicker":
             return web.json_response({"symbol": "XRPUSDT", "bidPrice": str(self.bid), "askPrice": str(self.ask)})
         if not self._check(request):
@@ -141,6 +171,68 @@ class FakeBinance:
                 o["status"] = "CANCELED"
             return web.json_response({"code": 200, "msg": "The operation of cancel all open order is done."})
         return web.json_response({"code": -1, "msg": f"ruta desconocida {m} {path}"}, status=404)
+
+    # -- datos públicos de mercado ------------------------------------------------------------------------
+    def _now(self) -> float:
+        return self.clock.time() if self.clock is not None else time.time()
+
+    def _spec(self, sym: str) -> dict:
+        tick, step, min_qty, notional, ctype, under, base = SPECS[sym]
+        return {"symbol": sym, "pair": sym, "contractType": ctype, "status": "TRADING", "baseAsset": base,
+                "quoteAsset": "USDT", "marginAsset": "USDT", "maintMarginPercent": "2.5000",
+                "requiredMarginPercent": "5.0000", "underlyingType": under,
+                "underlyingSubType": ["TradFi"] if ctype == "TRADIFI_PERPETUAL" else ["Crypto"],
+                "filters": [{"filterType": "PRICE_FILTER", "tickSize": tick, "minPrice": tick, "maxPrice": "1000000"},
+                            {"filterType": "LOT_SIZE", "stepSize": step, "minQty": min_qty, "maxQty": "1000000"},
+                            {"filterType": "MIN_NOTIONAL", "notional": notional},
+                            {"filterType": "PERCENT_PRICE", "multiplierUp": "1.05", "multiplierDown": "0.95"}]}
+
+    def _mid(self, sym: str, m: int) -> D:
+        px = self.price(sym, m)
+        if px is None and sym == "XRPUSDT":
+            return (self.bid + self.ask) / 2
+        return D(str(px))
+
+    def _public(self, path: str, q: dict):
+        now_m = int(self._now() * 1000) // MIN * MIN
+        if path == "/fapi/v1/depth":
+            sym = q["symbol"]
+            if sym == "XRPUSDT" and self.price(sym, now_m) is None:
+                bid, ask, tick = self.bid, self.ask, D("0.0001")
+            else:
+                mid, tick = self._mid(sym, now_m), D(SPECS[sym][0])
+                half = mid * D(str(self.spread_bps)) / 2 / 10_000
+                bid = ((mid - half) / tick).to_integral_value(ROUND_FLOOR) * tick
+                ask = max(((mid + half) / tick).to_integral_value(ROUND_CEILING) * tick, bid + tick)
+            ms = int(self._now() * 1000)
+            return web.json_response({"lastUpdateId": 1, "E": ms, "T": ms,
+                                      "bids": [[str(bid - i * tick), str(self.level)] for i in range(20)],
+                                      "asks": [[str(ask + i * tick), str(self.level)] for i in range(20)]})
+        if path == "/fapi/v1/klines":
+            sym, start, end = q["symbol"], int(q["startTime"]), int(q.get("endTime") or now_m)
+            out, m = [], start // MIN * MIN
+            while m <= min(end, now_m) and len(out) < int(q.get("limit", 500)):
+                o, c = float(self._mid(sym, m)), float(self._mid(sym, m + MIN))
+                h, lo = max(o, c) * 1.001, min(o, c) * 0.999
+                if (sym, m) in self.overrides:
+                    o, h, lo, c = self.overrides[(sym, m)]
+                out.append([m, str(o), str(h), str(lo), str(c), "100", m + MIN - 1, str(100 * o), 10, "50",
+                            str(50 * o), "0"])
+                m += MIN
+            return web.json_response(out)
+        if path == "/fapi/v1/ticker/24hr":
+            rows = [{"symbol": s_, "lastPrice": str(self._mid(s_, now_m)), "quoteVolume": str(VOLUMES.get(s_, 2e9))}
+                    for s_ in SPECS]
+            if "symbol" in q:
+                return web.json_response(next(r for r in rows if r["symbol"] == q["symbol"]))
+            return web.json_response(rows)
+        if path == "/fapi/v1/premiumIndex":
+            sym = q["symbol"]
+            hours = 4 if sym == "XAUUSDT" else 8
+            nxt = (int(self._now() * 1000) // (hours * 3600_000) + 1) * hours * 3600_000
+            return web.json_response({"symbol": sym, "markPrice": str(self._mid(sym, now_m)),
+                                      "lastFundingRate": str(self.funding_rate), "nextFundingTime": nxt})
+        return web.json_response([{"symbol": "XAUUSDT", "fundingIntervalHours": 4}])      # /fapi/v1/fundingInfo
 
     def app(self) -> web.Application:
         a = web.Application()
