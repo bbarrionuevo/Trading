@@ -61,6 +61,12 @@ class FakeBinance:
         self.algo_lag = 0                         # consultas que siguen diciendo NEW tras cancelar (el real tarda)
         self.algo_stuck = False                   # el stop no se cancela de a uno (solo con "cancelar todos")
         self.fail_cancel_all = False              # "cancelar todas las órdenes" da error
+        self.positions: dict[str, dict] = {}      # contrato → {"amt": con signo, "entry": precio promedio}
+        self.trades: list[dict] = []              # ejecuciones (userTrades)
+        self.fee = D("0.0005")                    # comisión de taker
+        self.fail_next_order = 0                  # cuántas IOC se ejecutan pero contestan 503 (no se sabe si entró)
+        self.fail_stops = 0                       # cuántos stops de emergencia rechaza
+        self.tradfi_signed = True                 # el dueño aceptó el acuerdo TradFi (si no: -4411, como la demo)
 
     def _check(self, request) -> bool:
         q = dict(request.query)
@@ -86,13 +92,18 @@ class FakeBinance:
                     "/fapi/v1/fundingInfo"):
             return self._public(path, dict(request.query))
         if path == "/fapi/v1/ticker/bookTicker":
-            return web.json_response({"symbol": "XRPUSDT", "bidPrice": str(self.bid), "askPrice": str(self.ask)})
+            sym = request.query.get("symbol", "XRPUSDT")
+            bid, ask = self._top(sym)
+            return web.json_response({"symbol": sym, "bidPrice": str(bid), "askPrice": str(ask)})
         if not self._check(request):
             return web.json_response({"code": -1022, "msg": "Signature for this request is not valid."}, status=400)
         q = dict(request.query)
+        self._fire_stops()
         if path == "/fapi/v2/balance":
+            used = sum((abs(x["amt"]) * x["entry"] / self.leverage.get(sym, 20) for sym, x in self.positions.items()),
+                       D(0))
             return web.json_response([{"asset": "USDT", "balance": str(self.balance), "crossUnPnl": "0",
-                                       "availableBalance": str(self.balance)}])
+                                       "availableBalance": str(self.balance - used)}])
         if path == "/fapi/v1/apiTradingStatus":
             ind = {"XRPUSDT": [{"isLocked": True, "indicator": "UFR"}]} if self.locked else {}
             return web.json_response({"indicators": ind})
@@ -101,7 +112,13 @@ class FakeBinance:
         if path == "/fapi/v1/multiAssetsMargin":
             return web.json_response({"multiAssetsMargin": self.multi_assets})
         if path == "/fapi/v2/positionRisk":
-            return web.json_response([])
+            return web.json_response([{"symbol": sym, "positionAmt": str(x["amt"]), "entryPrice": str(x["entry"]),
+                                       "marginType": "isolated", "leverage": str(self.leverage.get(sym, 20))}
+                                      for sym, x in self.positions.items()
+                                      if x["amt"] and q.get("symbol", sym) == sym])
+        if path == "/fapi/v1/userTrades":
+            return web.json_response([t for t in self.trades if t["symbol"] == q["symbol"]
+                                      and str(t["orderId"]) == str(q.get("orderId", t["orderId"]))])
         if path == "/fapi/v1/openOrders":
             return web.json_response([o for o in self.orders.values() if o["status"] == "NEW"])
         if path == "/fapi/v1/marginType":
@@ -119,6 +136,9 @@ class FakeBinance:
             self.tests.append(q)
             return web.json_response({})
         if path == "/fapi/v1/algoOrder" and m == "POST":
+            if self.fail_stops:
+                self.fail_stops -= 1
+                return web.json_response({"code": -1000, "msg": "Unknown error"}, status=400)
             a = {"algoId": len(self.algos) + 1, "clientAlgoId": q["clientAlgoId"], "algoType": q["algoType"],
                  "orderType": q["type"], "symbol": q["symbol"], "side": q["side"], "triggerPrice": q["triggerPrice"],
                  "workingType": q.get("workingType", "CONTRACT_PRICE"), "closePosition": q.get("closePosition") == "true",
@@ -133,18 +153,24 @@ class FakeBinance:
             return web.json_response(a) if a else web.json_response({"code": -2013, "msg": "Order does not exist."},
                                                                     status=400)
         if path == "/fapi/v1/algoOrder" and m == "DELETE":
-            a = self.algos[q["clientAlgoId"]]
+            a = self.algos.get(q["clientAlgoId"])
+            if a is None or a["algoStatus"] != "NEW":                 # ya vencido, disparado o cancelado
+                return web.json_response({"code": -2011, "msg": "Unknown order sent."}, status=400)
             if not self.algo_stuck:
                 a["algoStatus"], a["lag"] = "CANCELED", self.algo_lag
             self.cancel_after.append(time.monotonic() - a["created"])
             return web.json_response({"algoId": a["algoId"], "clientAlgoId": a["clientAlgoId"], "code": "200",
                                       "msg": "success"})
         if path == "/fapi/v1/openAlgoOrders":
-            return web.json_response([a for a in self.algos.values() if a["algoStatus"] == "NEW"])
+            return web.json_response([a for a in self.algos.values() if a["algoStatus"] == "NEW"
+                                      and q.get("symbol", a["symbol"]) == a["symbol"]])
         if path == "/fapi/v1/algoOpenOrders" and m == "DELETE":
             for a in self.algos.values():
-                a["algoStatus"] = "CANCELED"
+                if a["algoStatus"] == "NEW" and q.get("symbol", a["symbol"]) == a["symbol"]:
+                    a["algoStatus"] = "CANCELED"
             return web.json_response({"code": 200, "msg": "success"})
+        if path == "/fapi/v1/order" and m == "POST" and q.get("timeInForce") == "IOC":
+            return self._ioc(q)
         if path == "/fapi/v1/order" and m == "POST":
             if q.get("timeInForce") == "GTX" and q["side"] == "BUY" and D(q["price"]) >= self.ask:
                 return web.json_response({"code": -5022, "msg": "Due to the order could not be executed as maker"},
@@ -171,6 +197,78 @@ class FakeBinance:
                 o["status"] = "CANCELED"
             return web.json_response({"code": 200, "msg": "The operation of cancel all open order is done."})
         return web.json_response({"code": -1, "msg": f"ruta desconocida {m} {path}"}, status=404)
+
+    # -- ejecución --------------------------------------------------------------------------------------
+    def _top(self, sym: str) -> tuple[D, D]:
+        now_m = int(self._now() * 1000) // MIN * MIN
+        if sym == "XRPUSDT" and self.price(sym, now_m) is None:
+            return self.bid, self.ask
+        mid, tick = self._mid(sym, now_m), D(SPECS[sym][0])
+        half = mid * D(str(self.spread_bps)) / 2 / 10_000
+        bid = ((mid - half) / tick).to_integral_value(ROUND_FLOOR) * tick
+        return bid, max(((mid + half) / tick).to_integral_value(ROUND_CEILING) * tick, bid + tick)
+
+    def _fill(self, sym: str, side: str, qty: D, px: D, oid) -> None:
+        pos = self.positions.setdefault(sym, {"amt": D(0), "entry": D(0)})
+        signed = qty if side == "BUY" else -qty
+        realized = D(0)
+        if pos["amt"] == 0 or (pos["amt"] > 0) == (signed > 0):
+            new = pos["amt"] + signed
+            pos["entry"] = (abs(pos["amt"]) * pos["entry"] + qty * px) / abs(new)
+            pos["amt"] = new
+        else:
+            realized = (px - pos["entry"]) * min(qty, abs(pos["amt"])) * (1 if pos["amt"] > 0 else -1)
+            pos["amt"] += signed
+        if pos["amt"] == 0:
+            del self.positions[sym]
+            for a in self.algos.values():                 # Binance vence solo el stop de cierre total (demo, 4-nov)
+                if a["symbol"] == sym and a["algoStatus"] == "NEW" and a.get("closePosition"):
+                    a["algoStatus"] = "EXPIRED"
+        fee = qty * px * self.fee
+        self.balance += realized - fee
+        self.trades.append({"symbol": sym, "id": len(self.trades) + 1, "orderId": oid, "side": side, "price": str(px),
+                            "qty": str(qty), "realizedPnl": str(realized), "quoteQty": str(qty * px),
+                            "commission": str(fee), "commissionAsset": "USDT", "time": int(self._now() * 1000),
+                            "maker": False, "buyer": side == "BUY"})
+
+    def _ioc(self, q: dict):
+        sym, side, qty, price = q["symbol"], q["side"], D(q["quantity"]), D(q["price"])
+        reduce = q.get("reduceOnly") == "true"
+        if SPECS[sym][4] == "TRADIFI_PERPETUAL" and not self.tradfi_signed:
+            return web.json_response({"code": -4411, "msg": "Please sign TradFi-Perps agreement contract fapi."},
+                                     status=400)
+        pos = self.positions.get(sym, {"amt": D(0)})
+        if reduce:
+            if pos["amt"] == 0 or (pos["amt"] > 0) == (side == "BUY"):
+                return web.json_response({"code": -2022, "msg": "ReduceOnly Order is rejected."}, status=400)
+            qty = min(qty, abs(pos["amt"]))
+        bid, ask = self._top(sym)
+        px = ask if side == "BUY" else bid
+        oid = len(self.orders) + 1
+        o = {"symbol": sym, "clientOrderId": q["newClientOrderId"], "orderId": oid, "side": side, "type": "LIMIT",
+             "timeInForce": "IOC", "price": q["price"], "origQty": q["quantity"], "executedQty": "0", "avgPrice": "0",
+             "status": "EXPIRED", "reduceOnly": reduce, "created": time.monotonic()}
+        if (px <= price) if side == "BUY" else (px >= price):
+            self._fill(sym, side, qty, px, oid)
+            o.update(executedQty=str(qty), avgPrice=str(px), status="FILLED")
+        self.orders[q["newClientOrderId"]] = o
+        if self.fail_next_order:                              # entró, pero la respuesta se perdió
+            self.fail_next_order -= 1
+            return web.json_response({"code": -1000, "msg": "Unknown error, please check your request or try again "
+                                      "later."}, status=503)
+        return web.json_response(o)
+
+    def _fire_stops(self) -> None:
+        """Lo que hace Binance solo: si el precio de marca cruzó un stop de cierre total, cierra la posición."""
+        now_m = int(self._now() * 1000) // MIN * MIN
+        for a in self.algos.values():
+            if a["algoStatus"] != "NEW" or not a.get("closePosition") or a["symbol"] not in self.positions:
+                continue
+            mark, trigger = self._mid(a["symbol"], now_m), D(a["triggerPrice"])
+            if (mark <= trigger) if a["side"] == "SELL" else (mark >= trigger):
+                amt = self.positions[a["symbol"]]["amt"]
+                self._fill(a["symbol"], a["side"], abs(amt), mark, f"algo{a['algoId']}")
+                a["algoStatus"] = "FINISHED"
 
     # -- datos públicos de mercado ------------------------------------------------------------------------
     def _now(self) -> float:

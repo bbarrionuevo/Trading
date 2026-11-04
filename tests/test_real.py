@@ -275,7 +275,7 @@ async def test_si_mexc_ya_la_cerro_el_programa_se_sincroniza_y_avisa(tmp_path):
             clock.advance(2)
             await t.watch_once()
             assert t.st["positions"] == {} and len(fake.orders) == n     # no mandó ninguna orden de cierre
-            assert "MEXC ya la había cerrado" in alerts.texts()[-2] + alerts.texts()[-1]
+            assert "El exchange ya la había cerrado" in alerts.texts()[-2] + alerts.texts()[-1]
             assert await t.venue.reconcile() == ""                       # vuelve a coincidir: puede seguir operando
         finally:
             await llm.close()
@@ -401,7 +401,7 @@ def test_armar_el_simulacro_desde_la_consola_y_el_agente_lo_levanta_sin_claves(t
     monkeypatch.setenv("TRADING_HOME", str(home))
     for k in ("MEXC_ACCESS_KEY", "MEXC_SECRET_KEY"):
         monkeypatch.delenv(k, raising=False)
-    assert main(["armar-real", "--simulacro", "--capital", "100", "--dias", "2"]) == 0
+    assert main(["armar-real", "--simulacro", "--capital", "100", "--dias", "2", "--exchange", "mexc"]) == 0
     assert "Simulacro armado: 100 USDT" in capsys.readouterr().out
     data = json.loads((home / "ARMADO.json").read_text(encoding="utf-8"))
     assert data["simulacro"] and data["capital_usdt"] == 100 and (home / "state" / "parar").exists()
@@ -410,8 +410,8 @@ def test_armar_el_simulacro_desde_la_consola_y_el_agente_lo_levanta_sin_claves(t
     t = agent._build_real_trader(None, limits_mod.load())
     assert t.simulated and t.real and t.market.label == "SIMULACRO futuros MEXC"
     assert t.base == home / "simulacro" / "mexc-futuros"
-    assert main(["armar-real", "--simulacro", "--capital", "0"]) == 1        # sin saldo de mentira: no
-    assert main(["armar-real", "--simulacro", "--capital", "5000"]) == 0     # sin tope: el que quieras
+    assert main(["armar-real", "--simulacro", "--capital", "0", "--exchange", "mexc"]) == 1   # sin saldo de mentira
+    assert main(["armar-real", "--simulacro", "--capital", "5000", "--exchange", "mexc"]) == 0   # sin tope
     assert main(["armar-real", "--capital", "100"]) == 1                     # el real no lleva tope: todo el saldo
     lim = limits_mod.load()
     arming.arm(home, 7, ACCESS, arming.phrase(7))

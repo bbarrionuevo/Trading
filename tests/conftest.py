@@ -16,7 +16,8 @@ def _home(tmp_path, monkeypatch):
     """Cada test con su TRADING_HOME aislado: nunca toca la carpeta real del usuario."""
     monkeypatch.setenv("TRADING_HOME", str(tmp_path / "home"))
     for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "SEC_USER_AGENT", "WEBHOOK_SECRET", "ANTHROPIC_API_KEY",
-              "CLAUDE_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "MEXC_ACCESS_KEY", "MEXC_SECRET_KEY"):
+              "CLAUDE_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "MEXC_ACCESS_KEY", "MEXC_SECRET_KEY",
+              "BINANCE_API_KEY", "BINANCE_API_SECRET", "BINANCE_API_KEY_TEST", "BINANCE_API_SECRET_TEST"):
         monkeypatch.delenv(k, raising=False)
 
 

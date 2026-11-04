@@ -37,7 +37,7 @@ Lo que pidió, en sus palabras:
 | Simulacro del real | Armado el 3-nov con 100 USDT de mentira, 2 días. Mismo operador real, sin mandar órdenes |
 | **Dinero real** | **No arranca hasta que el dueño lo confirme** (4-nov: "debemos estar seguros de que todo funciona"). Va por fases: primero la prueba sin riesgo y el simulacro en Binance; después poca plata con vigilancia constante y actuar de inmediato ante cualquier falla; la última fase, cuando esté comprobado que todo funciona y gana. El armado lo hace siempre el dueño (`armar-real` con la frase). Historia: el 4-nov la prueba de MEXC falló primero por la dirección vieja (403) y después por la restricción de la cuenta (fila siguiente) |
 | **MEXC** | **Descartado (4-nov).** Con la dirección nueva, la prueba llegó a MEXC y respondió código 6002 (la cuenta no puede abrir posiciones), y el dueño informó una restricción permanente de la cuenta. El dueño decidió pasar la ejecución a **Binance Futures USDT-M**: la práctica ya opera con los precios de Binance; el simulacro sigue con los de MEXC hasta que esté el de Binance (ruta protegida, lo fusiona el dueño) |
-| **Binance Futures** | **Nuevo lugar de ejecución (4-nov).** Paso 1 (fusionado, PR #29, #32 y #35): cliente `execution/live/binance_futures.py` con lista cerrada, stop de emergencia por el servicio Algo y prueba sin riesgo `binance-real-check` (contrato XRPUSDT). **Prueba en la DEMO de Binance (plata ficticia, claves `BINANCE_API_KEY_TEST` / `BINANCE_API_SECRET_TEST`, `https://demo-fapi.binance.com`), 4-nov: los 10 pasos OK** (el stop se vio cancelado a los 0,6 s). En la cuenta real la corre el dueño (pone órdenes reales). **Hay 235 perpetuos TradFi** además de los 703 de cripto: ~200 acciones de EE. UU., Corea y Hong Kong, SPY y QQQ, oro, plata, petróleo, gas y cobre, **las 24 h, también el fin de semana**; 170 y 449 con más de 1 M USDT por día. Paso 2 en curso: la práctica ya usa los precios de Binance (este cambio); falta el venue real, el armado, el simulacro y la prueba de punta a punta en la demo. Antes de operar: cuenta en modo unidireccional y de un solo activo |
+| **Binance Futures** | **Nuevo lugar de ejecución (4-nov).** Paso 1 (fusionado, PR #29, #32 y #35): cliente `execution/live/binance_futures.py` con lista cerrada, stop de emergencia por el servicio Algo y prueba sin riesgo `binance-real-check` (contrato XRPUSDT). **Prueba en la DEMO de Binance (plata ficticia, claves `BINANCE_API_KEY_TEST` / `BINANCE_API_SECRET_TEST`, `https://demo-fapi.binance.com`), 4-nov: los 10 pasos OK** (el stop se vio cancelado a los 0,6 s). En la cuenta real la corre el dueño (pone órdenes reales). **Hay 235 perpetuos TradFi** además de los 703 de cripto: ~200 acciones de EE. UU., Corea y Hong Kong, SPY y QQQ, oro, plata, petróleo, gas y cobre, **las 24 h, también el fin de semana**; 170 y 449 con más de 1 M USDT por día. La práctica ya opera con los precios de Binance (PR #36). **Paso 2 (PR protegido, lo fusiona el dueño):** operador real `execution/live/binance_venue.py` (IOC con tope, aislado 1x en cada contrato, stop de emergencia Algo de cierre total al llenarse la entrada, conciliación que lo repone y frena si algo no coincide), armado por exchange, simulacro en la DEMO y `cerrar-todo` para Binance. **Probado de punta a punta en la demo el 4-nov:** SOL largo y XRP corto entraron, pusieron su stop al precio pedido, conciliaron, salieron y no quedó nada abierto (costo: spread y comisión, un centavo). Tesla rechazada: **falta que el dueño acepte el acuerdo TradFi** (código -4411), en la demo y en la cuenta real. Antes de operar: cuenta en modo unidireccional y de un solo activo |
 | Aprendizaje | **Arreglado el 3-nov (PR #23).** El meta-modelo había quedado en κ = 0 con 47 muestras, 37 de ellas noticias ajenas con BTC "de referencia" (Ferrari, 3M, "heladeras hackeadas"): p = 1/3 en todo y ninguna entrada posible, listados incluidos, desde la tarde del 3-nov. Ahora solo aprende de lo que se habría operado (sección 9) |
 | Fuentes | 14: Fed; medios cripto; CNBC, Seeking Alpha, Investing; anuncios oficiales de Binance (cada 3 s, rotando 72 formas de la URL para saltar la copia de ~120 s del CDN) y Upbit (cada 8 s: su límite es ~10 pedidos por minuto). OKX y Bybit apagados o sin sumar (sin efecto medido), Bitget apagado. SEC prendida desde el 4-nov (el dueño cargó `SEC_USER_AGENT`): los 8-K llegan con ~43 s de demora mediana. **Los medios llegan tarde para operar** (demora mediana de publicada a recibida, 4-nov: The Block 31 s, CoinDesk 56 s, Seeking Alpha 173 s, Investing 424 s, CNBC 592 s): solo sirven de contexto y para salir; lo que se opera son los avisos oficiales |
 | Velocidad (4-nov) | De recibida a decisión: 0,4 s sin IA y 3,8 s con IA (mediana). Las demoras largas (hasta 14 s) eran datos de mercado bajados para noticias que igual se descartaban, con el candado tomado: arreglado en el PR #26. Lo que más tarda ahora es la consulta a la IA (~3,4 s) |
@@ -142,11 +142,13 @@ Siempre así: `cd $env:USERPROFILE\TRADING; .\.venv\Scripts\python -m tradingage
 
 | Comando | Para qué |
 |---|---|
-| `mexc-real-check` | Prueba sin riesgo de la clave real: órdenes que no se pueden ejecutar, verificación y cancelación. Hace falta antes de armar |
-| `armar-real` | Arma el dinero real con todo el saldo. **Solo lo corre el dueño:** pide la frase exacta (REGLAS A-2) |
-| `armar-real --simulacro --capital 100 --dias 2` | El mismo operador real sin mandar órdenes |
+| `binance-real-check` | Prueba sin riesgo de la clave real de Binance: una orden que no se puede ejecutar y un stop lejísimos, verificación y cancelación. Hace falta antes de armar. **La corre el dueño** (pone órdenes reales) |
+| `binance-real-check --demo` | La misma prueba en la DEMO de Binance (plata ficticia, claves `*_TEST`). No cuenta para armar. La puede correr Claude |
+| `armar-real` | Arma el dinero real en Binance con todo el saldo. **Solo lo corre el dueño:** pide la frase exacta (REGLAS A-2). `--exchange mexc` para MEXC |
+| `armar-real --simulacro --capital 100 --dias 2` | El mismo operador real contra la DEMO de Binance (órdenes de verdad, plata ficticia). Con `--exchange mexc`, sin mandar órdenes |
 | `armar-real --desarmar` | No abre nada nuevo; lo abierto sale normal |
-| `cerrar-todo` | Emergencia: cancela y cierra todo lo real en MEXC, y desarma |
+| `cerrar-todo` | Emergencia: cancela órdenes y stops y cierra todo lo real en Binance (con tope de precio), y desarma. `--demo` en la demo; `--exchange mexc` en MEXC |
+| `mexc-real-check` | La prueba sin riesgo de MEXC (cuenta restringida desde el 4-nov) |
 | `sources` / `sources --check` | Qué fuentes están activas / leer cada una una vez |
 | `mexc-check` | Datos públicos de MEXC y si las claves leen la cuenta |
 | `estudio-listados` | Repite el estudio de listados de Binance (`datos\estudios\listados.json`); con `--exchange bybit`, el de Bybit (`listados-bybit.json`, solo desde la PC) |
@@ -259,13 +261,12 @@ dueño qué hiciste y por qué.
 
 ## 10. Pendiente (en orden)
 
-1. **Binance (MEXC quedó descartado el 4-nov).** El dueño fusiona el PR protegido del stop (la cancelación se ve
-   con demora), la PC se actualiza (aviso "🔄 Actualicé TRADING") y repite `binance-real-check`, que tiene que dar
-   los 10 pasos OK. Después, paso 2 (ruta protegida): el venue real (entradas IOC con tope, salidas "solo
-   reducir", stop de emergencia Algo de cierre total puesto al llenarse la entrada y cancelado al salir,
-   confirmando la cancelación con consultas de unos segundos como la prueba, ejecuciones por `userTrades`,
-   conciliación y el 503 que puede haber entrado), precios y universo de Binance para la práctica y el simulacro,
-   armado, `cerrar-todo` y `/cerrar SI` para Binance. Simulacro en Binance, revisión, y el dueño decide la plata.
+1. **Binance (MEXC quedó descartado el 4-nov).** Hecho: cliente, prueba sin riesgo (10 OK en la demo), práctica
+   con los precios de Binance (cripto y TradFi) y el operador real probado de punta a punta en la demo. Falta, en
+   orden: (a) el dueño fusiona el PR protegido del operador; (b) el dueño acepta el acuerdo TradFi en la demo y en
+   la cuenta real; (c) `armar-real --simulacro` (en la demo) y vigilar unos días: entradas, stops, salidas,
+   conciliación y avisos; (d) con eso, el dueño corre `binance-real-check` en la cuenta real y decide si arma el
+   dinero real (`armar-real`), por fases.
 2. **Upbit** (PR #22, estudiado el 4-nov: la señal más fuerte). Se lee cada 8 s. Con el próximo aviso, revisar en el
    simulacro la demora de punta a punta (publicado, recibido, decisión y orden) y el precio de entrada contra el
    precio del aviso.
@@ -317,6 +318,11 @@ dueño qué hiciste y por qué.
   - desde el 2-dic-2025 las órdenes condicionales (STOP_MARKET, TAKE_PROFIT...) van por el **servicio de órdenes
     Algo** (`/fapi/v1/algoOrder`); por la ruta común dan el código -4120 (visto en la PC el 4-nov). No tienen
     ruta de prueba: `binance-real-check` pone uno que solo se dispararía con +50 % y lo cancela a los 6 s;
+  - **el stop de cierre total (`closePosition`) lo vence Binance solo** cuando la posición se cierra (EXPIRED, en
+    milisegundos, demo 4-nov): cancelarlo después contesta -2011 "Unknown order" y no hay nada que hacer;
+  - Binance arranca cada contrato en 20x: el operador lo pone en aislado y 1x antes de la primera entrada;
+  - **los TradFi piden aceptar su acuerdo** en cada cuenta (demo y real): sin eso, código -4411 "Please sign
+    TradFi-Perps agreement". El programa avisa por Telegram una vez por día;
   - **la cancelación de un stop Algo se ve con demora:** el DELETE contesta "success", pero la consulta enseguida
     (~0,5 s después) todavía no decía CANCELED (4-nov, en la PC; minutos después sí, y no había quedado nada
     abierto). Hay que volver a consultar unos segundos antes de darlo por fallido: la prueba
