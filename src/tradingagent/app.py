@@ -161,6 +161,7 @@ class Agent:
         self.stop_event = asyncio.Event()
         self.started = time.time()
         self.news_tasks: set[asyncio.Task] = set()     # noticias que el operador está evaluando ahora
+        self.streams: list = []                        # fuentes empujadas (no se sondean)
 
     def stop(self) -> None:
         self.stop_event.set()
@@ -192,6 +193,7 @@ class Agent:
                 "portfolio": self.venue.portfolio.snapshot(self.venue.marks), "paper": self.venue.summary()
                 | {"portfolio": None}, "execution": self.execution.counts, "alerts": self.alerts.snapshot(),
                 "journal": self.journal.snapshot(), "bus": self.bus.stats(),
+                "streams": [s.snapshot() for s in self.streams],
                 "trader": self.trader.snapshot() if self.trader is not None else None,
                 "real": self.real_trader.snapshot() if self.real_trader is not None else None}
 
@@ -244,6 +246,21 @@ class Agent:
             except Exception:                                        # la prueba nunca frena al agente
                 log.warning("falló la prueba de red", exc_info=True)
             delay = EVERY_S
+
+    def _build_streams(self, lim) -> list:
+        """Fuentes empujadas: el canal oficial de anuncios de Binance (WebSocket), con una clave de SOLO LECTURA
+        (`BINANCE_LECTURA_KEY` / `BINANCE_LECTURA_SECRET`). Sin esa clave queda apagado (y lo dice el latido)."""
+        from .ingestion.binance_ws import SOURCE_ID, BinanceAnnouncements
+        o = (self.cfg["ingestion"].get("sources") or {}).get(SOURCE_ID) or {}
+        if o.get("enabled") is False:
+            self.sources_off[SOURCE_ID] = "apagada en la configuración"
+            return []
+        key, secret = self.env.get("BINANCE_LECTURA_KEY"), self.env.get("BINANCE_LECTURA_SECRET")
+        if not (key and secret):
+            self.sources_off[SOURCE_ID] = "falta BINANCE_LECTURA_KEY y BINANCE_LECTURA_SECRET en TRADING_HOME/.env"
+            return []
+        return [BinanceAnnouncements(key, secret, self.ingestion.handle, self.clock,
+                                     max_age_s=safety.news_max_age(float(o.get("max_age_s") or 600), lim))]
 
     def _build_trader(self, session, lim):
         from .intelligence.llm import LlmClassifier, api_key
@@ -409,6 +426,9 @@ class Agent:
                         self.real_trader = None
                 hb = Heartbeat(self.collect, interval_s=cfg["heartbeat_s"], printer=self.printer)
                 tasks += [asyncio.create_task(p.run(self.stop_event), name=f"fuente-{p.spec.id}") for p in self.pollers]
+                self.streams = self._build_streams(lim)
+                tasks += [asyncio.create_task(st.run(self.stop_event, session), name="fuente-binance.ws")
+                          for st in self.streams]
                 tasks += [asyncio.create_task(self.execution.run(self.stop_event), name="ejecucion"),
                           asyncio.create_task(self.venue.run_monitor(self.stop_event), name="monitor-ordenes"),
                           asyncio.create_task(self.lag.run(), name="lag"),
