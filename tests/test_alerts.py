@@ -243,5 +243,11 @@ def test_los_avisos_se_entienden_sin_saber_de_trading():
                     total_closed=3, llm={"calls": 0, "usd": 0.0, "failures": 2})
     assert "Resumen del 02/11" in d.text and "No hubo operaciones" in d.text and "Van 3 operaciones cerradas" in d.text
     assert "revisá la clave de Claude" in d.text and d.silent
-    for a in (e, x, w, d):
+    c = daily_alert("2026-11-05", mode="SIMULACRO futuros Binance", closed=2, won=1, pnl="0.8", equity="110.8",
+                    initial="110", total_closed=12, calib={"acierto": 0.583, "cerradas": 12, "reaccion_s": 3.84})
+    assert "Acierto: 58 % de 12 cerradas. De la noticia a la entrada: 3,8 s (mediana)." in c.text
+    assert "Acierto" not in daily_alert("2026-11-05", mode="SIMULACRO futuros Binance", closed=0, won=0, pnl=0,
+                                        equity="110", initial="110", total_closed=0,
+                                        calib={"acierto": None, "cerradas": 0, "reaccion_s": None}).text
+    for a in (e, x, w, d, c):
         assert not any(j in a.text for j in ("LONG", "SHORT", "PnL", "SL ", "TP ", "p=", "α", "bps", "DSR", "HALT"))
