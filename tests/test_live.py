@@ -307,7 +307,9 @@ async def test_listado_sale_por_tiempo_con_stop_fijo_de_10(tmp_path):
         prices["BTC_USDT"] = float(entry2) * 0.893              # −10,7 %: toca el stop fijo
         clock.advance(5)
         await t.watch_once()
-        assert t.st["positions"] == {} and "Perdí" in alerts.texts()[-1]
+        assert t.st["positions"] == {} and any("Perdí" in x for x in alerts.texts()[-2:])
+        # con 3 % de riesgo, un stop completo pasa el freno del día (2 %): no abre más hasta la noche
+        assert "Freno del día" in alerts.texts()[-1]
 
 
 async def test_solo_baja_datos_de_mercado_para_lo_que_puede_entrar(tmp_path):

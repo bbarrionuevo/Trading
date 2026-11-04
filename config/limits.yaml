@@ -7,7 +7,8 @@ capital:
                                 # trabajar e invertir con todo el dinero disponible"): el real opera con todo el
                                 # saldo de la cuenta de futuros y crece con él. Todo lo de abajo es % de ese saldo.
 per_trade:
-  max_risk_pct: 1.0             # pérdida al stop ≤ 1% del equity
+  max_risk_pct: 3.0             # pérdida al stop ≤ 3% del equity (el dueño, 4-nov-2026, con la simulación de la
+                                # calibración: mes típico +8 %, caída máxima típica en un año ~10 %; antes 1 %)
   max_position_pct: 40          # nocional por activo ≤ 40% del equity
   max_leverage: 1               # sin apalancamiento (los perpetuos 1x permiten corto)
   max_slippage_bps: 50          # tope de precio de toda orden: nunca a mercado sin tope

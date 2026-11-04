@@ -154,7 +154,8 @@ def test_plan_triple_barrera_costos_kelly_y_topes(lim):
     assert p.sl_frac == pytest.approx(1.5 * 0.002 * math.sqrt(120)) and p.trail == 0     # ETF: 120 min
     assert p.b_net < 2 and p.cost > 2 * 0.001                               # comisiones, spread e impacto
     risk = p.sl_frac + p.cost                                               # Kelly dice cuánto ARRIESGAR:
-    assert float(p.notional) == pytest.approx(min(1000 * p.kelly / risk, 10 / risk, 400, 300), abs=0.01)
+    budget = 1000 * lim["per_trade"]["max_risk_pct"] / 100               # el % de riesgo del sobre
+    assert float(p.notional) == pytest.approx(min(1000 * p.kelly / risk, budget / risk, 400, 300), abs=0.01)
     assert p.risk_usd <= 1000 * lim["per_trade"]["max_risk_pct"] / 100 + 1e-9
     assert p.slices == 1                                                    # Almgren-Chriss: un solo tramo
     capped, _ = plan(a, s, "PEPEUSDT", **{**kw, "net": 250.0})              # exposición neta ≤ 30 %
@@ -175,7 +176,7 @@ def test_plan_triple_barrera_costos_kelly_y_topes(lim):
     assert plan(a, s, "PEPEUSDT", **{**kw, "sigma_1m": None})[1] == ["sin_volatilidad_medible"]
     assert plan(a, s, "PEPEUSDT", **{**kw, "cash": 3.0})[1][0].startswith("nominal_menor_al_minimo")
     risky, _ = plan(a, s, "PEPEUSDT", **{**kw, "sigma_1m": 0.02})            # mucha volatilidad: stop lejos
-    assert risky.risk_usd <= 10.0 + 1e-9 and risky.sl_frac == 0.05
+    assert risky.risk_usd <= budget + 1e-9 and risky.sl_frac == 0.05
 
 
 def test_los_listados_salen_por_tiempo_con_stop_fijo_de_10_y_solo_si_llegan_a_tiempo(lim):
@@ -190,8 +191,9 @@ def test_los_listados_salen_por_tiempo_con_stop_fijo_de_10_y_solo_si_llegan_a_ti
     p, why = plan(a, s, "PEPE_USDT", **kw)
     assert why == [] and p.sl_frac == 0.10 and p.trail == 0 and not p.target   # stop fijo, sin objetivo
     assert p.horizon_s == 900                                              # sale a los 15 min
-    assert float(p.notional) == pytest.approx(10 / (p.sl_frac + p.cost), abs=0.01)   # manda el 1 % de riesgo
-    assert p.risk_usd == pytest.approx(10, abs=0.01)                       # el riesgo no cambia con el stop
+    budget = 1000 * lim["per_trade"]["max_risk_pct"] / 100               # el % de riesgo del sobre (3 %)
+    assert float(p.notional) == pytest.approx(min(budget / (p.sl_frac + p.cost), 300), abs=0.01)
+    assert p.risk_usd == pytest.approx(min(budget, 300 * (p.sl_frac + p.cost)), abs=0.01)   # el stop no lo cambia
     late = assess(ev("Coinbase will list PEPE", published_at=T0 - 150, received_at=T0 - 140), s, "PEPE", T0, cfg)
     assert any(r.startswith("listado_tarde") for r in late.reasons)       # a los 2,5 min el salto ya pasó
     other, _ = plan(*_hack_plan_args(cfg), **kw)                          # el resto sigue con el tope de 5 %
