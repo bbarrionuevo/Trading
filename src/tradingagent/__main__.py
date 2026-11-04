@@ -11,6 +11,7 @@
                                              ...y del operador paper (rearme tras un halt)
   python -m tradingagent mexc-check          prueba la API de futuros de MEXC (y las claves de lectura, si hay)
   python -m tradingagent mexc-real-check     prueba SIN RIESGO del modo real (órdenes que no se pueden ejecutar)
+  python -m tradingagent binance-real-check  lo mismo en Binance Futures (valida sin ejecutar y una orden solo maker)
   python -m tradingagent armar-real          arma el DINERO REAL con todo el saldo (frase exacta; --desarmar)
   python -m tradingagent armar-real --simulacro --capital 100 --dias 2   lo mismo SIN plata (ninguna orden)
   python -m tradingagent cerrar-todo         emergencia: cancela, cierra todo lo real y desarma
@@ -290,6 +291,38 @@ def cmd_mexc_real_check(args) -> int:
     return 1
 
 
+def cmd_binance_real_check(args) -> int:
+    """Prueba sin riesgo del modo real en Binance Futures (execution/live/binance_check.py). Nunca muestra saldos."""
+    _setup("WARNING")
+    import time
+
+    import aiohttp
+
+    from .execution.live import arming
+    from .execution.live.binance_check import real_check
+    from .execution.live.binance_futures import BinanceClient
+    key, secret = os.environ.get("BINANCE_API_KEY"), os.environ.get("BINANCE_API_SECRET")
+    if not (key and secret):
+        print("Faltan BINANCE_API_KEY y BINANCE_API_SECRET en", paths.home() / ".env")
+        return 2
+
+    async def main():
+        async with aiohttp.ClientSession() as session:
+            return await real_check(BinanceClient(session, key, secret), args.simbolo)
+
+    report = asyncio.run(main())
+    paths.write_json_atomic(paths.home() / "state" / "verificacion_binance.json",
+                            {"ok": bool(report["ok"]), "clave": arming.fingerprint(key), "ts": round(time.time()),
+                             "simbolo": report.get("simbolo"), "pasos": report["pasos"]})
+    for st in report["pasos"]:
+        print(f"{'OK ' if st['ok'] else 'MAL'}  {st['paso']}" + (f": {st['detalle']}" if st["detalle"] else ""))
+    if report["ok"]:
+        print("Listo: Binance entiende las órdenes como el programa las pide y no quedó nada abierto.")
+        return 0
+    print("La prueba NO pasó: el modo real no se puede armar. Ninguna orden quedó abierta.")
+    return 1
+
+
 def _restart_agent(home, why: str) -> None:
     """Pide al agente que se cierre prolijo: el supervisor lo relanza en segundos con el armado nuevo."""
     (home / "state").mkdir(parents=True, exist_ok=True)
@@ -554,6 +587,8 @@ def main(argv=None) -> int:
     sub.add_parser("mexc-check")
     rc = sub.add_parser("mexc-real-check")
     rc.add_argument("--simbolo", default="BTC_USDT")
+    bc = sub.add_parser("binance-real-check")
+    bc.add_argument("--simbolo", default="XRPUSDT")
     ar = sub.add_parser("armar-real")
     ar.add_argument("--capital", type=float, help="solo para el simulacro: USDT de mentira (100 si no se dice). "
                     "Con dinero real no hay tope: opera con todo el saldo de la cuenta")
@@ -582,6 +617,7 @@ def main(argv=None) -> int:
                 "sources": cmd_sources, "journal-verify": cmd_journal_verify, "paper-sim": cmd_paper_sim,
                 "collect": cmd_collect, "mexc-check": cmd_mexc_check, "llm-check": cmd_llm_check,
                 "supervisar": cmd_supervisar, "tablero": cmd_tablero, "mexc-real-check": cmd_mexc_real_check,
+                "binance-real-check": cmd_binance_real_check,
                 "armar-real": cmd_armar_real, "cerrar-todo": cmd_cerrar_todo,
                 "estudio-listados": cmd_estudio_listados}
     if args.cmd not in handlers:
