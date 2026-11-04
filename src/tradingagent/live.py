@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 
 from . import paths
-from .alerts.model import circuit_breaker_alert, daily_alert, system_alert, usdt_es
+from .alerts.model import asset_es, circuit_breaker_alert, daily_alert, system_alert, usdt_es
 from .core.bus import EventBus
 from .decision.policy import PolicyConfig, assess, news_blocks
 from .decision.risk import RiskState
@@ -64,7 +64,8 @@ class LiveTrader:
         self.simulated = simulated                                   # simulacro del real: nunca manda órdenes
         self.kill_file = home / "KILL"
         self.learned_path = learned_path or home / "datos" / "aprendizaje" / "estado.json"
-        self.universe_cache = home / "datos" / "universo-mexc.json"
+        self.universe_cache = home / "datos" / getattr(market, "universe_file", "universo-mexc.json")
+        self.venue_es = getattr(market, "venue_es", "MEXC")          # en los avisos: Binance o MEXC
         self.paper_config = paper_config
         self.lock = asyncio.Lock()
         self.counts: dict[str, int] = {}
@@ -98,8 +99,9 @@ class LiveTrader:
                 f"con {'el simulacro' if self.simulated else 'dinero real'}. Lo abierto sale normal.", silent=False))
         if self.first and self.real and self.simulated:
             await self.send_alert(system_alert(
-                f"🧪 Empecé el SIMULACRO del dinero real en futuros MEXC con {self.capital:g} USDT de mentira: es el "
-                "mismo programa que va a operar con tu plata, con los precios reales de MEXC, pero no manda ninguna "
+                f"🧪 Empecé el SIMULACRO del dinero real en futuros {self.venue_es} con {self.capital:g} USDT de mentira: "
+                f"es el mismo programa que va a operar con tu plata, con los precios reales de {self.venue_es}, pero "
+                "no manda ninguna "
                 "orden. Cada operación te llega marcada como SIMULACRO.", silent=False))
         elif self.real:
             await self.sync_capital()                  # todo el saldo: la caja es lo que hay en la cuenta
@@ -110,7 +112,7 @@ class LiveTrader:
                 "la pena, opero en segundos y te aviso.", silent=False))
 
     async def refresh_universe(self) -> None:
-        """Futuros de MEXC: todo lo operable (criptos, acciones, índices, metales y petróleo), renovado cada 6 h.
+        """Futuros: todo lo operable (criptos, acciones, índices, metales y petróleo), renovado cada 6 h.
         Se mira cada `UNIVERSE_EVERY_S` (no en cada vuelta) y se avisa en el log solo si cambia la cantidad."""
         if not hasattr(self.market, "load_universe"):
             return
@@ -124,7 +126,7 @@ class LiveTrader:
                 log.info("universo de %s: %d activos operables", self.market.name, n)
                 self._universe_n = n
         except Exception:                                              # sin universo, los de siempre
-            log.exception("no pude cargar el universo de MEXC")
+            log.exception("no pude cargar el universo de %s", self.venue_es)
 
     def learned(self) -> dict:
         return paths.read_json(self.learned_path, None) or {}
@@ -351,7 +353,7 @@ class LiveTrader:
         await asyncio.to_thread(paths.write_json_atomic, self.base / shadow.STATE, self.st)
         if first:
             await self.send_alert(system_alert(
-                f"💵 Empecé a operar con DINERO REAL en futuros MEXC, con todo el saldo de la cuenta: "
+                f"💵 Empecé a operar con DINERO REAL en futuros {self.venue_es}, con todo el saldo de la cuenta: "
                 f"{usdt_es(equity, signed=False)}. Si ganamos, opero con lo que haya. Cada operación te llega marcada "
                 "como DINERO REAL. Para frenar todo: python -m tradingagent cerrar-todo", silent=False))
         elif abs(delta) >= 1:
@@ -380,20 +382,20 @@ class LiveTrader:
             await self.save(run)
 
     async def reconcile(self) -> None:
-        """Dinero real: si las posiciones de MEXC no coinciden con las del programa, no se abre nada nuevo."""
+        """Dinero real: si las posiciones del exchange no coinciden con las del programa, no se abre nada nuevo."""
         if not hasattr(self.venue, "reconcile"):
             return
         before = self.venue.blocked
         now = await self.venue.reconcile()
         if now and now != before and now.startswith("exchange_sin_respuesta"):
             await self.send_alert(system_alert(                         # un corte de red: se reintenta solo
-                "⚠️ MEXC no responde (o se cortó internet): no abro nada nuevo hasta que vuelva. Lo abierto tiene "
+                f"⚠️ {self.venue_es} no responde (o se cortó internet): no abro nada nuevo hasta que vuelva. Lo abierto tiene "
                 "su stop de emergencia en el exchange.", silent=True))
         elif now and now != before:
-            what = "del SIMULACRO" if self.simulated else "de DINERO REAL en MEXC"
+            what = "del SIMULACRO" if self.simulated else f"de DINERO REAL en {self.venue_es}"
             await self.send_alert(system_alert(
                 f"⚠️ Las posiciones {what} no coinciden con las del programa: no abro nada nuevo hasta que "
-                "coincidan. ¿Abriste o cerraste algo a mano en MEXC?", silent=False))
+                f"coincidan. ¿Abriste o cerraste algo a mano en {self.venue_es}?", silent=False))
         elif before and not now:
             await self.send_alert(system_alert("✅ Las posiciones de dinero real volvieron a coincidir."))
 
@@ -446,7 +448,7 @@ class LiveTrader:
         out = [f"{title}: {usdt_es(eq, signed=False)} ({usdt_es(eq - ini)} desde el inicio), "
                f"{st['stats']['operaciones']} operaciones cerradas"]
         for sym, p in st["positions"].items():
-            out.append(f"  · {p['side']} {sym.replace('_USDT', '')} desde {p['avg_price']}, límite {p['stop']}"
+            out.append(f"  · {p['side']} {asset_es(sym)} desde {p['avg_price']}, límite {p['stop']}"
                        + (" (sigue al precio)" if p.get("trail") else ""))
         if (st.get("risk") or {}).get("halted"):
             out.append("  ⛔ frenado por caída: no abre nada hasta revisarlo")

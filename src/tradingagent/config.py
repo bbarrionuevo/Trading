@@ -9,6 +9,10 @@ from pathlib import Path
 
 import yaml
 
+# Mercados de la cuenta de práctica: futuros de Binance (el lugar de ejecución desde el 4-nov-2026), MEXC (la cuenta
+# real quedó restringida) y Binance spot.
+MARKETS = ("binance-futuros", "mexc-futuros", "binance-spot")
+
 DEFAULTS = {
     "mode": "paper",                      # esta versión no tiene modo real (REGLAS A-2)
     "heartbeat_s": 15,
@@ -38,7 +42,7 @@ DEFAULTS = {
     # llm_usd_dia: techo de seguridad del gasto en Claude (no es un límite de uso: la IA se consulta SIEMPRE
     # que su respuesta pueda cambiar una decisión y NUNCA si no; el techo solo frena un error que se dispare).
     # Por defecto, el del sobre (ai.max_llm_usd_per_day).
-    "trader": {"enabled": True, "mercado": "mexc-futuros", "capital_usdt": 120, "llm": True, "aprender": True,
+    "trader": {"enabled": True, "mercado": "binance-futuros", "capital_usdt": 120, "llm": True, "aprender": True,
                "llm_usd_dia": None},
     "alerts": {"telegram": True, "rate_per_s": 1.0, "burst": 3, "max_queue": 500},
 }
@@ -95,8 +99,8 @@ def validate(cfg: dict) -> list[str]:
     cap = cfg["trader"].get("llm_usd_dia")
     if cap is not None and (isinstance(cap, bool) or not isinstance(cap, int | float) or not 0 <= cap <= 1000):
         errs.append(f"trader.llm_usd_dia={cap!r} fuera de rango [0, 1000] (o null = el del sobre)")
-    if cfg["trader"].get("mercado") not in ("mexc-futuros", "binance-spot"):
-        errs.append("trader.mercado: tiene que ser mexc-futuros o binance-spot")
+    if cfg["trader"].get("mercado") not in MARKETS:
+        errs.append("trader.mercado: tiene que ser " + ", ".join(MARKETS))
     return errs
 
 

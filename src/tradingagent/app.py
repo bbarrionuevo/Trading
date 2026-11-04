@@ -1,5 +1,5 @@
 """Ensamblado del agente: ingesta → inteligencia (clasificador + Claude si duda) → decisión y riesgo →
-ejecución paper (live.py: futuros de MEXC por defecto), con diario, latido y alertas. Cada pieza corre en
+ejecución paper (live.py: futuros de Binance por defecto), con diario, latido y alertas. Cada pieza corre en
 su propia tarea; las alertas y el diario en hilos. En segundo plano, el recolector aprende cada 15 min.
 
 Arranque: carga TRADING_HOME/.env y config.yaml, abre el diario, lanza el despachador de alertas (que
@@ -228,13 +228,15 @@ class Agent:
         from .intelligence.llm import LlmClassifier, api_key
         from .live import LiveTrader
         from .marketdata import mexc
-        from .research.futures import MexcFutures
+        from .research.futures import BinanceFutures, MexcFutures
         from .research.shadow import BinanceSpot
         t = self.cfg["trader"]
         market = self._trader_market
         if market is None:
             if t["mercado"] == "binance-spot":
                 market = BinanceSpot()
+            elif t["mercado"] == "binance-futuros":
+                market = BinanceFutures()
             else:
                 keys = (self.env.get("MEXC_ACCESS_KEY"), self.env.get("MEXC_SECRET_KEY"))
                 market = MexcFutures(readonly=mexc.ReadOnlyClient(session, *keys) if all(keys) else None)
