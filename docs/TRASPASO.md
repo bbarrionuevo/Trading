@@ -36,6 +36,7 @@ Lo que pidió, en sus palabras:
 | Cuenta de práctica (paper) | 120 USDT simulados en futuros MEXC; 3 operaciones el 3-nov (−0,20 USDT, cortos mal leídos por las reglas antes de que la IA confirmara cada entrada) |
 | Simulacro del real | Armado el 3-nov con 100 USDT de mentira, 2 días. Mismo operador real, sin mandar órdenes |
 | **Dinero real** | **Arranca el 4-nov con 100 USDT** en la cuenta de futuros de MEXC. El dueño corre `mexc-real-check` y después `armar-real` (frase `ARMO DINERO REAL CON TODO EL SALDO POR 30 DIAS`). Al armar el real, se reemplaza el simulacro. **4-nov, 7:07:** con la plata ya en Futuros y el modo Cobertura, la prueba falló con HTTP 403 al mandar la orden: el programa usaba la dirección vieja de MEXC (`contract.mexc.com`), que bloquea en la entrada el envío y la cancelación de órdenes. No se creó nada. El arreglo (dirección `api.mexc.com` y ruta `order/create`, sección 11) es ruta protegida: lo fusiona el dueño y después repite la prueba |
+| **MEXC** | **Descartado (4-nov).** Con la dirección nueva, la prueba llegó a MEXC y respondió código 6002 (la cuenta no puede abrir posiciones), y el dueño informó una restricción permanente de la cuenta. El dueño decidió pasar la ejecución a **Binance Futures USDT-M**: falta el conector (ruta protegida, lo fusiona el dueño). Mientras tanto, la práctica y el simulacro siguen con los precios públicos de MEXC, sin órdenes |
 | Aprendizaje | **Arreglado el 3-nov (PR #23).** El meta-modelo había quedado en κ = 0 con 47 muestras, 37 de ellas noticias ajenas con BTC "de referencia" (Ferrari, 3M, "heladeras hackeadas"): p = 1/3 en todo y ninguna entrada posible, listados incluidos, desde la tarde del 3-nov. Ahora solo aprende de lo que se habría operado (sección 9) |
 | Fuentes | 14: Fed; medios cripto; CNBC, Seeking Alpha, Investing; anuncios oficiales de Binance (cada 3 s, rotando 72 formas de la URL para saltar la copia de ~120 s del CDN) y Upbit (cada 2 s). OKX y Bybit apagados o sin sumar (sin efecto medido), Bitget apagado. SEC apagada (falta `SEC_USER_AGENT`). **Los medios llegan tarde para operar** (demora mediana de publicada a recibida, 4-nov: The Block 31 s, CoinDesk 56 s, Seeking Alpha 173 s, Investing 424 s, CNBC 592 s): solo sirven de contexto y para salir; lo que se opera son los avisos oficiales |
 | Velocidad (4-nov) | De recibida a decisión: 0,4 s sin IA y 3,8 s con IA (mediana). Las demoras largas (hasta 14 s) eran datos de mercado bajados para noticias que igual se descartaban, con el candado tomado: arreglado en el PR #26. Lo que más tarda ahora es la consulta a la IA (~3,4 s) |
@@ -217,6 +218,11 @@ dueño qué hiciste y por qué.
 - **Upbit** (4-nov, desde la PC, `docs/ESTUDIO-LISTADOS.md`): alta en wones +20,9 % a 5 min (14 de 14), listado nuevo
   +13,5 % (21 de 21), fin del soporte −7,4 % (6 de 6), advertencia −2,6 %. Casi todo dentro del primer minuto:
   entrando al minuto 1 la mediana cae a +1,1 %. Es la señal más fuerte y la más frecuente (~1,4 por semana).
+- **Calibración con avisos reales** (4-nov): sin datos, la IA calificaba un listado de Upbit con importancia 3 e
+  impacto 4. Como el vector toma el menor entre la IA y el a priori, el sistema no entraba en ninguno (NIL +24 %,
+  CT +29 %, KAIA +34 % en el primer minuto o la hora). Con la reacción medida de cada tipo de aviso oficial en el
+  prompt (`llm.SYSTEM`), entra en los 3 listados (p = 0,77) y en el fin del soporte de BLUR (corto, p = 0,69), y
+  no entra en las advertencias (±3 a 6 %). La IA sigue leyendo cada noticia y el vector sigue tomando el menor.
 - **Bybit** (3-nov, desde la PC): listados spot +0,4 % a 5 min (n = 4) y perpetuos +0,03 % (n = 48). Sin efecto: no
   es fuente.
 - **Fed** (`docs/ESTUDIO-MACRO.md`, n = 4): reacción en los primeros minutos y después va para cualquier lado en BTC

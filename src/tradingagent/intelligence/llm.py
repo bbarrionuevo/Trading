@@ -94,7 +94,19 @@ Return the JSON object required by the schema:
 - impact: 0 to 10, the expected size of the price move of the listed assets because of this fact (a 40 million
   dollar hack at a small exchange barely moves bitcoin: 1; a 1.5 billion dollar hack at a top exchange: 8).
 - Polarity is the net direction: recoveries, refunds, compensation or "fully backed again" are not negative.
-- reason: one short sentence in Spanish explaining the classification."""
+- reason: one short sentence in Spanish explaining the classification.
+
+Measured price reactions of OFFICIAL exchange notices (180 days of data, perpetual futures, median move within 5
+minutes). Scale polarity, importance and impact to these magnitudes; the token named in the notice is the
+protagonist (relevance 10), whatever the market pair written next to it ("KAIA/BTC" is about KAIA):
+- New spot listing or new KRW market (Upbit "신규 거래지원" or "KRW 마켓 디지털 자산 추가", "Binance Will List"):
+  +13% to +21%, rising in 35 of 35 Upbit cases. Category listado, polarity 0.8 to 1, importance 8, impact 8.
+- End of trading support / delisting (Upbit "거래지원 종료", "Binance Will Delist"): -7%, falling in 6 of 6.
+  Category deslistado, polarity -0.8, importance 8, impact 7.
+- Caution designation (Upbit "유의 종목 지정", "유의 촉구"): -3%. Category deslistado, polarity -0.5, importance 6,
+  impact 5. Caution LIFTED ("지정 해제"): +6%. Category listado, polarity 0.5, importance 5, impact 5. Caution period
+  extended ("지정 기간 연장"): no effect, new_event false.
+- Futures or perpetual contract launches (not spot listings): no lasting effect. Impact 2."""
 
 SCHEMA = {
     "type": "object",

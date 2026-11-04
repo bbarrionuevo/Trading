@@ -179,3 +179,24 @@ async def test_el_mismo_titular_no_se_paga_dos_veces():
     assert first.usd > 0 and again.usd == 0 and again.signal == first.signal         # misma respuesta, gratis
     assert len(fake.requests) == 1 and c.cache_hits == 1 and c.budget.calls == 1
     assert fake.requests[0]["max_tokens"] == llm.MAX_TOKENS <= 300                   # respuesta corta, tope bajo
+
+
+def test_la_ia_conoce_la_reaccion_medida_de_los_avisos_oficiales():
+    """Calibración del 4-nov con avisos reales: sin estos datos la IA calificaba un listado de Upbit con importancia
+    3 e impacto 4, y como el vector toma el menor entre la IA y el a priori, el sistema no entraba en ninguno (NIL,
+    CT y KAIA subieron +24 a +34 %). Con la reacción medida en el prompt los califica bien y entra."""
+    for cue in ("신규 거래지원", "KRW 마켓 디지털 자산 추가", "거래지원 종료", "유의 종목 지정", "지정 해제", "Binance Will List"):
+        assert cue in llm.SYSTEM, cue
+    from tradingagent.decision.policy import PolicyConfig, assess
+    from tradingagent.intelligence.classifier import Signal
+    from tradingagent.marketdata.universe import Entry
+    from tradingagent.research import assets
+
+    assets.register([Entry("NIL", "NIL_USDT", "cripto", 5e6)])
+
+    ev = {"title": "닐리온(NIL) KRW 마켓 디지털 자산 추가", "body": "", "tier": 1, "published_at": T0 - 10,
+          "received_at": T0 - 8, "cluster_sources": 1, "assets_hint": []}
+    before = Signal("listado", 0.4, 0.48, ("NIL",), 60, ("llm",), certainty=0.8, relevance=9, importance=3, impact=4)
+    after = Signal("listado", 0.9, 0.48, ("NIL",), 60, ("llm",), certainty=0.8, relevance=10, importance=8, impact=8)
+    assert assess(ev, before, "NIL", T0, PolicyConfig()).reasons                  # así no entraba
+    assert assess(ev, after, "NIL", T0, PolicyConfig()).reasons == ()             # así entra (p ≈ 0,77)
