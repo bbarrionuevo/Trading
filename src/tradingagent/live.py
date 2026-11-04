@@ -60,6 +60,7 @@ class LiveTrader:
         self.cfg = cfg or PolicyConfig()
         home = home or paths.home()
         self.base = base_dir or home / "paper-vivo" / market.name
+        self.home = home
         self.venue_factory, self.real = venue_factory, real          # real: el venue de dinero real (A-2)
         self.simulated = simulated                                   # simulacro del real: nunca manda órdenes
         self.kill_file = home / "KILL"
@@ -438,10 +439,18 @@ class LiveTrader:
         if not s:
             return
         llm = self.llm.budget.as_dict() if self.llm is not None and self.llm.budget.day == last else None
+        calib = None
+        try:                                                           # acierto y velocidad, de toda la historia
+            from .research.calibracion import report
+            rep = await asyncio.to_thread(report, self.base, self.home / "journal")
+            calib = {"acierto": rep["acierto"], "cerradas": rep["cerradas"],
+                     "reaccion_s": (rep["reaccion_s"] or {}).get("mediana")}
+        except Exception:                                              # el resumen sale igual
+            log.warning("no pude calcular la calibración del resumen", exc_info=True)
         await self.send_alert(daily_alert(
             last, mode=self.market.label, closed=s["closed"], won=s["won"], pnl=s["pnl"],
             equity=self.st.get("equity") or self.st["cash"], initial=self.st["initial"],
-            total_closed=self.st["stats"]["operaciones"], llm=llm))
+            total_closed=self.st["stats"]["operaciones"], llm=llm, calib=calib))
 
     async def watch(self, stop: asyncio.Event) -> None:
         last_house = 0.0

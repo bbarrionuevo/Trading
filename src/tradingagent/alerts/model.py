@@ -290,7 +290,7 @@ def startup_alert(mode: str, sources_active: int, sources_total: int, version: s
 
 
 def daily_alert(day: str, *, mode: str, closed: int, won: int, pnl, equity, initial, total_closed: int,
-                needed: int = 60, llm: dict | None = None) -> Alert:
+                needed: int = 60, llm: dict | None = None, calib: dict | None = None) -> Alert:
     """Resumen diario de la cuenta de la PC, en una mirada."""
     dd, mm = day[8:10], day[5:7]
     if closed:
@@ -303,6 +303,11 @@ def daily_alert(day: str, *, mode: str, closed: int, won: int, pnl, equity, init
     if total_closed < needed:
         lines.append(f"Van {total_closed} operaciones cerradas: con {needed} ya se puede medir bien si el sistema "
                      "gana.")
+    if calib and calib.get("cerradas"):                    # calibración: acierto de toda la historia y velocidad
+        line = f"Acierto: {round(100 * calib['acierto'])} % de {calib['cerradas']} cerradas."
+        if calib.get("reaccion_s") is not None:
+            line += f" De la noticia a la entrada: {esc(num_es(round(calib['reaccion_s'], 1)))} s (mediana)."
+        lines.append(line)
     if llm:
         calls, usd, fails = llm.get("calls", 0), llm.get("usd", 0.0), llm.get("failures", 0)
         line = f"IA: {calls} consulta{'s' if calls != 1 else ''} ({esc(num_es(round(usd, 4)))} USD)."
