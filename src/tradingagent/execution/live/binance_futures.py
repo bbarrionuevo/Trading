@@ -29,6 +29,7 @@ import aiohttp
 from ...core.redact import redact
 
 BASE = "https://fapi.binance.com"
+DEMO = "https://demo-fapi.binance.com"          # la DEMO de Binance (plata ficticia), documentación oficial
 GET_PATHS = ("/fapi/v2/balance", "/fapi/v2/positionRisk", "/fapi/v1/positionSide/dual", "/fapi/v1/multiAssetsMargin",
              "/fapi/v1/order", "/fapi/v1/openOrders", "/fapi/v1/userTrades", "/fapi/v1/apiTradingStatus",
              "/fapi/v1/commissionRate", "/fapi/v1/algoOrder", "/fapi/v1/openAlgoOrders")

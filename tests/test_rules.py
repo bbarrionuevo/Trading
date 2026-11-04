@@ -83,14 +83,20 @@ def test_a3_ordenes_solo_en_el_modulo_real_y_nunca_retiros_ni_transferencias():
     only_binance = [r"X-MBX-APIKEY", r"/fapi/v\d/order", r"/fapi/v\d/(leverage|marginType|allOpenOrders|algo|openAlgo)"]
     live = SRC / "execution" / "live" / "mexc_futures.py"
     binance = SRC / "execution" / "live" / "binance_futures.py"
+    news = SRC / "ingestion" / "binance_ws.py"          # anuncios por WebSocket, con clave de SOLO LECTURA (4-nov)
     hits = []
     for f in code_files():
         text = f.read_text(encoding="utf-8")
         hits += [f"{f.relative_to(ROOT)}: {b}" for b in everywhere if re.search(b, text)]
         if f != live:
             hits += [f"{f.relative_to(ROOT)}: {b}" for b in only_live if re.search(b, text)]
-        if f != binance:                                 # órdenes de Binance: solo en su cliente (4-nov, el dueño)
+        if f not in (binance, news):                     # órdenes de Binance: solo en su cliente (4-nov, el dueño)
             hits += [f"{f.relative_to(ROOT)}: {b}" for b in only_binance if re.search(b, text)]
+    text = news.read_text(encoding="utf-8")              # el canal de anuncios firma, pero no opera:
+    hits += [f"{news.relative_to(ROOT)}: {b}" for b in (r"/fapi/", r"/sapi/v\d", r"BINANCE_API_(KEY|SECRET)",
+                                                         r"\border", r"/api/v3/(?!time)") if re.search(b, text)]
+    assert set(re.findall(r"wss://[^\s\"'`)]+", text)) == {"wss://api.binance.com/sapi/wss"}   # solo los anuncios
+    assert "BINANCE_LECTURA_KEY" in text
     assert hits == []
     from tradingagent.execution.live import binance_futures as bf
     assert bf.GET_PATHS == ("/fapi/v2/balance", "/fapi/v2/positionRisk", "/fapi/v1/positionSide/dual",

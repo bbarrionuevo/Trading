@@ -70,6 +70,7 @@ class LiveTrader:
         self.lock = asyncio.Lock()
         self.counts: dict[str, int] = {}
         self._universe_at, self._universe_n = float("-inf"), None
+        self._agreement_day = None                                   # aviso del acuerdo TradFi: uno por día
 
     # -- arranque y estado ------------------------------------------------------------------------------
     async def start(self) -> None:
@@ -159,9 +160,24 @@ class LiveTrader:
                 self.journal.record("decision", row)
             for row in run.trades:
                 self.journal.record("paper_trade", row)
+        await self._agreement_notice(run.decisions, now)
         await asyncio.to_thread(shadow._save, self.base, now, self.st, run.trades, run.decisions)
         run.trades, run.decisions = [], []
         run.counts.clear()
+
+    async def _agreement_notice(self, decisions: list[dict], now: float) -> None:
+        """Binance rechaza los TradFi (acciones, oro, petróleo) hasta que el dueño firma su acuerdo (código -4411,
+        visto en la demo el 4-nov). Firmarlo es cosa del dueño: se le avisa una vez por día, no en cada noticia."""
+        hits = [r for r in decisions if any("-4411" in str(m) for m in r.get("motivos") or [])]
+        day = time.strftime("%Y-%m-%d", time.gmtime(now))
+        if not hits or self._agreement_day == day:
+            return
+        self._agreement_day = day
+        what = "el SIMULACRO (en la demo)" if self.simulated else "el dinero real"
+        await self.send_alert(system_alert(
+            f"✍️ Binance no deja operar acciones, oro ni petróleo (TradFi) en {what} hasta que aceptes su acuerdo: "
+            f"rechazó {asset_es(hits[0].get('symbol', ''))}. Entrá a Binance → Futuros → un contrato TradFi (por ejemplo "
+            "TSLAUSDT) y aceptá el acuerdo. Las criptos siguen normal.", silent=False))
 
     # -- noticias ---------------------------------------------------------------------------------------
     def _event(self, ing) -> dict:
@@ -386,17 +402,27 @@ class LiveTrader:
         if not hasattr(self.venue, "reconcile"):
             return
         before = self.venue.blocked
-        now = await self.venue.reconcile()
-        if now and now != before and now.startswith("exchange_sin_respuesta"):
+        await self.venue.reconcile()
+        now = self.venue.blocked                  # el motivo, no el texto que devuelve (un corte dice "sin respuesta")
+        what = "del SIMULACRO" if self.simulated else f"de DINERO REAL en {self.venue_es}"
+        if now == before:
+            return
+        if now.startswith("exchange_sin_respuesta"):
             await self.send_alert(system_alert(                         # un corte de red: se reintenta solo
-                f"⚠️ {self.venue_es} no responde (o se cortó internet): no abro nada nuevo hasta que vuelva. Lo abierto tiene "
-                "su stop de emergencia en el exchange.", silent=True))
-        elif now and now != before:
-            what = "del SIMULACRO" if self.simulated else f"de DINERO REAL en {self.venue_es}"
+                f"⚠️ {self.venue_es} no responde (o se cortó internet): no abro nada nuevo hasta que vuelva. Lo "
+                "abierto tiene su stop de emergencia en el exchange.", silent=True))
+        elif "diferencias" in now:
             await self.send_alert(system_alert(
                 f"⚠️ Las posiciones {what} no coinciden con las del programa: no abro nada nuevo hasta que "
                 f"coincidan. ¿Abriste o cerraste algo a mano en {self.venue_es}?", silent=False))
-        elif before and not now:
+        elif "sin_stop" in now:
+            syms = now.split("sin_stop:", 1)[1].split(";")[0]
+            await self.send_alert(system_alert(
+                f"⚠️ Una posición {what} quedó sin su stop de emergencia en el exchange ({syms}): no abro nada nuevo "
+                "y lo vuelvo a poner cada 30 s. Si no se arregla, cerrala con /cerrar SI.", silent=False))
+        elif now:
+            await self.send_alert(system_alert(f"⚠️ No abro nada nuevo {what}: {now}", silent=False))
+        else:
             await self.send_alert(system_alert("✅ Las posiciones de dinero real volvieron a coincidir."))
 
     async def daily_summary(self, run: _LiveRun) -> None:

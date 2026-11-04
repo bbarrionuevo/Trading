@@ -225,8 +225,9 @@ EXIT_REASON_ES = {
     "liquidacion": "El precio saltó de golpe más allá del límite y la posición se liquidó.",
     "stop_movil": "El precio retrocedió desde su mejor nivel y salí con la ganancia asegurada{level}.",
     "pedido_del_dueno": "La cerré porque lo pediste.",
-    "cerrada_en_el_exchange": "MEXC ya la había cerrado sola (el stop de emergencia) o la cerraste a mano. La saqué "
-                              "de la cuenta del programa con un precio estimado: el resultado exacto está en MEXC.",
+    "cerrada_en_el_exchange": "El exchange ya la había cerrado solo (el stop de emergencia) o la cerraste a mano. La "
+                              "saqué de la cuenta del programa con un precio estimado: el resultado exacto está en el "
+                              "exchange.",
 }
 
 

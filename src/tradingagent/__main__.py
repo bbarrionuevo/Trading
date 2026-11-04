@@ -292,32 +292,40 @@ def cmd_mexc_real_check(args) -> int:
 
 
 def cmd_binance_real_check(args) -> int:
-    """Prueba sin riesgo del modo real en Binance Futures (execution/live/binance_check.py). Nunca muestra saldos."""
+    """Prueba sin riesgo del modo real en Binance Futures (execution/live/binance_check.py). Nunca muestra saldos.
+    `--demo`: la misma prueba en la DEMO de Binance (plata ficticia, claves *_TEST). No cuenta para armar."""
     _setup("WARNING")
     import time
 
     import aiohttp
 
+    from .app import binance_keys
     from .execution.live import arming
     from .execution.live.binance_check import real_check
-    from .execution.live.binance_futures import BinanceClient
-    key, secret = os.environ.get("BINANCE_API_KEY"), os.environ.get("BINANCE_API_SECRET")
+    from .execution.live.binance_futures import BASE, DEMO, BinanceClient
+    key, secret = binance_keys(os.environ, demo=args.demo)
     if not (key and secret):
-        print("Faltan BINANCE_API_KEY y BINANCE_API_SECRET en", paths.home() / ".env")
+        print("Faltan", "BINANCE_API_KEY_TEST y BINANCE_API_SECRET_TEST" if args.demo
+              else "BINANCE_API_KEY y BINANCE_API_SECRET", "en", paths.home() / ".env")
         return 2
 
     async def main():
         async with aiohttp.ClientSession() as session:
-            return await real_check(BinanceClient(session, key, secret), args.simbolo)
+            return await real_check(BinanceClient(session, key, secret, base=DEMO if args.demo else BASE), args.simbolo)
 
     report = asyncio.run(main())
-    paths.write_json_atomic(paths.home() / "state" / "verificacion_binance.json",
+    name = "verificacion_binance_demo.json" if args.demo else arming.VERIFY_FILES["binance-futuros"]
+    paths.write_json_atomic(paths.home() / "state" / name,
                             {"ok": bool(report["ok"]), "clave": arming.fingerprint(key), "ts": round(time.time()),
-                             "simbolo": report.get("simbolo"), "pasos": report["pasos"], "stop": report.get("stop")})
+                             "simbolo": report.get("simbolo"), "pasos": report["pasos"], "stop": report.get("stop"),
+                             **({"demo": True} if args.demo else {})})
+    if args.demo:
+        print("DEMO de Binance (plata ficticia):")
     for st in report["pasos"]:
         print(f"{'OK ' if st['ok'] else 'MAL'}  {st['paso']}" + (f": {st['detalle']}" if st["detalle"] else ""))
     if report["ok"]:
-        print("Listo: Binance entiende las órdenes como el programa las pide y no quedó nada abierto.")
+        print("Listo: Binance entiende las órdenes como el programa las pide y no quedó nada abierto."
+              + (" (En la demo: no cuenta para armar el dinero real.)" if args.demo else ""))
         return 0
     print("La prueba NO pasó: el modo real no se puede armar. Ninguna orden quedó abierta.")
     return 1
@@ -331,57 +339,69 @@ def _restart_agent(home, why: str) -> None:
 
 def cmd_armar_real(args) -> int:
     """Armado local del dueño (REGLAS A-2): frase exacta, activos y vencimiento. Sin tope de capital: el real
-    opera con todo el saldo de la cuenta de futuros. `--simulacro`: lo mismo sin mandar órdenes."""
+    opera con todo el saldo de la cuenta de futuros. `--simulacro`: lo mismo sin plata en juego (en Binance, contra la
+    DEMO de Binance; en MEXC, contra un exchange simulado sobre el libro real)."""
     _setup("WARNING")
     from . import limits as limits_mod
+    from .app import binance_keys
     from .execution.live import arming
     home = paths.home()
     if args.desarmar:
         print("Desarmado: el modo real no abre nada nuevo (lo abierto sale normal)." if arming.disarm(home)
               else "No estaba armado.")
         return 0
+    binance = args.exchange == "binance"
+    venue, where = ("binance-futuros", "Binance") if binance else ("mexc-futuros", "MEXC")
     assets = tuple(a.strip().upper() for a in args.activos.split(",") if a.strip())
     current = paths.read_json(home / arming.ARM_FILE, None)
     real_armed = isinstance(current, dict) and not current.get("simulacro")
-    if args.simulacro:                                # sin plata en juego: sin frase ni claves
+    if args.simulacro:                                # sin plata en juego: sin frase
         if real_armed:
             print("Ya hay DINERO REAL armado. Si querés volver al simulacro, primero: "
                   "python -m tradingagent armar-real --desarmar")
             return 1
+        if binance and not all(binance_keys(os.environ, demo=True)):
+            print("Para el simulacro en la demo de Binance faltan BINANCE_API_KEY_TEST y BINANCE_API_SECRET_TEST en",
+                  home / ".env")
+            return 2
         capital = 100.0 if args.capital is None else args.capital
         try:
-            data = arming.arm(home, args.dias, "", "", assets=assets, simulacro=True, capital=capital)
+            data = arming.arm(home, args.dias, "", "", assets=assets, simulacro=True, capital=capital, venue=venue)
         except ValueError as e:
             print(f"No se armó el simulacro: {e}")
             return 1
         _restart_agent(home, "simulacro")
+        against = ("contra la DEMO de Binance (órdenes de verdad, plata ficticia)" if binance
+                   else "contra un exchange simulado con el libro real de MEXC (no manda ninguna orden)")
         print(f"Simulacro armado: {data['capital_usdt']:g} USDT de mentira, activos {', '.join(data['activos'])}, "
-              f"por {args.dias} días. Opera igual que el dinero real (mismo programa, precios reales de MEXC) pero NO "
-              "manda órdenes. El agente se reinicia solo en segundos y te avisa por Telegram.")
+              f"por {args.dias} días. Es el mismo programa que el dinero real, con los precios reales de {where}, "
+              f"{against}. El agente se reinicia solo en segundos y te avisa por Telegram.")
         return 0
     if args.capital is not None:
-        print("Con dinero real no hay tope: opera con TODO el saldo de la cuenta de futuros de MEXC. "
+        print(f"Con dinero real no hay tope: opera con TODO el saldo de la cuenta de futuros de {where}. "
               "--capital es solo para el simulacro.")
         return 1
-    access, _ = _trading_keys()
+    access = binance_keys(os.environ, demo=False)[0] if binance else _trading_keys()[0]
     if not access:
-        print("Faltan MEXC_ACCESS_KEY y MEXC_SECRET_KEY en", home / ".env")
+        print("Faltan", "BINANCE_API_KEY y BINANCE_API_SECRET" if binance else "MEXC_ACCESS_KEY y MEXC_SECRET_KEY",
+              "en", home / ".env")
         return 2
     want = arming.phrase(args.dias)
-    print(f"Vas a armar DINERO REAL con TODO el saldo de tu cuenta de futuros de MEXC (y lo que se gane), activos "
+    print(f"Vas a armar DINERO REAL con TODO el saldo de tu cuenta de futuros de {where} (y lo que se gane), activos "
           f"{', '.join(assets)}, por {args.dias} días. Cada operación arriesga como mucho "
           f"{limits_mod.load()['per_trade']['max_risk_pct']:g} % del saldo.\n"
           f"Para confirmar, escribí exactamente:  {want}")
     typed = input("> ")
     try:
-        arming.arm(home, args.dias, access, typed, assets=assets)
+        arming.arm(home, args.dias, access, typed, assets=assets, venue=venue)
     except ValueError as e:
         print(f"No se armó: {e}")
         return 1
-    ok, why, _ = arming.status(home, access)
+    ok, why, _ = arming.status(home, access, venue=venue)
     _restart_agent(home, "armado real")
+    check = "binance-real-check" if binance else "mexc-real-check"
     print("Armado con todo el saldo.", "El agente se reinicia solo en segundos y empieza." if ok
-          else f"Todavía no opera: {why} (corré python -m tradingagent mexc-real-check).")
+          else f"Todavía no opera: {why} (corré python -m tradingagent {check}).")
     return 0
 
 
@@ -417,23 +437,48 @@ def cmd_estudio_listados(args) -> int:
 
 
 def cmd_cerrar_todo(args) -> int:
-    """Emergencia: cancela todas las órdenes y cierra todas las posiciones reales (con tope de precio), y desarma."""
+    """Emergencia: cancela todas las órdenes y stops y cierra todas las posiciones reales (con tope de precio), y
+    desarma. Binance por defecto; `--demo` lo hace en la DEMO de Binance; `--exchange mexc`, en MEXC."""
     _setup("WARNING")
     import aiohttp
 
     from .execution.live import arming
+    home = paths.home()
+    if args.exchange == "binance":
+        from .app import binance_keys
+        from .execution.live.binance_futures import BASE, DEMO, BinanceClient
+        from .execution.live.binance_venue import close_everything
+        key, secret = binance_keys(os.environ, demo=args.demo)
+        if not (key and secret):
+            print("Faltan", "BINANCE_API_KEY_TEST y BINANCE_API_SECRET_TEST" if args.demo
+                  else "BINANCE_API_KEY y BINANCE_API_SECRET", "en", home / ".env")
+            return 2
+        current = paths.read_json(home / arming.ARM_FILE, None) or {}
+        if bool(current.get("simulacro")) == bool(args.demo):          # el armado de esa misma cuenta
+            arming.disarm(home)
+
+        async def close_binance():
+            async with aiohttp.ClientSession() as session:
+                client = BinanceClient(session, key, secret, base=DEMO if args.demo else BASE)
+                return await close_everything(client, [x for x in args.simbolos.split(",") if x and "_" not in x])
+
+        left = asyncio.run(close_binance())
+        print(("DEMO de Binance: " if args.demo else "Desarmado. ")
+              + ("Todo cerrado." if not left else f"Quedan {len(left)} posiciones: cerralas desde Binance."))
+        return 0 if not left else 1
     from .execution.live.check import _clean_up
     from .execution.live.mexc_futures import TradingClient
     access, secret = _trading_keys()
     if not (access and secret):
         print("Faltan MEXC_ACCESS_KEY y MEXC_SECRET_KEY")
         return 2
-    arming.disarm(paths.home())
+    arming.disarm(home)
 
     async def main():
         async with aiohttp.ClientSession() as session:
             client = TradingClient(session, access, secret)
-            symbols = sorted({p.get("symbol") for p in await client.positions()} | set(args.simbolos.split(",")))
+            wanted = args.simbolos.split(",") if args.simbolos else ["BTC_USDT", "ETH_USDT", "SOL_USDT"]
+            symbols = sorted({p.get("symbol") for p in await client.positions()} | set(wanted))
             for sym in (x for x in symbols if x):
                 await _clean_up(client, session, sym, client.base)
             return [p for p in await client.positions() if float(p.get("holdVol", 0) or 0) > 0]
@@ -591,6 +636,7 @@ def main(argv=None) -> int:
     rc.add_argument("--simbolo", default="BTC_USDT")
     bc = sub.add_parser("binance-real-check")
     bc.add_argument("--simbolo", default="XRPUSDT")
+    bc.add_argument("--demo", action="store_true", help="en la DEMO de Binance (plata ficticia, claves *_TEST)")
     ar = sub.add_parser("armar-real")
     ar.add_argument("--capital", type=float, help="solo para el simulacro: USDT de mentira (100 si no se dice). "
                     "Con dinero real no hay tope: opera con todo el saldo de la cuenta")
@@ -598,14 +644,17 @@ def main(argv=None) -> int:
     ar.add_argument("--activos", default="todos", help="todos (lo que mueva la noticia: criptos, acciones, índices, "
                     "oro, petróleo) o una lista, por ejemplo BTC,ETH,TSLA")
     ar.add_argument("--desarmar", action="store_true")
-    ar.add_argument("--simulacro", action="store_true", help="probar el modo real SIN plata: mismo programa, "
-                    "precios reales de MEXC, ninguna orden (capital hasta el tope del sobre, hasta 30 días)")
+    ar.add_argument("--simulacro", action="store_true", help="probar el modo real SIN plata: mismo programa y "
+                    "mismos precios; en Binance contra la DEMO (plata ficticia), en MEXC sin mandar órdenes")
+    ar.add_argument("--exchange", choices=("binance", "mexc"), default="binance")
     es = sub.add_parser("estudio-listados")
     es.add_argument("--dias", type=int, default=180)
     es.add_argument("--exchange", choices=("binance", "bybit", "upbit"), default="binance",
                     help="de quién son los avisos (Bybit y Upbit solo responden desde la PC)")
     ct = sub.add_parser("cerrar-todo")
-    ct.add_argument("--simbolos", default="BTC_USDT,ETH_USDT,SOL_USDT")
+    ct.add_argument("--simbolos", default="", help="además de los que tengan posición (BTCUSDT,ETHUSDT...)")
+    ct.add_argument("--exchange", choices=("binance", "mexc"), default="binance")
+    ct.add_argument("--demo", action="store_true", help="en la DEMO de Binance (plata ficticia)")
     sub.add_parser("llm-check")
     s = sub.add_parser("sources")
     s.add_argument("--check", action="store_true")

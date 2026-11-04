@@ -84,6 +84,24 @@ def quiet_connection_resets(loop, context) -> None:
     loop.default_exception_handler(context)
 
 
+VENUE_ES = {"binance-futuros": "Binance", "mexc-futuros": "MEXC"}
+
+
+def binance_keys(env, *, demo: bool) -> tuple[str | None, str | None]:
+    """Las claves de Binance: las de la DEMO (plata ficticia) o las reales. Nunca se mezclan."""
+    if demo:
+        return env.get("BINANCE_API_KEY_TEST"), env.get("BINANCE_API_SECRET_TEST")
+    return env.get("BINANCE_API_KEY"), env.get("BINANCE_API_SECRET")
+
+
+def arm_key(env, data: dict) -> str | None:
+    """La clave con la que se armó: la huella del armado tiene que coincidir con ella."""
+    from .execution.live import arming
+    if arming.venue_of(data) == "binance-futuros":
+        return binance_keys(env, demo=bool(data.get("simulacro")))[0]
+    return env.get("MEXC_ACCESS_KEY")
+
+
 class OwnerActions:
     """Lo que el dueño puede pedir por Telegram (alerts/commands.py): informar y bajar riesgo, nunca armar."""
 
@@ -98,10 +116,12 @@ class OwnerActions:
             lines += a.trader.status_lines("Práctica")
         if a.real_trader is not None:
             lines += a.real_trader.status_lines("Simulacro" if a.real_trader.simulated else "💵 DINERO REAL")
-        ok, why, data = arming.status(home, a.env.get("MEXC_ACCESS_KEY"))
+        current = paths.read_json(home / arming.ARM_FILE, None) or {}
+        ok, why, data = arming.status(home, arm_key(a.env, current))
         if data:
             left = (float(data.get("vence", 0)) - time.time()) / 86400
-            lines.append(f"Armado ({'simulacro' if data.get('simulacro') else 'dinero real'}): "
+            lines.append(f"Armado en {VENUE_ES.get(arming.venue_of(data), arming.venue_of(data))} "
+                         f"({'simulacro' if data.get('simulacro') else 'dinero real'}): "
                          + (f"opera, vence en {left:.0f} días" if ok else f"no abre nada nuevo ({why})"))
         else:
             lines.append("Dinero real: no armado")
@@ -117,14 +137,15 @@ class OwnerActions:
 
     async def close_all(self, why: str) -> str:
         from .execution.live import arming
+        where = VENUE_ES.get(arming.venue_of(paths.read_json(paths.home() / arming.ARM_FILE, None) or {}), "el exchange")
         arming.disarm(paths.home())
         t = self.agent.real_trader
         if t is None:
             return "No hay operador de dinero real corriendo: no había nada que cerrar. Quedó desarmado."
         before, left = await t.close_all(why)
         if left:
-            return (f"Cerré {before - left} de {before}. Quedan {left} abiertas: cerralas a mano en MEXC o en la PC "
-                    "con python -m tradingagent cerrar-todo. Quedó desarmado.")
+            return (f"Cerré {before - left} de {before}. Quedan {left} abiertas: cerralas a mano en {where} o en la "
+                    "PC con python -m tradingagent cerrar-todo. Quedó desarmado.")
         return f"✅ Cerré todo ({before} posiciones) y quedó desarmado. Para volver: armar-real en la PC."
 
 
@@ -140,6 +161,7 @@ class Agent:
         self.stop_event = asyncio.Event()
         self.started = time.time()
         self.news_tasks: set[asyncio.Task] = set()     # noticias que el operador está evaluando ahora
+        self.streams: list = []                        # fuentes empujadas (no se sondean)
 
     def stop(self) -> None:
         self.stop_event.set()
@@ -171,6 +193,7 @@ class Agent:
                 "portfolio": self.venue.portfolio.snapshot(self.venue.marks), "paper": self.venue.summary()
                 | {"portfolio": None}, "execution": self.execution.counts, "alerts": self.alerts.snapshot(),
                 "journal": self.journal.snapshot(), "bus": self.bus.stats(),
+                "streams": [s.snapshot() for s in self.streams],
                 "trader": self.trader.snapshot() if self.trader is not None else None,
                 "real": self.real_trader.snapshot() if self.real_trader is not None else None}
 
@@ -224,6 +247,21 @@ class Agent:
                 log.warning("falló la prueba de red", exc_info=True)
             delay = EVERY_S
 
+    def _build_streams(self, lim) -> list:
+        """Fuentes empujadas: el canal oficial de anuncios de Binance (WebSocket), con una clave de SOLO LECTURA
+        (`BINANCE_LECTURA_KEY` / `BINANCE_LECTURA_SECRET`). Sin esa clave queda apagado (y lo dice el latido)."""
+        from .ingestion.binance_ws import SOURCE_ID, BinanceAnnouncements
+        o = (self.cfg["ingestion"].get("sources") or {}).get(SOURCE_ID) or {}
+        if o.get("enabled") is False:
+            self.sources_off[SOURCE_ID] = "apagada en la configuración"
+            return []
+        key, secret = self.env.get("BINANCE_LECTURA_KEY"), self.env.get("BINANCE_LECTURA_SECRET")
+        if not (key and secret):
+            self.sources_off[SOURCE_ID] = "falta BINANCE_LECTURA_KEY y BINANCE_LECTURA_SECRET en TRADING_HOME/.env"
+            return []
+        return [BinanceAnnouncements(key, secret, self.ingestion.handle, self.clock,
+                                     max_age_s=safety.news_max_age(float(o.get("max_age_s") or 600), lim))]
+
     def _build_trader(self, session, lim):
         from .intelligence.llm import LlmClassifier, api_key
         from .live import LiveTrader
@@ -264,6 +302,8 @@ class Agent:
         data = paths.read_json(home / arming.ARM_FILE, None)
         if not isinstance(data, dict) or not self.cfg["trader"].get("real", True):
             return None
+        if arming.venue_of(data) == "binance-futuros":
+            return self._build_binance_real_trader(session, lim, data)
         sim = bool(data.get("simulacro"))
         keys = (self.env.get("MEXC_ACCESS_KEY"), self.env.get("MEXC_SECRET_KEY"))
         if not sim and not all(keys):
@@ -279,6 +319,38 @@ class Agent:
                       else TradingClient(session, *keys))
             return RealVenue(client, session, registry, books, pf, clock, home=home, access_key=keys[0], limits=lim,
                              leverage=lev)
+
+        return LiveTrader(market, session, self.clock, lim, alerts=self.alerts, journal=self.journal,
+                          capital=float(data["capital_usdt"]) if sim else 0.0,     # real: todo el saldo (lo lee)
+                          llm=self.trader.llm if self.trader else None,
+                          venue_factory=venue, base_dir=base_dir, real=True, simulated=sim)
+
+    def _build_binance_real_trader(self, session, lim, data):
+        """Binance (desde el 4-nov-2026): el operador real con el venue de Binance. En SIMULACRO va contra la DEMO de
+        Binance (plata ficticia, claves *_TEST): el exchange es de verdad (órdenes, ejecuciones, stops), la plata no.
+        Las decisiones usan siempre los precios del Binance real; la demo pone el precio de cada orden con su libro."""
+        from .execution.live.binance_futures import BASE, DEMO, BinanceClient
+        from .execution.live.binance_venue import BinanceVenue
+        from .live import LiveTrader
+        from .marketdata import binance_futures as bfd
+        from .research.futures import BinanceFutures
+        home = paths.home()
+        sim = bool(data.get("simulacro"))
+        key, secret = binance_keys(self.env, demo=sim)
+        if not (key and secret):
+            log.warning("armado de Binance sin %s: el operador real no arranca",
+                        "BINANCE_API_KEY_TEST / BINANCE_API_SECRET_TEST" if sim else "BINANCE_API_KEY / BINANCE_API_SECRET")
+            return None
+        lev = int(lim["per_trade"]["max_leverage"])
+        market = BinanceFutures(max_leverage=lev)
+        market.label = "SIMULACRO futuros Binance (demo)" if sim else "REAL futuros Binance"
+        base_dir = home / ("simulacro" if sim else "real") / market.name
+
+        def venue(registry, books, pf, clock):
+            client = BinanceClient(session, key, secret, base=DEMO if sim else BASE)
+            pricing = bfd.books(session, clock, DEMO) if sim else books
+            return BinanceVenue(client, session, registry, pricing, pf, clock, home=home, api_key=key, limits=lim,
+                                leverage=lev, state_path=base_dir / "stops.json", simulated=sim)
 
         return LiveTrader(market, session, self.clock, lim, alerts=self.alerts, journal=self.journal,
                           capital=float(data["capital_usdt"]) if sim else 0.0,     # real: todo el saldo (lo lee)
@@ -354,6 +426,9 @@ class Agent:
                         self.real_trader = None
                 hb = Heartbeat(self.collect, interval_s=cfg["heartbeat_s"], printer=self.printer)
                 tasks += [asyncio.create_task(p.run(self.stop_event), name=f"fuente-{p.spec.id}") for p in self.pollers]
+                self.streams = self._build_streams(lim)
+                tasks += [asyncio.create_task(st.run(self.stop_event, session), name="fuente-binance.ws")
+                          for st in self.streams]
                 tasks += [asyncio.create_task(self.execution.run(self.stop_event), name="ejecucion"),
                           asyncio.create_task(self.venue.run_monitor(self.stop_event), name="monitor-ordenes"),
                           asyncio.create_task(self.lag.run(), name="lag"),
