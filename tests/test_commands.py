@@ -112,3 +112,23 @@ async def test_el_dueno_cierra_todo_lo_real_desde_el_celular(tmp_path):
             assert t.counts.get("pedido_del_dueno") == 1
         finally:
             await llm.close()
+
+
+async def test_al_apagarse_cierra_su_conexion_a_telegram(tmp_path):
+    """En cada reinicio el log decía "Unclosed client session" (16 veces al 4-nov): la tarea de órdenes se cancelaba
+    sin cerrar su conexión. Ahora la cierra siempre."""
+    import asyncio
+
+    tg = FakeTelegram()
+    async with serve(tg.app()) as url:
+        t = TelegramTransport(TOKEN, str(OWNER), base_url=url)
+        c = Commands(t, tmp_path / "home", Actions(), chat_id=str(OWNER))
+        task = asyncio.create_task(c.run(asyncio.Event()))
+        for _ in range(100):
+            if t.session is not None:
+                break
+            await asyncio.sleep(0.01)
+        assert t.session is not None
+        task.cancel()                                             # como al apagarse el agente
+        await asyncio.gather(task, return_exceptions=True)
+        assert t.session is None

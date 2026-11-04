@@ -113,10 +113,13 @@ def test_el_agente_arma_el_simulacro_local_sin_la_clave_de_trading(tmp_path, mon
 
     home = tmp_path / "home"
     monkeypatch.setenv("TRADING_HOME", str(home))
-    assert main(["armar-real", "--simulacro", "--capital", "100", "--dias", "3"]) == 0
+    monkeypatch.setenv("BINANCE_LECTURA_KEY", "clave-lectura-0000")                # aunque haya clave de lectura...
+    monkeypatch.setenv("BINANCE_LECTURA_SECRET", "secreto-lectura-0000")
+    assert main(["armar-real", "--simulacro", "--dias", "3"]) == 0
     assert "libro real de Binance y órdenes simuladas" in capsys.readouterr().out
     data = json.loads((home / "ARMADO.json").read_text(encoding="utf-8"))
     assert data["modo"] == "local" and data["simulacro"] and data["venues"] == ["binance-futuros"]
+    assert data["capital_usdt"] == 100            # ...nunca el saldo real: el simulacro se publica (G-8, 4-nov)
     env = {"BINANCE_LECTURA_KEY": "clave-lectura-0000", "BINANCE_LECTURA_SECRET": "secreto-lectura-0000",
            "BINANCE_API_KEY": "clave-trading-NO-SE-USA", "BINANCE_API_SECRET": "secreto-trading-NO-SE-USA"}
     agent = Agent(config.load(None), env)

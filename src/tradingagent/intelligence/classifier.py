@@ -12,7 +12,8 @@ y horizonte, en microsegundos y sin red.
 - Los activos salen del texto (grounding): si no hay ninguno y la noticia es de mercado (macro,
   regulación, ETF, tesorería, quiebra), se usa BTC como referencia, con menos confianza. Si es el hecho de una
   empresa o de un activo que la noticia no nombra (resultados de Ferrari, una recompra de 3M, un hackeo
-  cualquiera), no hay activo: nada que operar (reglas-3, ver `classify`).
+  cualquiera), no hay activo: nada que operar (reglas-3). Desde reglas-4, una regulatoria, de ETF, de tesorería
+  o de quiebra sin activo va a BTC solo si el texto habla de cripto (ver `classify`).
 - Los resultados de empresas nunca son de una cripto: "LTC reports Q3 earnings" es LTC Properties, no Litecoin.
 """
 import re
@@ -20,7 +21,7 @@ from dataclasses import asdict, dataclass
 
 from ..research import assets as asset_mod
 
-VERSION = "reglas-3"
+VERSION = "reglas-4"
 
 
 @dataclass(frozen=True)
@@ -129,6 +130,13 @@ UNCERTAIN = re.compile(r"\b(?i:reportedly|rumou?rs?|rumou?red|sources say|consid
                        r"expected to|proposal|proposes|potentially|might|could)\b|\bmay\b")
 DENIAL = _r(r"\b(denies|denied|false|fake|not true|no plans|rejects? (reports|rumou?rs)|debunk(s|ed)?)\b")
 EXCHANGES = _r(r"\b(binance|coinbase|kraken|upbit|okx|bybit|robinhood|bithumb)\b")
+# Contexto cripto: sin activo en el texto, una noticia regulatoria, de ETF o de quiebra va a BTC de referencia solo si
+# habla de cripto. "3M stock soars following $7.35 billion settlement" (Investing, 4-nov) y "SEC charges hedge fund
+# manager" quedaban en BTC por "settlement" o "charges" (reglas-3). La macro (la Fed) sí mueve a BTC sin nombrarlo.
+CRYPTO_CONTEXT = _r(r"\b(crypto\w*|bitcoin|btc|ether(eum)?|stablecoins?|digital assets?|tokens?|blockchain|defi|"
+                    r"web3|altcoins?|memecoins?|tether|usdt|usdc|"
+                    r"(halt(s|ed)?|freez(e|es)|froze|paus(e|es|ed)) withdrawals|"     # frenar retiros y "valores
+                    r"unregistered securit(y|ies))\b")                                    # no registrados": cripto
 # Resultados de una empresa: ninguna cripto "reporta ganancias" (3-nov: "LTC reports strong Q3 earnings" era LTC
 # Properties, una inmobiliaria, y se tomó como Litecoin).
 EARNINGS = _r(r"\b(earnings|EPS|A?FFO)\b|\bQ[1-4](\s+(FY)?20\d\d)?\s+(results|earnings|revenue|sales|profit|loss)\b|"
@@ -186,7 +194,8 @@ def classify(title: str, body: str = "", *, tier: int = 2, cluster_sources: int 
         # de una empresa (Ferrari, 3M) o un hackeo cualquiera quedaba en BTC. Nunca podía entrar (relevancia 3 <
         # 7), pero pagaba consultas a la IA y ensuciaba el aprendizaje: el 3-nov, 37 de las 47 muestras del
         # meta-modelo eran eso (hasta "heladeras hackeadas en Europa"), llevaron κ a 0 y frenaron TODA entrada.
-        if not any(r.category in MARKET_WIDE for r in hits):
+        crypto = CRYPTO_CONTEXT.search(text) or EXCHANGES.search(text)
+        if not any(r.category == "macro" or (r.category in MARKET_WIDE and crypto) for r in hits):
             return Signal(primary.category, round(polarity, 3), 0.0, (), primary.horizon_min,
                           tuple(r.name for r in hits), certainty=round(certainty, 3))
         assets = (asset_mod.MARKET_PROXY,)
