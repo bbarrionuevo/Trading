@@ -6,11 +6,12 @@ programa las pide, sin abrir ninguna posición:
 1. Lee la cuenta (el saldo no se muestra ni se publica) y el estado de las reglas cuantitativas (ningún bloqueo).
 2. Modo unidireccional y "un solo activo" (con el multi-activo Binance obliga a margen cruzado; acá va aislado).
 3. Pone el contrato de prueba en margen aislado y 1x.
-4. Valida con la ruta oficial de prueba de órdenes (no llega al mercado) la entrada IOC con tope de
-   precio y el stop de emergencia STOP_MARKET de cierre.
+4. Valida con la ruta oficial de prueba de órdenes (no llega al mercado) la entrada IOC con tope de precio.
 5. Pone UNA orden "solo maker" (GTX) un 3 % debajo del mejor comprador: no puede ejecutarse (si cruzara, Binance la
-   rechaza). Verifica lado, tamaño, precio, tipo y que no se ejecutó nada, **espera 6 s** (las reglas cuantitativas
-   cuentan como "cancelación inválida" la que se cancela antes de 5 s) y la cancela.
+   rechaza). Y UN stop STOP_MARKET por el servicio de órdenes Algo (el del stop de emergencia: la ruta común lo
+   rechaza desde dic-2025) que solo compraría si el precio subiera 50 %. Verifica cómo los entendió Binance,
+   **espera 6 s** (las reglas cuantitativas cuentan como "cancelación inválida" la que se cancela antes de 5 s) y
+   los cancela.
 6. Verifica que no apareció ninguna posición. Si algo sale mal, cancela las órdenes de ese contrato. Nunca cierra
    posiciones por su cuenta: si apareciera una (no debería), lo dice para que el dueño la cierre.
 
@@ -21,12 +22,12 @@ import time
 from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 
 from ...core.redact import redact
-from .binance_futures import BUY, GTX, IOC, SELL, STOP_MARKET, BinanceClient, BinanceError
+from .binance_futures import BUY, GTX, IOC, STOP_MARKET, BinanceClient, BinanceError
 
 SYMBOL = "XRPUSDT"                    # mínimo de 5 USDT por orden (en BTC es de 100)
 DISTANCE = Decimal("0.03")
 CAP = Decimal("0.003")                # tope de precio de la entrada validada
-STOP = Decimal("0.05")
+ALGO_DISTANCE = Decimal("0.5")      # el stop de prueba: compra solo si sube 50 % (no puede en 6 s)
 WAIT_BEFORE_CANCEL_S = 6.0
 
 
@@ -47,7 +48,7 @@ async def real_check(client: BinanceClient, symbol: str = SYMBOL, *, pause_s: fl
     steps: list[dict] = []
 
     def step(name: str, ok: bool, detail: str = "") -> bool:
-        steps.append({"paso": name, "ok": bool(ok), "detalle": detail})
+        steps.append({"paso": name, "ok": bool(ok), "detalle": "" if ok else detail})   # la ayuda, solo si falla
         return ok
 
     placed = False
@@ -83,17 +84,17 @@ async def real_check(client: BinanceClient, symbol: str = SYMBOL, *, pause_s: fl
         ms = int(time.time() * 1000)
         await client.test_order(symbol=symbol, side=BUY, qty=qty, price=_round(ask * (1 + CAP), tick, up=True), tif=IOC,
                                 client_id=f"chk{ms}t")
-        await client.test_order(symbol=symbol, side=SELL, qty=qty, order_type=STOP_MARKET,
-                                stop_price=_round(bid * (1 - STOP), tick, up=False), client_id=f"chk{ms}s")
-        step("Binance valida la entrada IOC y el stop de emergencia (sin ejecutar)", True)
+        step("Binance valida la entrada IOC (sin ejecutar)", True)
         need = qty * far * Decimal("1.1")
         if Decimal(str(money["available"])) < need:
             step("orden de prueba", False, f"falta saldo en futuros (hace falta ≥ {need:.2f} USDT): se hace cuando "
                                            "cargues la plata")
             return {"ok": False, "solo_lectura": True, "simbolo": symbol, "pasos": steps}
-        cid = f"chk{ms}m"
+        cid, sid = f"chk{ms}m", f"chk{ms}s"
         placed = True
         await client.submit(symbol=symbol, side=BUY, qty=qty, price=far, tif=GTX, client_id=cid)
+        trigger = _round(ask * (1 + ALGO_DISTANCE), tick, up=True)     # solo con +50 %: imposible en 6 s
+        await client.emergency_stop(symbol=symbol, side=BUY, trigger_price=trigger, client_id=sid, qty=qty)
         o = await client.order(symbol, cid)
         problems = []
         if o.get("side") != BUY:
@@ -108,20 +109,35 @@ async def real_check(client: BinanceClient, symbol: str = SYMBOL, *, pause_s: fl
             problems.append("se ejecutó (no debía)")
         if o.get("status") != "NEW":
             problems.append(f"estado {o.get('status')} en vez de abierta")
+        st = await client.stop(sid)
+        stop_problems = []
+        if st.get("orderType", st.get("type")) != STOP_MARKET or st.get("side") != BUY:
+            stop_problems.append(f"tipo {st.get('orderType')}/{st.get('side')} en vez de {STOP_MARKET}/{BUY}")
+        if abs(Decimal(str(st.get("triggerPrice", 0))) - trigger) > tick:
+            stop_problems.append(f"disparo {st.get('triggerPrice')} en vez de {trigger}")
+        if st.get("workingType") != "MARK_PRICE":
+            stop_problems.append(f"precio de disparo {st.get('workingType')} en vez de MARK_PRICE")
+        if st.get("algoStatus") != "NEW":
+            stop_problems.append(f"estado {st.get('algoStatus')} en vez de esperando")
         await asyncio.sleep(pause_s)                  # nunca cancelar antes de 5 s (reglas cuantitativas)
         await client.cancel(symbol, cid)
+        await client.cancel_stop(sid)
         if (await client.order(symbol, cid)).get("status") != "CANCELED":
             problems.append("no quedó cancelada")
+        if (await client.stop(sid)).get("algoStatus") not in ("CANCELED", "CANCELLED"):
+            stop_problems.append("no quedó cancelado")
         step("orden de prueba solo maker", not problems, "; ".join(problems))
+        step("stop de emergencia por el servicio Algo de Binance", not stop_problems, "; ".join(stop_problems))
         after = await client.positions(symbol)
         step("no se abrió ninguna posición", len(after) == len(before),
              "" if len(after) == len(before) else "apareció una posición: cerrala desde Binance")
     except (BinanceError, PermissionError, ValueError, KeyError, TypeError, StopIteration) as e:
         step("error", False, redact(str(e))[:300])
-    ok = len(steps) >= 9 and all(s["ok"] for s in steps)
+    ok = len(steps) >= 10 and all(s["ok"] for s in steps)
     if not ok and placed:
         try:
             await client.cancel_all(symbol)           # nada colgado (nunca cierra posiciones solo)
+            await client.cancel_all_stops(symbol)
         except (BinanceError, PermissionError):
             pass
     return {"ok": ok, "simbolo": symbol, "pasos": steps}

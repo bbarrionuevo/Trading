@@ -11,7 +11,6 @@ from tradingagent.execution.live.binance_futures import (
     GTX,
     IOC,
     SELL,
-    STOP_MARKET,
     BinanceClient,
     BinanceError,
     allowed,
@@ -40,8 +39,13 @@ async def test_firma_lista_cerrada_y_nunca_a_mercado_sin_tope():
             with pytest.raises(ValueError):
                 await c.submit(**{"symbol": "XRPUSDT", "side": BUY, "qty": "10", "price": "0.5", "tif": IOC,
                                   "client_id": "x", **bad})
-        with pytest.raises(ValueError):
+        with pytest.raises(TypeError):                                            # ni a mercado ni stops por acá
             await c.submit(symbol="XRPUSDT", side=BUY, qty="10", client_id="m", order_type="MARKET")
+        st = await c.emergency_stop(symbol="XRPUSDT", side=SELL, trigger_price="0.45", client_id="e1")
+        assert st["closePosition"] and st["orderType"] == "STOP_MARKET" and st["workingType"] == "MARK_PRICE"
+        assert len(await c.open_stops("XRPUSDT")) == 1
+        await c.cancel_stop("e1")
+        assert (await c.stop("e1"))["algoStatus"] == "CANCELED" and await c.open_stops("XRPUSDT") == []
     assert fake.signed and all(fake.signed)
     assert not any("transfer" in p or "withdraw" in p for _, p in fake.calls)       # ni siquiera salió a la red
     assert allowed("POST", "/fapi/v1/order") and not allowed("PUT", "/fapi/v1/order")
@@ -68,11 +72,13 @@ async def test_prueba_sin_riesgo_espera_antes_de_cancelar_y_valida_el_stop():
         rep = await real_check(BinanceClient(s, KEY, SECRET, base=url), pause_s=0.2)
     assert rep["ok"], rep["pasos"]
     assert fake.margin["XRPUSDT"] == "ISOLATED" and fake.leverage["XRPUSDT"] == 1
-    kinds = {(t["type"], t.get("timeInForce"), t.get("closePosition")) for t in fake.tests}
-    assert kinds == {("LIMIT", IOC, None), (STOP_MARKET, None, "true")}             # entrada y stop, sin ejecutar
+    assert [(t["type"], t.get("timeInForce")) for t in fake.tests] == [("LIMIT", IOC)]    # la entrada, sin ejecutar
     assert [o["status"] for o in fake.orders.values()] == ["CANCELED"]
-    assert fake.cancel_after and fake.cancel_after[0] >= 0.15                      # esperó (Windows despierta ~15 ms antes)
-    assert {t["side"] for t in fake.tests} == {BUY, SELL}
+    stop = next(iter(fake.algos.values()))                                         # el stop, por el servicio Algo
+    assert stop["orderType"] == "STOP_MARKET" and stop["algoStatus"] == "CANCELED" and stop["side"] == BUY
+    assert float(stop["triggerPrice"]) > float(fake.ask) * 1.49                    # solo con +50 %: no se dispara
+    assert len(fake.cancel_after) == 2 and min(fake.cancel_after) >= 0.15          # esperó (Windows despierta ~15 ms antes)
+    assert all(p["detalle"] == "" for p in rep["pasos"])                         # sin ayudas si todo da bien
 
 
 @pytest.mark.parametrize("setup,paso", [
@@ -88,6 +94,7 @@ async def test_prueba_sin_riesgo_detecta_lo_que_falta(setup, paso):
         rep = await real_check(BinanceClient(s, KEY, SECRET, base=url), pause_s=0)
     assert not rep["ok"] and any(p["paso"] == paso and not p["ok"] for p in rep["pasos"]), rep["pasos"]
     assert all(o["status"] == "CANCELED" for o in fake.orders.values())              # nada quedó colgado
+    assert all(a["algoStatus"] == "CANCELED" for a in fake.algos.values())
 
 
 async def test_sin_saldo_solo_lee_y_no_pone_ninguna_orden():

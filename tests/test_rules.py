@@ -80,7 +80,7 @@ def test_a3_ordenes_solo_en_el_modulo_real_y_nunca_retiros_ni_transferencias():
                   r"\bccxt\b", r"/api/v3/order\b", r"\bnewOrder\b", r"\bplaceOrder\b", r"change_margin",
                   r"change_position_mode", r"/private/(plan|stop)order", r"/fapi/v\d/(batchOrders|listenKey)"]
     only_live = [r"/private/order", r"change_leverage", r"/private/position/(?!open_positions)"]
-    only_binance = [r"X-MBX-APIKEY", r"/fapi/v\d/order", r"/fapi/v\d/(leverage|marginType|allOpenOrders)"]
+    only_binance = [r"X-MBX-APIKEY", r"/fapi/v\d/order", r"/fapi/v\d/(leverage|marginType|allOpenOrders|algo|openAlgo)"]
     live = SRC / "execution" / "live" / "mexc_futures.py"
     binance = SRC / "execution" / "live" / "binance_futures.py"
     hits = []
@@ -95,9 +95,12 @@ def test_a3_ordenes_solo_en_el_modulo_real_y_nunca_retiros_ni_transferencias():
     from tradingagent.execution.live import binance_futures as bf
     assert bf.GET_PATHS == ("/fapi/v2/balance", "/fapi/v2/positionRisk", "/fapi/v1/positionSide/dual",
                             "/fapi/v1/multiAssetsMargin", "/fapi/v1/order", "/fapi/v1/openOrders", "/fapi/v1/userTrades",
-                            "/fapi/v1/apiTradingStatus", "/fapi/v1/commissionRate")
-    assert bf.POST_PATHS == ("/fapi/v1/order", "/fapi/v1/order/test", "/fapi/v1/leverage", "/fapi/v1/marginType")
-    assert bf.DELETE_PATHS == ("/fapi/v1/order", "/fapi/v1/allOpenOrders")
+                            "/fapi/v1/apiTradingStatus", "/fapi/v1/commissionRate", "/fapi/v1/algoOrder",
+                            "/fapi/v1/openAlgoOrders")
+    assert bf.POST_PATHS == ("/fapi/v1/order", "/fapi/v1/order/test", "/fapi/v1/leverage", "/fapi/v1/marginType",
+                             "/fapi/v1/algoOrder")                     # el stop de emergencia (servicio Algo)
+    assert bf.DELETE_PATHS == ("/fapi/v1/order", "/fapi/v1/allOpenOrders", "/fapi/v1/algoOrder",
+                               "/fapi/v1/algoOpenOrders")
     for path in ("/sapi/v1/asset/transfer", "/sapi/v1/futures/transfer", "/sapi/v1/capital/withdraw/apply",
                  "/fapi/v1/batchOrders", "/fapi/v1/positionSide/dual", "/fapi/v1/multiAssetsMargin"):
         assert not bf.allowed("POST", path), path                          # ni mover plata ni cambiar el modo
