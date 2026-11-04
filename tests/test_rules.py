@@ -97,6 +97,10 @@ def test_a3_ordenes_solo_en_el_modulo_real_y_nunca_retiros_ni_transferencias():
                                                          r"\border", r"/api/v3/(?!time)") if re.search(b, text)]
     assert set(re.findall(r"wss://[^\s\"'`)]+", text)) == {"wss://api.binance.com/sapi/wss"}   # solo los anuncios
     assert "BINANCE_LECTURA_KEY" in text
+    dry = (SRC / "execution" / "live" / "binance_dryrun.py").read_text(encoding="utf-8")   # el simulacro local:
+    assert not re.search(r"BINANCE_API_(KEY|SECRET)", dry)                # nunca la clave de trading
+    assert set(re.findall(r"self\.reader\.(\w+)", dry)) <= {"request", "usdt"}  # de la de lectura, solo leer
+    assert set(re.findall(r"self\.reader\.request\(\"(\w+)\"", dry)) == {"GET"}
     assert hits == []
     from tradingagent.execution.live import binance_futures as bf
     assert bf.GET_PATHS == ("/fapi/v2/balance", "/fapi/v2/positionRisk", "/fapi/v1/positionSide/dual",

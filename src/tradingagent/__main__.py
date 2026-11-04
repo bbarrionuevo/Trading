@@ -360,18 +360,27 @@ def cmd_armar_real(args) -> int:
             print("Ya hay DINERO REAL armado. Si querés volver al simulacro, primero: "
                   "python -m tradingagent armar-real --desarmar")
             return 1
-        if binance and not all(binance_keys(os.environ, demo=True)):
+        demo = binance and args.demo
+        if demo and not all(binance_keys(os.environ, demo=True)):
             print("Para el simulacro en la demo de Binance faltan BINANCE_API_KEY_TEST y BINANCE_API_SECRET_TEST en",
                   home / ".env")
             return 2
-        capital = 100.0 if args.capital is None else args.capital
+        capital = args.capital
+        if capital is None and binance and not demo:          # el mismo capital que la cuenta real, sin tocarla
+            capital = _real_balance_read_only()
+            if capital:
+                print(f"Simulacro con el saldo real de tu cuenta de futuros ({capital:.2f} USDT), leído con la clave "
+                      "de solo lectura: la cuenta no se toca.")
+        capital = 100.0 if capital is None else capital
         try:
-            data = arming.arm(home, args.dias, "", "", assets=assets, simulacro=True, capital=capital, venue=venue)
+            data = arming.arm(home, args.dias, "", "", assets=assets, simulacro=True, capital=capital, venue=venue,
+                              mode=("demo" if demo else "local") if binance else None)
         except ValueError as e:
             print(f"No se armó el simulacro: {e}")
             return 1
         _restart_agent(home, "simulacro")
-        against = ("contra la DEMO de Binance (órdenes de verdad, plata ficticia)" if binance
+        against = ("contra la DEMO de Binance (órdenes de verdad, plata ficticia)" if demo
+                   else "con el libro real de Binance y órdenes simuladas en la PC (ninguna orden sale)" if binance
                    else "contra un exchange simulado con el libro real de MEXC (no manda ninguna orden)")
         print(f"Simulacro armado: {data['capital_usdt']:g} USDT de mentira, activos {', '.join(data['activos'])}, "
               f"por {args.dias} días. Es el mismo programa que el dinero real, con los precios reales de {where}, "
@@ -402,6 +411,42 @@ def cmd_armar_real(args) -> int:
     check = "binance-real-check" if binance else "mexc-real-check"
     print("Armado con todo el saldo.", "El agente se reinicia solo en segundos y empieza." if ok
           else f"Todavía no opera: {why} (corré python -m tradingagent {check}).")
+    return 0
+
+
+def _real_balance_read_only() -> float | None:
+    """Saldo real de futuros de Binance con la clave de SOLO LECTURA (para que el simulacro use el mismo capital)."""
+    key, secret = os.environ.get("BINANCE_LECTURA_KEY"), os.environ.get("BINANCE_LECTURA_SECRET")
+    if not (key and secret):
+        return None
+    import aiohttp
+
+    from .execution.live.binance_futures import BinanceClient
+
+    async def read():
+        async with aiohttp.ClientSession() as session:
+            client = BinanceClient(session, key, secret)
+            await client.sync_time()
+            return float((await client.usdt())["equity"])
+
+    try:
+        value = asyncio.run(read())
+    except Exception as e:                                               # noqa: BLE001 (sin saldo, el de siempre)
+        print(f"No pude leer el saldo real ({type(e).__name__}): uso 100 USDT.")
+        return None
+    return round(value, 2) if value > 0 else None
+
+
+def cmd_informe_simulacro(args) -> int:
+    """Calibración: qué tan rápido llegan las noticias, qué tan rápido se entra, cuánto se acierta y cuánto se gana."""
+    _setup("WARNING")
+    from .research.calibracion import render, report
+    home = paths.home()
+    base = {"simulacro": home / "simulacro", "demo": home / "simulacro-demo", "practica": home / "paper-vivo",
+            "real": home / "real"}[args.cuenta] / "binance-futuros"
+    import time as _time
+    rep = report(base, home / "journal", since=_time.time() - args.dias * 86400 if args.dias else None)
+    print(render(rep, args.cuenta))
     return 0
 
 
@@ -647,6 +692,11 @@ def main(argv=None) -> int:
     ar.add_argument("--simulacro", action="store_true", help="probar el modo real SIN plata: mismo programa y "
                     "mismos precios; en Binance contra la DEMO (plata ficticia), en MEXC sin mandar órdenes")
     ar.add_argument("--exchange", choices=("binance", "mexc"), default="binance")
+    ar.add_argument("--demo", action="store_true", help="el simulacro contra la DEMO de Binance (plata ficticia) "
+                    "en vez del libro real con órdenes simuladas en la PC")
+    inf = sub.add_parser("informe-simulacro", help="calibración: velocidad, acierto y ganancia")
+    inf.add_argument("--cuenta", choices=("simulacro", "demo", "practica", "real"), default="simulacro")
+    inf.add_argument("--dias", type=float, default=0, help="solo los últimos N días (0 = todo)")
     es = sub.add_parser("estudio-listados")
     es.add_argument("--dias", type=int, default=180)
     es.add_argument("--exchange", choices=("binance", "bybit", "upbit"), default="binance",
@@ -670,7 +720,7 @@ def main(argv=None) -> int:
                 "supervisar": cmd_supervisar, "tablero": cmd_tablero, "mexc-real-check": cmd_mexc_real_check,
                 "binance-real-check": cmd_binance_real_check,
                 "armar-real": cmd_armar_real, "cerrar-todo": cmd_cerrar_todo,
-                "estudio-listados": cmd_estudio_listados}
+                "estudio-listados": cmd_estudio_listados, "informe-simulacro": cmd_informe_simulacro}
     if args.cmd not in handlers:
         ap.print_help()
         return 2

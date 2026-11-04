@@ -326,9 +326,13 @@ class Agent:
                           venue_factory=venue, base_dir=base_dir, real=True, simulated=sim)
 
     def _build_binance_real_trader(self, session, lim, data):
-        """Binance (desde el 4-nov-2026): el operador real con el venue de Binance. En SIMULACRO va contra la DEMO de
-        Binance (plata ficticia, claves *_TEST): el exchange es de verdad (órdenes, ejecuciones, stops), la plata no.
-        Las decisiones usan siempre los precios del Binance real; la demo pone el precio de cada orden con su libro."""
+        """Binance (desde el 4-nov-2026): el operador real con el venue de Binance. Tres modos:
+        - real: la clave de trading, todo el saldo de la cuenta;
+        - simulacro LOCAL (el de siempre desde el 4-nov): precios y libro de PRODUCCIÓN, órdenes simuladas en la PC
+          (binance_dryrun.py). Nunca usa la clave de trading: solo la de lectura, para el saldo y la comisión reales;
+        - simulacro DEMO: contra la demo de Binance (claves *_TEST): órdenes de verdad, plata ficticia.
+        Las decisiones usan siempre los precios del Binance real."""
+        from .execution.live.binance_dryrun import LocalDryRunClient
         from .execution.live.binance_futures import BASE, DEMO, BinanceClient
         from .execution.live.binance_venue import BinanceVenue
         from .live import LiveTrader
@@ -336,15 +340,32 @@ class Agent:
         from .research.futures import BinanceFutures
         home = paths.home()
         sim = bool(data.get("simulacro"))
+        mode = (data.get("modo") or "demo") if sim else "real"
+        lev = int(lim["per_trade"]["max_leverage"])
+        if mode == "local":                                    # el capital real, 100 % aislado: sin clave de trading
+            market = BinanceFutures(max_leverage=lev)
+            market.label = "SIMULACRO futuros Binance"
+            base_dir = home / "simulacro" / market.name
+            rkey, rsecret = self.env.get("BINANCE_LECTURA_KEY"), self.env.get("BINANCE_LECTURA_SECRET")
+
+            def local(registry, books, pf, clock):
+                reader = BinanceClient(session, rkey, rsecret) if rkey and rsecret else None
+                client = LocalDryRunClient(books, session, capital=float(data["capital_usdt"]), clock=clock,
+                                           reader=reader, state_path=base_dir / "exchange-simulado.json")
+                return BinanceVenue(client, session, registry, books, pf, clock, home=home, api_key="", limits=lim,
+                                    leverage=lev, state_path=base_dir / "stops.json", simulated=True)
+
+            return LiveTrader(market, session, self.clock, lim, alerts=self.alerts, journal=self.journal,
+                              capital=float(data["capital_usdt"]), llm=self.trader.llm if self.trader else None,
+                              venue_factory=local, base_dir=base_dir, real=True, simulated=True)
         key, secret = binance_keys(self.env, demo=sim)
         if not (key and secret):
             log.warning("armado de Binance sin %s: el operador real no arranca",
                         "BINANCE_API_KEY_TEST / BINANCE_API_SECRET_TEST" if sim else "BINANCE_API_KEY / BINANCE_API_SECRET")
             return None
-        lev = int(lim["per_trade"]["max_leverage"])
         market = BinanceFutures(max_leverage=lev)
         market.label = "SIMULACRO futuros Binance (demo)" if sim else "REAL futuros Binance"
-        base_dir = home / ("simulacro" if sim else "real") / market.name
+        base_dir = home / ("simulacro-demo" if sim else "real") / market.name
 
         def venue(registry, books, pf, clock):
             client = BinanceClient(session, key, secret, base=DEMO if sim else BASE)

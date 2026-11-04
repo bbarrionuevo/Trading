@@ -258,20 +258,21 @@ def test_el_simulacro_de_binance_va_contra_la_demo(tmp_path, monkeypatch, capsys
 
     home = tmp_path / "home"
     monkeypatch.setenv("TRADING_HOME", str(home))
-    assert main(["armar-real", "--simulacro"]) == 2                                 # sin las claves de la demo
+    assert main(["armar-real", "--simulacro", "--demo"]) == 2                       # sin las claves de la demo
     monkeypatch.setenv("BINANCE_API_KEY_TEST", "clave-demo-0000")
     monkeypatch.setenv("BINANCE_API_SECRET_TEST", "secreto-demo-0000")
-    assert main(["armar-real", "--simulacro", "--dias", "3"]) == 0
+    assert main(["armar-real", "--simulacro", "--demo", "--dias", "3"]) == 0
     assert "DEMO de Binance" in capsys.readouterr().out
     data = json.loads((home / "ARMADO.json").read_text(encoding="utf-8"))
     assert data["venues"] == ["binance-futuros"] and data["simulacro"] and data["capital_usdt"] == 100
+    assert data["modo"] == "demo"
     env = {"BINANCE_API_KEY_TEST": "clave-demo-0000", "BINANCE_API_SECRET_TEST": "secreto-demo-0000",
            "BINANCE_API_KEY": "clave-real-no-se-usa", "BINANCE_API_SECRET": "secreto-real-no-se-usa"}
     agent = Agent(config.load(None), env)
     agent.alerts = agent.journal = None
     t = agent._build_real_trader(None, limits_mod.load())
     assert t.simulated and t.real and t.market.label == "SIMULACRO futuros Binance (demo)"
-    assert t.base == home / "simulacro" / "binance-futuros"
+    assert t.base == home / "simulacro-demo" / "binance-futuros"
     v = t.venue_factory(InstrumentRegistry([]), None, Portfolio(D("100")), ManualClock(T0))
     assert v.client.base == DEMO and v.books.url.startswith(DEMO) and v.simulated     # la demo, con su libro
     assert v._key == "clave-demo-0000"                                                 # nunca la clave real

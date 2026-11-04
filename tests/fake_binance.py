@@ -67,6 +67,7 @@ class FakeBinance:
         self.fail_next_order = 0                  # cuántas IOC se ejecutan pero contestan 503 (no se sabe si entró)
         self.fail_stops = 0                       # cuántos stops de emergencia rechaza
         self.tradfi_signed = True                 # el dueño aceptó el acuerdo TradFi (si no: -4411, como la demo)
+        self.taker_rate = "0.0004"                # comisión de taker de la cuenta (commissionRate)
 
     def _check(self, request) -> bool:
         q = dict(request.query)
@@ -116,6 +117,9 @@ class FakeBinance:
                                        "marginType": "isolated", "leverage": str(self.leverage.get(sym, 20))}
                                       for sym, x in self.positions.items()
                                       if x["amt"] and q.get("symbol", sym) == sym])
+        if path == "/fapi/v1/commissionRate":
+            return web.json_response({"symbol": q["symbol"], "makerCommissionRate": "0.0002",
+                                      "takerCommissionRate": self.taker_rate})
         if path == "/fapi/v1/userTrades":
             return web.json_response([t for t in self.trades if t["symbol"] == q["symbol"]
                                       and str(t["orderId"]) == str(q.get("orderId", t["orderId"]))])
