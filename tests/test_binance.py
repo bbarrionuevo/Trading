@@ -79,6 +79,29 @@ async def test_prueba_sin_riesgo_espera_antes_de_cancelar_y_valida_el_stop():
     assert float(stop["triggerPrice"]) > float(fake.ask) * 1.49                    # solo con +50 %: no se dispara
     assert len(fake.cancel_after) == 2 and min(fake.cancel_after) >= 0.15          # esperó (Windows despierta ~15 ms antes)
     assert all(p["detalle"] == "" for p in rep["pasos"])                         # sin ayudas si todo da bien
+    assert rep["stop"]["estados"] == ["CANCELED"]
+
+
+async def test_el_stop_tarda_en_mostrarse_cancelado_y_la_prueba_lo_espera():
+    fake = FakeBinance()
+    fake.algo_lag = 3                                    # el real muestra la cancelación con demora (4-nov)
+    async with serve(fake.app()) as url, aiohttp.ClientSession() as s:
+        rep = await real_check(BinanceClient(s, KEY, SECRET, base=url), pause_s=0, poll_s=0.01)
+    assert rep["ok"], rep["pasos"]
+    assert rep["stop"]["estados"] == ["NEW", "CANCELED"]
+    assert ("DELETE", "/fapi/v1/algoOpenOrders") not in fake.calls                  # no hizo falta limpiar
+
+
+async def test_si_el_stop_no_se_cancela_lo_dice_y_limpia():
+    fake = FakeBinance()
+    fake.algo_stuck = True
+    fake.fail_cancel_all = True                         # aunque falle cancelar las órdenes, cancela los stops
+    async with serve(fake.app()) as url, aiohttp.ClientSession() as s:
+        rep = await real_check(BinanceClient(s, KEY, SECRET, base=url), pause_s=0, confirm_s=0.1, poll_s=0.02)
+    paso = next(p for p in rep["pasos"] if p["paso"] == "stop de emergencia por el servicio Algo de Binance")
+    assert not rep["ok"] and not paso["ok"] and "Binance dice NEW" in paso["detalle"], rep["pasos"]
+    assert ("DELETE", "/fapi/v1/algoOpenOrders") in fake.calls                      # canceló todos los stops
+    assert all(a["algoStatus"] == "CANCELED" for a in fake.algos.values())
 
 
 @pytest.mark.parametrize("setup,paso", [
