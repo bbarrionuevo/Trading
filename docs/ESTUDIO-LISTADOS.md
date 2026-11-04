@@ -67,11 +67,39 @@ es la de la primera publicación del aviso. Últimos 180 días, en MEXC futuros 
   próximo aviso.
 
 Qué cambió en el sistema:
-1. Upbit se lee cada **2 s** (antes 10). Cloudflare guarda la respuesta solo 1 s (`max-age=1`).
+1. Upbit se lee cada **5 s** (antes 10). Cada 2 s, Upbit (Cloudflare) devolvía HTTP 429 en uno de cada tres pedidos.
+   En Binance, entrar a los 10–20 s del aviso rinde igual o mejor que a los 5 s: el primer pico se devuelve.
 2. La advertencia levantada ya no se lee como deslistado (las reglas abrían un corto contra un +6 %), y la extendida
    no se opera (no es un hecho nuevo).
 3. En "KAIA/BTC" BTC es la moneda del par, no el protagonista: antes la noticia del listado de KAIA (+34 % en la
    hora) quedaba también en BTC.
+
+### Upbit operado en Binance Futures, segundo a segundo (4-nov)
+
+Mismos avisos de Upbit, ahora en el lugar donde vamos a operar (Binance USDT-M):
+- **Con perpetuo en Binance en ese momento** (`onboardDate`): 18 de los listados nuevos, 15 de las altas en wones y
+  11 de los fines de soporte.
+- **Velas de 1 minuto:** al cierre del minuto del aviso, +11 % (listado), +18 % (alta en wones) y −6 % (fin del
+  soporte).
+- **Velas de 1 segundo** (spot de Binance, que acompaña al perpetuo; 21 listados): +23 % a los **5 s**, +19 % a los
+  10 s, +16 % a los 30 s y +19 % a los 60 s. El salto es instantáneo y el primer pico se devuelve en parte.
+
+Ganancia neta (0,2 % de costos) según cuándo se entra y cómo se sale, listados (n = 23):
+
+| Entrada | Stop que sigue al precio a 5 % (regla actual) | 15 min con stop fijo de 5 % | **15 min con stop de 10 %** |
+|---|---|---|---|
+| a los 10 s | mediana −0,2 % (11/23 ganan) | mediana −4,1 % (8/23) | mediana +0,6 %, media +4,3 % (12/23) |
+| a los 20 s | mediana −1,0 % (10/23) | mediana −0,2 % (11/23) | **mediana +3,0 %, media +6,6 % (16/23)** |
+
+- Entrar a los 5 s compra el pico (mediana −0,2 % a 15 min); entrar a los 60 s deja poco (+0,8 %).
+- El programa entra a los ~6-15 s (Upbit cada 5 s, IA ~2-3 s): justo en la ventana buena.
+- **La salida decide:** el sacudón después del pico toca un stop de 5 %; uno de 10 % lo aguanta y captura la
+  suba de los minutos siguientes. Con 1 % de riesgo por operación, un stop de 10 % es una posición más chica, no
+  más riesgo. **Cambiar el tope de 5 % (REGLAS A-5) para los listados lo decide el dueño.**
+- Fin del soporte en corto (n = 8): stop que sigue al precio a 8-10 %, mediana +1,8 % entrando a los 10 s. n chico.
+- Los listados propios de Binance casi nunca tienen perpetuo al anunciarse: no se pueden operar en Binance futuros.
+- Cuidado: n chico; el spot reemplaza al perpetuo en los segundos; en plena noticia el costo real puede pasar el
+  0,2 % (con 0,5 % la mediana a 20 s y 15 min sigue en +2,7 %).
 
 ### Binance: la copia del CDN demoraba ~60 s
 

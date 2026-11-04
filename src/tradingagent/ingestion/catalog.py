@@ -65,10 +65,11 @@ DEFAULT_SOURCES = (
     SourceSpec("binance.listados", BINANCE_LISTINGS, tier=TIER_OFFICIAL, interval_s=3, max_age_s=600,
                category="listado", format="binance", url_variants=binance_variants()),
     # Avisos de mercado de Upbit (en coreano). Estudio del 4-nov (180 días, en MEXC): listado nuevo +13,5 % a 5 min
-    # (21 de 21 suben), alta en wones +20,9 % (14 de 14), casi todo dentro del primer minuto. Cloudflare guarda la
-    # respuesta solo 1 s (max-age=1): cada 2 s llega fresca sin cargar a Upbit. Desde la PC solo anda con el
-    # almacén de certificados de Windows (prueba de red del 3-nov).
-    SourceSpec("upbit.avisos", UPBIT_NOTICES, tier=TIER_OFFICIAL, interval_s=2, max_age_s=600, category="listado",
+    # (21 de 21 suben), alta en wones +20,9 % (14 de 14), casi todo dentro del primer minuto. Cada 5 s: cada 2 s
+    # Upbit (Cloudflare) devolvía HTTP 429 en uno de cada tres pedidos (PC, 4-nov), y en Binance entrar a los 10-20 s
+    # del aviso rinde igual o mejor que a los 5 s (el primer pico se devuelve). Desde la PC solo anda con el almacén
+    # de certificados de Windows (prueba de red del 3-nov).
+    SourceSpec("upbit.avisos", UPBIT_NOTICES, tier=TIER_OFFICIAL, interval_s=5, max_age_s=600, category="listado",
                format="upbit", os_trust=True),
     # OKX y Bitget quedan apagadas: en el mismo estudio, los listados de OKX no movieron la moneda en MEXC (mediana
     # ≈ 0 % a 5, 15 y 60 min) y los de Bitget son casi todos de acciones. Se prenden en config.yaml si cambia.
