@@ -4,7 +4,7 @@
  "cash": "120.0",
  "positions": {},
  "risk": {
-  "day": "2026-11-03",
+  "day": "2026-11-04",
   "day_start": 120.0,
   "week": "2026-W45",
   "week_start": 120.0,
@@ -29,9 +29,7 @@
    "mmr": "0.001",
    "max_leverage": 500,
    "trading": true,
-   "ts": 1793670086,
-   "maker_cuenta": "0.0001",
-   "taker_cuenta": "0.0004"
+   "ts": 1793758087
   },
   "ETH_USDT": {
    "symbol": "ETH_USDT",
@@ -46,9 +44,7 @@
    "mmr": "0.001",
    "max_leverage": 500,
    "trading": true,
-   "ts": 1793670086,
-   "maker_cuenta": "0.0001",
-   "taker_cuenta": "0.0004"
+   "ts": 1793758087
   },
   "SOL_USDT": {
    "symbol": "SOL_USDT",
@@ -63,32 +59,30 @@
    "mmr": "0.0023",
    "max_leverage": 300,
    "trading": true,
-   "ts": 1793670086,
-   "maker_cuenta": "0.0001",
-   "taker_cuenta": "0.0004"
+   "ts": 1793758087
   }
  },
  "spreads": {
   "ETH_USDT": {
-   "mean": 0.044295,
+   "mean": 0.044289,
    "var": 0.0,
-   "n": 5,
-   "ts": 1793743156.076444
+   "n": 6,
+   "ts": 1793758087.420983
   },
   "SOL_USDT": {
-   "mean": 1.083909,
+   "mean": 1.083944,
    "var": 1.3e-05,
-   "n": 5,
-   "ts": 1793743156.076444
+   "n": 6,
+   "ts": 1793758087.420983
   },
   "BTC_USDT": {
    "mean": 0.012969,
    "var": 0.0,
-   "n": 4,
-   "ts": 1793743156.076444
+   "n": 5,
+   "ts": 1793758087.420983
   }
  },
- "last_check": 1793743156.0764441,
+ "last_check": 1793758087.4209833,
  "created_at": 1793670086,
  "strategy_tag": "reglas-2+riesgo-2",
  "stats": {
@@ -100,5 +94,5 @@
  "fees": "0",
  "realized": "0",
  "equity": "120.000000",
- "updated_at": 1793743156
+ "updated_at": 1793758087
 }

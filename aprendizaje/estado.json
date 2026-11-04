@@ -1,92 +1,9 @@
 {
- "categorias": {
-  "etf:corto": {
-   "r_recv_15m": {
-    "n": 1,
-    "media": -0.002769,
-    "desvio": null,
-    "ic95": null
-   },
-   "r_recv_60m": {
-    "n": 1,
-    "media": -0.008478,
-    "desvio": null,
-    "ic95": null
-   }
-  },
-  "hack:corto": {
-   "r_recv_15m": {
-    "n": 13,
-    "media": -0.001205,
-    "desvio": 0.001547,
-    "ic95": [
-     -0.00214,
-     -0.00027
-    ]
-   },
-   "r_recv_60m": {
-    "n": 13,
-    "media": -0.001078,
-    "desvio": 0.001859,
-    "ic95": [
-     -0.002202,
-     4.5e-05
-    ]
-   }
-  },
-  "hack:largo": {
-   "r_recv_15m": {
-    "n": 3,
-    "media": -0.001514,
-    "desvio": 0.000797,
-    "ic95": [
-     -0.003434,
-     0.000406
-    ]
-   },
-   "r_recv_60m": {
-    "n": 3,
-    "media": -0.000222,
-    "desvio": 0.000173,
-    "ic95": [
-     -0.000637,
-     0.000194
-    ]
-   }
-  },
-  "regulatorio:corto": {
-   "r_recv_15m": {
-    "n": 1,
-    "media": -0.003407,
-    "desvio": null,
-    "ic95": null
-   },
-   "r_recv_60m": {
-    "n": 1,
-    "media": -0.003579,
-    "desvio": null,
-    "ic95": null
-   }
-  },
-  "tesoreria:largo": {
-   "r_recv_15m": {
-    "n": 1,
-    "media": -0.000593,
-    "desvio": null,
-    "ic95": null
-   },
-   "r_recv_60m": {
-    "n": 1,
-    "media": -0.000421,
-    "desvio": null,
-    "ic95": null
-   }
-  }
- },
+ "categorias": {},
  "apagadas": [],
  "costo": 0.002,
  "min_n": 30,
- "nlp": "reglas-2",
+ "nlp": "reglas-3",
  "meta": {},
- "calculado": 1793743154
+ "calculado": 1793758085
 }
