@@ -166,7 +166,7 @@ def test_binance_y_upbit_se_leen_rapido():
 
     specs = {s.id: s for s in DEFAULT_SOURCES}
     b, u = specs["binance.listados"], specs["upbit.avisos"]
-    assert b.interval_s <= 3 and u.interval_s <= 2
+    assert b.interval_s <= 3 and 3 <= u.interval_s <= 5      # Upbit: 2 s daba HTTP 429 (PC, 4-nov)
     v = binance_variants()
     assert len(v) == len(set(v)) == 72 and b.url_variants == v
     for x in v:                                             # solo los tamaños que CloudFront acepta (si no, HTTP 400)

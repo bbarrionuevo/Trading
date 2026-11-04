@@ -67,7 +67,8 @@ es la de la primera publicación del aviso. Últimos 180 días, en MEXC futuros 
   próximo aviso.
 
 Qué cambió en el sistema:
-1. Upbit se lee cada **2 s** (antes 10). Cloudflare guarda la respuesta solo 1 s (`max-age=1`).
+1. Upbit se lee cada **5 s** (antes 10). Cada 2 s, Upbit (Cloudflare) devolvía HTTP 429 en uno de cada tres pedidos.
+   En Binance, entrar a los 10–20 s del aviso rinde igual o mejor que a los 5 s: el primer pico se devuelve.
 2. La advertencia levantada ya no se lee como deslistado (las reglas abrían un corto contra un +6 %), y la extendida
    no se opera (no es un hecho nuevo).
 3. En "KAIA/BTC" BTC es la moneda del par, no el protagonista: antes la noticia del listado de KAIA (+34 % en la
