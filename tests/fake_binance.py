@@ -27,6 +27,7 @@ class FakeBinance:
         self.signed: list[bool] = []
         self.cancel_after: list[float] = []       # segundos entre crear y cancelar (reglas cuantitativas)
         self.margin, self.leverage = {}, {}
+        self.algos: dict[str, dict] = {}         # stops del servicio Algo
 
     def _check(self, request) -> bool:
         q = dict(request.query)
@@ -78,9 +79,35 @@ class FakeBinance:
         if path == "/fapi/v1/leverage":
             self.leverage[q["symbol"]] = int(q["leverage"])
             return web.json_response({"symbol": q["symbol"], "leverage": int(q["leverage"])})
+        if path in ("/fapi/v1/order", "/fapi/v1/order/test") and m == "POST" and q.get("type") != "LIMIT":
+            return web.json_response({"code": -4120, "msg": "Order type not supported for this endpoint. Please use "
+                                      "the Algo Order API endpoints instead."}, status=400)   # como el real (4-nov)
         if path == "/fapi/v1/order/test" and m == "POST":
             self.tests.append(q)
             return web.json_response({})
+        if path == "/fapi/v1/algoOrder" and m == "POST":
+            a = {"algoId": len(self.algos) + 1, "clientAlgoId": q["clientAlgoId"], "algoType": q["algoType"],
+                 "orderType": q["type"], "symbol": q["symbol"], "side": q["side"], "triggerPrice": q["triggerPrice"],
+                 "workingType": q.get("workingType", "CONTRACT_PRICE"), "closePosition": q.get("closePosition") == "true",
+                 "quantity": q.get("quantity", "0"), "algoStatus": "NEW", "created": time.monotonic()}
+            self.algos[q["clientAlgoId"]] = a
+            return web.json_response(a)
+        if path == "/fapi/v1/algoOrder" and m == "GET":
+            a = self.algos.get(q.get("clientAlgoId"))
+            return web.json_response(a) if a else web.json_response({"code": -2013, "msg": "Order does not exist."},
+                                                                    status=400)
+        if path == "/fapi/v1/algoOrder" and m == "DELETE":
+            a = self.algos[q["clientAlgoId"]]
+            a["algoStatus"] = "CANCELED"
+            self.cancel_after.append(time.monotonic() - a["created"])
+            return web.json_response({"algoId": a["algoId"], "clientAlgoId": a["clientAlgoId"], "code": "200",
+                                      "msg": "success"})
+        if path == "/fapi/v1/openAlgoOrders":
+            return web.json_response([a for a in self.algos.values() if a["algoStatus"] == "NEW"])
+        if path == "/fapi/v1/algoOpenOrders" and m == "DELETE":
+            for a in self.algos.values():
+                a["algoStatus"] = "CANCELED"
+            return web.json_response({"code": 200, "msg": "success"})
         if path == "/fapi/v1/order" and m == "POST":
             if q.get("timeInForce") == "GTX" and q["side"] == "BUY" and D(q["price"]) >= self.ask:
                 return web.json_response({"code": -5022, "msg": "Due to the order could not be executed as maker"},

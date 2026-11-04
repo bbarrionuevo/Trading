@@ -312,4 +312,12 @@ dueño qué hiciste y por qué.
     la clave; un error de la clave llega en JSON.
 - **Binance:** la API (`api.binance.com`) anda desde Argentina y no desde la nube; los anuncios
   (`www.binance.com/bapi`) andan desde los dos.
+- **Binance Futures:**
+  - desde el 2-dic-2025 las órdenes condicionales (STOP_MARKET, TAKE_PROFIT...) van por el **servicio de órdenes
+    Algo** (`/fapi/v1/algoOrder`); por la ruta común dan el código -4120 (visto en la PC el 4-nov). No tienen
+    ruta de prueba: `binance-real-check` pone uno que solo se dispararía con +50 % y lo cancela a los 6 s;
+  - `/fapi/v1/order/test` valida órdenes comunes sin mandarlas;
+  - `aggTrades` históricos solo de los últimos 2 días (código -4166): para estudiar segundos, las velas de 1 s
+    del spot (`/api/v3/klines?interval=1s`) tienen historia;
+  - en USDⓈ-M todo es cripto (565 perpetuos): sin acciones, monedas ni oro.
 - **Upbit:** solo con `truststore` (la cadena del certificado viene incompleta).

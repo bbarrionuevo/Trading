@@ -2,9 +2,11 @@
 restringió la cuenta). La única pieza del programa que puede mandar órdenes a Binance.
 
 - **Lista cerrada** de operaciones (REGLAS A-3): leer saldo, posiciones, órdenes, ejecuciones, modo de la cuenta y
-  estado de las reglas cuantitativas; abrir y cerrar con órdenes LIMIT IOC o "solo maker" (GTX) y el stop de
-  emergencia STOP_MARKET de cierre; validar sin ejecutar (`/fapi/v1/order/test`); cancelar; fijar margen aislado y
-  apalancamiento. Cualquier otra ruta lanza `PermissionError` antes de salir a la red. No existe código de retiros
+  estado de las reglas cuantitativas; abrir y cerrar con órdenes LIMIT IOC o "solo maker" (GTX); validar sin
+  ejecutar (`/fapi/v1/order/test`); cancelar; fijar margen aislado y apalancamiento.
+- **El stop de emergencia va por el servicio de órdenes Algo** (`/fapi/v1/algoOrder`): desde el 2-dic-2025 Binance
+  rechaza las órdenes condicionales en la ruta común (código -4120, visto en la PC el 4-nov). Es un STOP_MARKET que
+  cierra toda la posición, disparado por el precio de marca. Cualquier otra ruta lanza `PermissionError` antes de salir a la red. No existe código de retiros
   ni de transferencias, y la clave de la PC no debería tener esos permisos.
 - **Para no ser baneados** (reglas cuantitativas de Binance y límites por IP, investigados el 4-nov):
   - sin reintentos automáticos de órdenes; ante HTTP 429 o 418 no se manda nada más hasta que pase la pausa
@@ -29,9 +31,10 @@ from ...core.redact import redact
 BASE = "https://fapi.binance.com"
 GET_PATHS = ("/fapi/v2/balance", "/fapi/v2/positionRisk", "/fapi/v1/positionSide/dual", "/fapi/v1/multiAssetsMargin",
              "/fapi/v1/order", "/fapi/v1/openOrders", "/fapi/v1/userTrades", "/fapi/v1/apiTradingStatus",
-             "/fapi/v1/commissionRate")
-POST_PATHS = ("/fapi/v1/order", "/fapi/v1/order/test", "/fapi/v1/leverage", "/fapi/v1/marginType")
-DELETE_PATHS = ("/fapi/v1/order", "/fapi/v1/allOpenOrders")
+             "/fapi/v1/commissionRate", "/fapi/v1/algoOrder", "/fapi/v1/openAlgoOrders")
+POST_PATHS = ("/fapi/v1/order", "/fapi/v1/order/test", "/fapi/v1/leverage", "/fapi/v1/marginType",
+              "/fapi/v1/algoOrder")
+DELETE_PATHS = ("/fapi/v1/order", "/fapi/v1/allOpenOrders", "/fapi/v1/algoOrder", "/fapi/v1/algoOpenOrders")
 PUBLIC_PATHS = ("/fapi/v1/time", "/fapi/v1/exchangeInfo", "/fapi/v1/depth", "/fapi/v1/ticker/bookTicker")
 LIMIT, STOP_MARKET = "LIMIT", "STOP_MARKET"
 IOC, GTX = "IOC", "GTX"                           # GTX = "solo maker": si cruzara el libro, Binance la rechaza
@@ -158,22 +161,13 @@ class BinanceClient:
         return await self.request("GET", "/fapi/v1/userTrades", {"symbol": symbol, "orderId": order_id}) or []
 
     # -- órdenes ------------------------------------------------------------------------------------------
-    def _order_params(self, *, symbol, side, qty, price=None, tif=None, client_id, reduce_only=False,
-                      order_type=LIMIT, stop_price=None) -> dict:
-        if side not in (BUY, SELL) or order_type not in (LIMIT, STOP_MARKET):
-            raise ValueError(f"orden no permitida: {side} {order_type}")
-        p = {"symbol": symbol, "side": side, "type": order_type, "newClientOrderId": client_id[:36],
-             "newOrderRespType": "RESULT"}
-        if order_type == LIMIT:
-            if tif not in (IOC, GTX) or price is None or not Decimal(str(qty)) > 0:   # nunca a mercado sin tope (D-2)
-                raise ValueError("una orden límite necesita precio, cantidad y IOC o solo maker")
-            p.update(timeInForce=tif, price=fmt(price), quantity=fmt(qty))
-            if reduce_only:
-                p["reduceOnly"] = "true"
-        else:                                          # stop de emergencia: solo cierra la posición entera
-            if stop_price is None:
-                raise ValueError("el stop de emergencia necesita precio de disparo")
-            p.update(stopPrice=fmt(stop_price), closePosition="true", workingType="MARK_PRICE", priceProtect="TRUE")
+    def _order_params(self, *, symbol, side, qty, price, tif, client_id, reduce_only=False) -> dict:
+        if side not in (BUY, SELL) or tif not in (IOC, GTX) or price is None or not Decimal(str(qty)) > 0:
+            raise ValueError("solo órdenes límite IOC o solo maker, con precio y cantidad")   # nunca a mercado (D-2)
+        p = {"symbol": symbol, "side": side, "type": LIMIT, "timeInForce": tif, "price": fmt(price), "quantity": fmt(qty),
+             "newClientOrderId": client_id[:36], "newOrderRespType": "RESULT"}
+        if reduce_only:
+            p["reduceOnly"] = "true"
         return p
 
     async def submit(self, **kw) -> dict:
@@ -182,6 +176,35 @@ class BinanceClient:
     async def test_order(self, **kw) -> dict:
         """Valida la orden en Binance sin mandarla al mercado (no ejecuta ni queda abierta)."""
         return await self.request("POST", "/fapi/v1/order/test", self._order_params(**kw))
+
+    # -- stop de emergencia (servicio de órdenes Algo) ---------------------------------------------------
+    async def emergency_stop(self, *, symbol: str, side: str, trigger_price, client_id: str,
+                             qty=None) -> dict:
+        """STOP_MARKET disparado por el precio de marca. Sin `qty`: cierra TODA la posición (lo normal). Con `qty`
+        (solo la prueba sin riesgo, lejísimos del precio): una orden condicional común, para validar la ruta."""
+        if side not in (BUY, SELL) or trigger_price is None:
+            raise ValueError("el stop necesita lado y precio de disparo")
+        p = {"algoType": "CONDITIONAL", "symbol": symbol, "side": side, "type": STOP_MARKET,
+             "triggerPrice": fmt(trigger_price), "workingType": "MARK_PRICE", "priceProtect": "true",
+             "clientAlgoId": client_id[:36], "newOrderRespType": "RESULT"}
+        if qty is None:
+            p["closePosition"] = "true"
+        else:
+            p["quantity"] = fmt(qty)
+        return await self.request("POST", "/fapi/v1/algoOrder", p)
+
+    async def stop(self, client_id: str) -> dict:
+        return await self.request("GET", "/fapi/v1/algoOrder", {"clientAlgoId": client_id}) or {}
+
+    async def open_stops(self, symbol: str) -> list[dict]:
+        data = await self.request("GET", "/fapi/v1/openAlgoOrders", {"symbol": symbol})
+        return data if isinstance(data, list) else (data or {}).get("orders", [])
+
+    async def cancel_stop(self, client_id: str) -> dict:
+        return await self.request("DELETE", "/fapi/v1/algoOrder", {"clientAlgoId": client_id})
+
+    async def cancel_all_stops(self, symbol: str) -> dict:
+        return await self.request("DELETE", "/fapi/v1/algoOpenOrders", {"symbol": symbol})
 
     async def cancel(self, symbol: str, client_id: str) -> dict:
         return await self.request("DELETE", "/fapi/v1/order", {"symbol": symbol, "origClientOrderId": client_id})
