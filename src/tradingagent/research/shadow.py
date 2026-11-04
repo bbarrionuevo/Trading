@@ -439,7 +439,7 @@ class _Run:
         stop_px, tp_px = bar.prices(float(avg), p.side, p.sl_frac, p.tp_frac)
         stop = inst.round_price(D(str(stop_px)), up=p.side < 0)          # el stop, del lado de más protección
         tp = inst.round_price(D(str(tp_px)), up=p.side > 0)              # el take-profit, del lado más exigente
-        if p.trail:                                                      # stop que sigue al precio: sin techo
+        if p.trail or not p.target:                                      # sin techo: sale por el stop o el tiempo
             tp = inst.round_price(avg * D(100) if p.side > 0 else avg / D(100), up=p.side > 0)
         notional = order.filled_qty * avg
         self.st["positions"][sym] = {
@@ -462,7 +462,7 @@ class _Run:
         await self._alert(entry_alert(sym, p.side, order.filled_qty, avg, notional, stop=stop, tp=tp, p=p.p,
                                       alpha=p.alpha, category=sig.category, title=ev["title"], source=ev["source"],
                                       order_id=order.order_id, mode=self.market.label,
-                                      expiry_min=p.horizon_s // 60, trail=p.trail))
+                                      expiry_min=p.horizon_s // 60, trail=p.trail, target=p.target))
 
 
 def entry_slippage(cfg: PolicyConfig, category: str, limits: dict) -> float:

@@ -178,9 +178,9 @@ def test_plan_triple_barrera_costos_kelly_y_topes(lim):
     assert risky.risk_usd <= 10.0 + 1e-9 and risky.sl_frac == 0.05
 
 
-def test_los_listados_salen_con_stop_que_sigue_al_precio_y_solo_si_llegan_a_tiempo(lim):
-    """Estudio del 3-nov (docs/ESTUDIO-LISTADOS.md): stop de 5 % que sigue al precio (+12,7 % por operación
-    contra +4,9 % con objetivo fijo) y solo si se llega en los primeros 2 minutos."""
+def test_los_listados_salen_por_tiempo_con_stop_fijo_de_10_y_solo_si_llegan_a_tiempo(lim):
+    """Calibración del 4-nov (avisos de Upbit en Binance, segundo a segundo, n = 23): salir a los 15 min con stop
+    FIJO de 10 % rinde; el stop que sigue al precio a 5 % no. El riesgo sigue en 1 %: posición más chica (A-5)."""
     cfg = PolicyConfig()
     s = classify("Coinbase will list PEPE")
     a = assess(ev("Coinbase will list PEPE"), s, "PEPE", T0, cfg)
@@ -188,11 +188,19 @@ def test_los_listados_salen_con_stop_que_sigue_al_precio_y_solo_si_llegan_a_tiem
               adv=5e7, fee_taker=0.001, spread=0.0005, kind="perp", max_leverage=1.0, min_notional=5.0,
               limits=lim, cfg=cfg)
     p, why = plan(a, s, "PEPE_USDT", **kw)
-    assert why == [] and p.trail == 0.05 and p.sl_frac == 0.05            # la moneda quieta no achica el stop
-    assert p.tp_frac == pytest.approx(0.125)                               # b = 2,5 solo para dimensionar
+    assert why == [] and p.sl_frac == 0.10 and p.trail == 0 and not p.target   # stop fijo, sin objetivo
+    assert p.horizon_s == 900                                              # sale a los 15 min
     assert float(p.notional) == pytest.approx(10 / (p.sl_frac + p.cost), abs=0.01)   # manda el 1 % de riesgo
+    assert p.risk_usd == pytest.approx(10, abs=0.01)                       # el riesgo no cambia con el stop
     late = assess(ev("Coinbase will list PEPE", published_at=T0 - 150, received_at=T0 - 140), s, "PEPE", T0, cfg)
     assert any(r.startswith("listado_tarde") for r in late.reasons)       # a los 2,5 min el salto ya pasó
+    other, _ = plan(*_hack_plan_args(cfg), **kw)                          # el resto sigue con el tope de 5 %
+    assert other is None or other.sl_frac <= 0.05
+
+
+def _hack_plan_args(cfg):
+    s = classify("Binance hacked: $40M in BTC stolen")
+    return assess(ev("Binance hacked: $40M in BTC stolen"), s, "BTC", T0, cfg), s, "BTC_USDT"
 
 
 def test_liquidacion_lejos_del_stop():

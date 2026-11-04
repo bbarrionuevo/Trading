@@ -99,7 +99,8 @@ del dueño.
      mayor a 1 %.
    - "No correr detrás del precio" (`chase_blocks`).
 7. **Perfiles por categoría** (`policy.EXITS`, medidos con datos):
-   - **listado:** solo con menos de 2 min; stop de 5 % que **sigue al mejor precio**, sin objetivo fijo; tope de
+   - **listado:** solo con menos de 2 min; **stop FIJO de 10 % y salida a los 15 min**, sin objetivo (A-5, aprobado
+     por el dueño el 4-nov: calibración con Upbit en Binance; el stop que seguía al precio a 5 % perdía); tope de
      precio de 50 bps; exento de "ya recorrió el objetivo" (`DRIFT`).
    - **macro:** solo con menos de 90 s.
 8. **Riesgo** (`decision/risk.py`, `config/limits.yaml`).
@@ -233,8 +234,8 @@ dueño qué hiciste y por qué.
   no entra en las advertencias (±3 a 6 %). La IA sigue leyendo cada noticia y el vector sigue tomando el menor.
 - **Upbit en Binance Futures, segundo a segundo** (4-nov, `docs/ESTUDIO-LISTADOS.md`): +23 % a los 5 s del aviso.
   Entrando a los 10-20 s, saliendo a los 15 min con stop de 10 %: mediana +0,6 % a +3,0 %, media +4,3 % a +6,6 %
-  neto (n = 23). Con la salida actual (stop que sigue al precio a 5 %): mediana −0,2 % a −1,0 %. El stop de 10 %
-  necesita el OK del dueño (A-5).
+  neto (n = 23). Con la salida de antes (stop que sigue al precio a 5 %): mediana −0,2 % a −1,0 %. Aplicado (A-5,
+  aprobado por el dueño el 4-nov).
 - **Bybit** (3-nov, desde la PC): listados spot +0,4 % a 5 min (n = 4) y perpetuos +0,03 % (n = 48). Sin efecto: no
   es fuente.
 - **Fed** (`docs/ESTUDIO-MACRO.md`, n = 4): reacción en los primeros minutos y después va para cualquier lado en BTC

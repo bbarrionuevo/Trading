@@ -6,6 +6,7 @@ import json
 from decimal import Decimal as D
 
 import aiohttp
+import pytest
 
 from conftest import serve
 from fake_anthropic import KEY, FakeClaude
@@ -278,8 +279,9 @@ async def test_no_corre_detras_del_precio_si_la_noticia_ya_se_movio(tmp_path):
     assert rows["y3"]["analisis"]["movido_desde_la_noticia"] == 0.001
 
 
-async def test_listado_sale_con_stop_que_sigue_al_precio_y_cobra_la_suba(tmp_path):
-    """Estudio del 3-nov: en los listados el stop acompaña al precio (5 % del mejor) en vez de un objetivo fijo."""
+async def test_listado_sale_por_tiempo_con_stop_fijo_de_10(tmp_path):
+    """Calibración del 4-nov (Upbit en Binance, n = 23): en los listados, stop FIJO de 10 % y salida a los 15 min. El
+    sacudón después del pico (que tocaba el stop de 5 %) ya no lo saca; el riesgo sigue en 1 % (A-5)."""
     clock = ManualClock(T0 + 600)
     prices = {"BTC_USDT": 100_000.0, "ETH_USDT": 4_000.0, "SOL_USDT": 150.0}
     mk = FakeMexc(lambda sym, m: prices[sym], clock)
@@ -289,21 +291,23 @@ async def test_listado_sale_con_stop_que_sigue_al_precio_y_cobra_la_suba(tmp_pat
         await t.on_news(news("l1", "Kraken adds trading for Bitcoin (BTC) options", clock.time()))
         pos = t.st["positions"]["BTC_USDT"]
         entry = D(pos["avg_price"])
-        assert pos["trail"] == 0.05 and D(pos["stop"]) < entry * D("0.951")          # stop inicial 5 %
-        assert D(pos["tp"]) > entry * 10                                               # sin techo
-        assert "no hay techo para la ganancia" in alerts.texts()[-1]
-        for px in (106_000.0, 112_000.0, 118_000.0):                                  # sube: el stop lo acompaña
+        assert "trail" not in pos and entry * D("0.899") < D(pos["stop"]) < entry * D("0.901")   # stop fijo 10 %
+        assert D(pos["tp"]) > entry * 10 and pos["until"] - clock.time() == pytest.approx(900, abs=1)
+        assert "salgo cuando se cumple el tiempo" in alerts.texts()[-1]
+        for px in (112_000.0, 94_000.0, 103_000.0):          # pico, sacudón de −6 % y rebote: no sale
             prices["BTC_USDT"] = px
-            clock.advance(2)
+            clock.advance(60)
             await t.watch_once()
-        assert D(t.st["positions"]["BTC_USDT"]["stop"]) > entry * D("1.10")           # ya asegura ganancia
-        assert json.loads((home / "paper-vivo" / "mexc-futuros" / "estado.json").read_text(encoding="utf-8"))[
-            "positions"]["BTC_USDT"]["stop"] == t.st["positions"]["BTC_USDT"]["stop"]   # guardado: sobrevive reinicio
-        prices["BTC_USDT"] = 111_000.0                                                # retrocede más del 5 %
-        clock.advance(2)
+        assert "BTC_USDT" in t.st["positions"]
+        clock.advance(900)                                    # a los 15 min sale con lo que haya
         await t.watch_once()
-        assert t.st["positions"] == {} and t.counts.get("stop_movil") == 1
-        assert "salí con la ganancia asegurada" in alerts.texts()[-1] and "Gané" in alerts.texts()[-1]
+        assert t.st["positions"] == {} and "Gané" in alerts.texts()[-1]
+        await t.on_news(news("l2", "Coinbase adds trading for Bitcoin (BTC) perpetuals", clock.time()))
+        entry2 = D(t.st["positions"]["BTC_USDT"]["avg_price"])
+        prices["BTC_USDT"] = float(entry2) * 0.893              # −10,7 %: toca el stop fijo
+        clock.advance(5)
+        await t.watch_once()
+        assert t.st["positions"] == {} and "Perdí" in alerts.texts()[-1]
 
 
 async def test_solo_baja_datos_de_mercado_para_lo_que_puede_entrar(tmp_path):
