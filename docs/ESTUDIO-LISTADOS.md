@@ -95,7 +95,7 @@ Ganancia neta (0,2 % de costos) según cuándo se entra y cómo se sale, listado
 - El programa entra a los ~6-15 s (Upbit cada 5 s, IA ~2-3 s): justo en la ventana buena.
 - **La salida decide:** el sacudón después del pico toca un stop de 5 %; uno de 10 % lo aguanta y captura la
   suba de los minutos siguientes. Con 1 % de riesgo por operación, un stop de 10 % es una posición más chica, no
-  más riesgo. **Cambiar el tope de 5 % (REGLAS A-5) para los listados lo decide el dueño.**
+  más riesgo. **Aplicado el 4-nov** (`policy.EXITS`, REGLAS A-5 aprobada por el dueño).
 - Fin del soporte en corto (n = 8): stop que sigue al precio a 8-10 %, mediana +1,8 % entrando a los 10 s. n chico.
 - Los listados propios de Binance casi nunca tienen perpetuo al anunciarse: no se pueden operar en Binance futuros.
 - Cuidado: n chico; el spot reemplaza al perpetuo en los segundos; en plena noticia el costo real puede pasar el

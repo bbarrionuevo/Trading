@@ -86,6 +86,7 @@ class EntryPlan:
     impact: float
     slices: int = 1
     trail: float = 0.0                      # > 0: stop que sigue al precio a esa distancia (sin objetivo fijo)
+    target: bool = True                     # False: sin objetivo de ganancia; sale por tiempo o por el stop
 
     def as_dict(self) -> dict:
         return {"lado": SIDE_NAME[self.side], "notional": str(self.notional), "sl": round(self.sl_frac, 5),
@@ -160,7 +161,7 @@ def plan(a: Assessment, sig: Signal, symbol: str, *, equity: float, cash: float,
     sl, tp = barriers(sigma_1m, sig.horizon_min, cfg.barrier)
     prof = cfg.exits.get(sig.category)
     if prof is not None:                                    # salida medida para esta categoría
-        sl = max(sl, prof.min_stop)
+        sl = prof.stop if prof.stop else max(sl, prof.min_stop)   # stop fijo medido (puede pasar el 5 %: A-5)
         if prof.b_kelly:
             tp = sl * prof.b_kelly
     sigma_daily = sigma_1m * math.sqrt(1440)
@@ -189,9 +190,10 @@ def plan(a: Assessment, sig: Signal, symbol: str, *, equity: float, cash: float,
     edge = a.p * (tp - cost) - (1 - a.p) * (sl + cost)               # ventaja esperada por operación
     urgency = max(edge, 0.0) * price * math.log(2) / (cfg.half_life_s / 60)   # lo que se pierde por minuto de espera
     schedule = best_schedule(notional / price, price, sigma_1m, impact, drift=urgency)
-    return EntryPlan(symbol, a.side, D(str(round(notional, 2))), sl, tp, int(sig.horizon_min * 60), a.p, a.alpha, f,
+    horizon_s = int(prof.hold_s) if prof is not None and prof.hold_s else int(sig.horizon_min * 60)
+    return EntryPlan(symbol, a.side, D(str(round(notional, 2))), sl, tp, horizon_s, a.p, a.alpha, f,
                      cost, b_net, round(notional * (sl + cost), 6), sigma_1m, impact, schedule["tramos"],
-                     prof.trail if prof is not None else 0.0), []
+                     prof.trail if prof is not None else 0.0, prof.target if prof is not None else True), []
 
 
 def news_move(candles: dict, t_pub: float | None, price_now: float, side: int) -> float | None:
@@ -219,15 +221,22 @@ class ExitProfile:
     min_stop: float = 0.0                   # el stop nunca más cerca que esto (la moneda estaba quieta antes)
     trail: float = 0.0                      # stop que sigue al mejor precio a esta distancia, sin objetivo fijo
     b_kelly: float | None = None            # ganancia/pérdida esperada que usa Kelly (sin objetivo fijo)
+    stop: float = 0.0                       # stop FIJO a esta distancia (reemplaza al de la volatilidad)
+    hold_s: float = 0.0                     # salida por tiempo (reemplaza el horizonte de la noticia)
+    target: bool = True                     # False: sin objetivo de ganancia
     max_slippage_bps: float = 30            # tope de precio de la entrada (nunca más que el del sobre)
 
 
-# Listados spot: 7 casos reales, entrando al minuto: con stop fijo y objetivo 10 % la media fue +4,9 % por
-# operación; con stop que sigue al precio a 5 %, +12,7 % (5 de 7 ganan). Entrando a los 5 minutos, todo pierde:
-# solo vale llegar primero.
+# Listados (calibración del 4-nov con los avisos de Upbit operados en Binance Futures, segundo a segundo, n = 23;
+# docs/ESTUDIO-LISTADOS.md): el salto pasa en los primeros 5 s y el primer pico se devuelve en parte. Entrando a
+# los 10-20 s, salir a los 15 min con stop FIJO de 10 % dio mediana +0,6 % a +3,0 % y media +4,3 % a +6,6 % neto;
+# el stop que sigue al precio a 5 % daba −0,2 % a −1,0 % y un stop fijo de 5 % perdía (el sacudón lo toca). El
+# riesgo por operación sigue en 1 %: con el stop más ancho la posición es más chica. Stop de hasta 10 % en
+# listados: REGLAS A-5, aprobado por el dueño el 4-nov.
 # Macro (decisiones de la Fed, 4 casos en MEXC): casi todo el movimiento pasa en los primeros 5 minutos y después
 # en BTC y los índices sigue o se da vuelta como una moneda al aire. Más tarde que eso no hay ventaja medible.
-EXITS = {"listado": ExitProfile(max_age_s=120, min_stop=0.05, trail=0.05, b_kelly=2.5, max_slippage_bps=50),
+EXITS = {"listado": ExitProfile(max_age_s=120, stop=0.10, hold_s=900, target=False, b_kelly=2.5,
+                                max_slippage_bps=50),
          "macro": ExitProfile(max_age_s=90)}
 
 

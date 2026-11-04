@@ -184,7 +184,7 @@ def risk_alert(kind: str, symbol, side, qty, price, pnl=None, *, mode: str = "PA
 
 def entry_alert(symbol, side: int, qty, price, notional, *, stop, tp, p: float, alpha: float = 0.0, why: str = "",
                 source: str = "", order_id: str = "", mode: str = "PAPER", expiry_min: int | None = None,
-                category: str = "", title: str = "", trail: float = 0.0) -> Alert:
+                category: str = "", title: str = "", trail: float = 0.0, target: bool = True) -> Alert:
     """Aviso de entrada: qué hizo, con cuánto, cuándo sale (pierde poco o gana más) y por qué."""
     asset = esc(asset_es(symbol))
     price_d, notional_d = D(str(price)), D(str(notional))
@@ -203,6 +203,9 @@ def entry_alert(symbol, side: int, qty, price, notional, *, stop, tp, p: float, 
         exits = (f"Si va en contra hasta {esc(num_es(stop))} salgo y pierdo ≈ {esc(usdt_es(loss, False))}. Si "
                  f"{way}, el límite lo acompaña ({esc(pct_es(D(str(trail)) * 100, False))} del mejor precio) y salgo "
                  "cuando retroceda: no hay techo para la ganancia.")
+    if not target and not trail:                    # salida por tiempo: sin techo y con stop fijo
+        exits = (f"Si va en contra hasta {esc(num_es(stop))} salgo y pierdo ≈ {esc(usdt_es(loss, False))}. Si no, "
+                 "salgo cuando se cumple el tiempo, con lo que haya ganado: no hay techo.")
     lines = [f"{head} · {esc(mode_es(mode))}",
              f"Puse {esc(usdt_es(notional_d, False))} con {asset} a {esc(num_es(price))} USDT. {bet}",
              exits + (f" Como mucho lo tengo {esc(minutes_es(expiry_min))}." if expiry_min else ""),
