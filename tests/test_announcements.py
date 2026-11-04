@@ -133,6 +133,22 @@ def test_avisos_de_upbit_en_coreano_listado_y_deslistado():
     assert spec.enabled and spec.os_trust and spec.format == "upbit" and spec.interval_s <= 10
 
 
+def test_avisos_reales_de_upbit_alerta_levantada_extendida_y_par_de_mercado():
+    """Títulos reales del 4-nov. Estudio de Upbit (180 días): la alerta LEVANTADA sube (+6 % a 5 min, 4 de 4), así
+    que no puede leerse como deslistado; la extensión de una alerta ya conocida no es un hecho nuevo; y en
+    "KAIA/BTC" BTC es solo la moneda del par (KAIA subió 34 % en la hora: no hay que perderla ni comprar BTC)."""
+    assets.register([Entry(k, f"{k}_USDT", "cripto", 5e6) for k in ("INJ", "EGLD", "INIT", "KAIA", "NIL")])
+    lifted = classify("인젝티브(INJ) 거래 유의 종목 지정 해제 안내", tier=1)
+    assert lifted.category != "deslistado" and lifted.polarity >= 0
+    assert classify("멀티버스엑스(EGLD) 거래 유의 종목 지정 기간 연장 안내", tier=1).category != "deslistado"
+    warned = classify("이니시아(INIT) 거래 유의 종목 지정 안내", tier=1)
+    assert warned.category == "deslistado" and warned.polarity < 0 and warned.assets == ("INIT",)
+    kaia = classify("카이아(KAIA) 신규 거래지원 안내 (KRW, BTC, USDT 마켓) (KAIA/BTC 초기 매수 제한 안내)", tier=1)
+    assert kaia.category == "listado" and kaia.assets == ("KAIA",)
+    assert classify("닐리온(NIL) KRW 마켓 디지털 자산 추가", tier=1).assets == ("NIL",)
+    assert assets.detect("BTC/USDT hits a record") == ["BTC"]              # la base del par sí cuenta
+
+
 def test_una_fuente_con_almacen_del_sistema_usa_ese_contexto_tls():
     import ssl
 

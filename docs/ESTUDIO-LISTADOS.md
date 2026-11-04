@@ -43,6 +43,45 @@ mercado". Se repite en la PC con `python -m tradingagent estudio-listados` (deja
 Listados spot de OKX con contrato en MEXC (n = 4): mediana +0,2 % a 5 min, −0,2 % a 15 min y −0,3 % a 60 min:
 **no mueven el precio**. Los anuncios de Bitget son casi todos de acciones. Las dos fuentes quedan apagadas.
 
+### Upbit (4-nov, desde la PC): el efecto más fuerte medido
+
+Su API de avisos solo responde desde la PC, con el almacén de certificados de Windows. Se repite con
+`python -m tradingagent estudio-listados --exchange upbit` (detalle en `datos\estudios\listados-upbit.json`). La hora
+es la de la primera publicación del aviso. Últimos 180 días, en MEXC futuros (medianas):
+
+| Aviso de Upbit | n | 5 min | 15 min | 60 min | 4 h |
+|---|---|---|---|---|---|
+| Alta en el mercado en wones ("KRW 마켓 디지털 자산 추가") | 14 | +20,9 % (14/14 suben) | +18,9 % | +29,3 % (14/14) | +12,7 % |
+| Listado nuevo ("신규 거래지원") | 21 | +13,5 % (21/21) | +13,3 % | +14,2 % (20/21) | +12,9 % |
+| Advertencia levantada ("지정 해제") | 4 | +6,0 % (4/4) | +10,3 % | +3,9 % | +1,1 % |
+| Advertencia extendida ("지정 기간 연장") | 6 | +0,2 % (4/6) | +0,5 % | +0,4 % | +0,4 % |
+| Advertencia ("유의 종목 지정", "유의 촉구") | 16 | −2,6 % (3/16 suben) | −2,8 % | −3,0 % | −2,2 % |
+| Fin del soporte ("거래지원 종료") | 6 | −7,4 % (0/6) | −7,7 % | −7,3 % | −4,4 % |
+
+**Llegar en segundos es todo** (los 7 listados del último mes, con velas de 1 minuto):
+- Casi toda la suba pasa dentro del primer minuto. Al cierre del minuto del aviso, RSR ya iba +32 %, PUFFER +74 %,
+  CT +29 % y NIL +24 %.
+- Entrando recién al cierre del minuto 1, con el stop que sigue al precio a 5 % y 0,2 % de costos: mediana +1,1 %,
+  media +4,1 % (4 de 7 ganan). Entrando al minuto 2: mediana +0,3 %.
+- Con velas de 1 minuto no se puede medir cuánto queda a los 5 a 20 segundos. Lo va a medir el simulacro con el
+  próximo aviso.
+
+Qué cambió en el sistema:
+1. Upbit se lee cada **2 s** (antes 10). Cloudflare guarda la respuesta solo 1 s (`max-age=1`).
+2. La advertencia levantada ya no se lee como deslistado (las reglas abrían un corto contra un +6 %), y la extendida
+   no se opera (no es un hecho nuevo).
+3. En "KAIA/BTC" BTC es la moneda del par, no el protagonista: antes la noticia del listado de KAIA (+34 % en la
+   hora) quedaba también en BTC.
+
+### Binance: la copia del CDN demoraba ~60 s
+
+Medido en la PC el 4-nov: la lista de anuncios de Binance la sirve CloudFront con una copia que dura ~120 s (la
+"edad" de la respuesta iba de 10 a 115 s). Leyendo cada 10 s, un listado llegaba en promedio ~60 s tarde, justo el
+minuto que decide la ganancia. CloudFront guarda una copia por URL exacta, y el servidor acepta los parámetros en
+cualquier orden: ahora se rotan 72 formas equivalentes de la URL, una cada 3 s. Cada forma vuelve a pedirse a los
+~216 s, ya vencida, así que la respuesta sale fresca del servidor de Binance. CloudFront solo acepta tamaños de
+página 5, 10, 15, 20 y 50; otro valor o un parámetro extra da HTTP 400.
+
 ### Bybit (3-nov, desde la PC)
 
 Su API de avisos solo responde desde la PC (desde la nube está bloqueada). Se repite con

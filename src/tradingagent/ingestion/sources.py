@@ -46,6 +46,10 @@ class SourceSpec:
     note: str = ""
     format: str = "rss"                  # rss (RSS/Atom) o el lector JSON de ingestion/announcements.py
     os_trust: bool = False               # verificar el certificado con el almacén del sistema (truststore): Upbit
+    # URLs equivalentes que se van rotando en cada lectura. El CDN guarda una copia por URL exacta: la lista de
+    # Binance se guarda ~120 s (medido en la PC el 4-nov), así que con una sola URL un listado llegaba en promedio
+    # ~60 s tarde. Con muchas variantes que vuelven a pedirse después de vencer, cada lectura trae la lista fresca.
+    url_variants: tuple[str, ...] = ()
 
 
 @dataclass
@@ -94,6 +98,7 @@ class PollingSource:
         self.rng = rng or random.Random()
         self.health = SourceHealth()
         self._etag = self._last_modified = None
+        self._turn = self.rng.randrange(len(spec.url_variants)) if spec.url_variants else 0   # variante de URL
         self._seen: OrderedDict[str, None] = OrderedDict()     # entradas ya emitidas por ESTA fuente
         self._seen_max = seen_max
         self._first = True
@@ -128,9 +133,13 @@ class PollingSource:
             headers["If-None-Match"] = self._etag
         if self._last_modified:
             headers["If-Modified-Since"] = self._last_modified
+        url = self.spec.url
+        if self.spec.url_variants:                       # rotación: cada URL tiene su propia copia en el CDN
+            url = self.spec.url_variants[self._turn % len(self.spec.url_variants)]
+            self._turn += 1
         t0 = self.clock.monotonic()
         try:
-            async with self.session.get(self.spec.url, headers=headers, ssl=self._ssl(),
+            async with self.session.get(url, headers=headers, ssl=self._ssl(),
                                         timeout=aiohttp.ClientTimeout(total=self.spec.timeout_s)) as r:
                 if r.status == 304:
                     return None

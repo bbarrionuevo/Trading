@@ -11,6 +11,11 @@ Resultado del 3-nov-2026 (docs/ESTUDIO-LISTADOS.md): los listados spot siguen su
 
 `exchange="bybit"`: lo mismo con los avisos de Bybit ("Bybit to List Foo (FOO) on Spot" y los perpetuos de
 criptos; los "TradFi" son acciones y no cuentan). Su API solo responde desde la PC (desde la nube está bloqueada).
+
+`exchange="upbit"`: los avisos de trading de Upbit, en coreano, desde la PC (certificado con el almacén de
+Windows): listado nuevo ("신규 거래지원"), alta en el mercado en wones ("KRW 마켓 디지털 자산 추가"), fin del
+soporte ("거래지원 종료"), advertencia ("유의 종목 지정", "유의 촉구") y advertencia levantada ("지정 해제"). La hora
+es la de la primera publicación (`first_listed_at`): Upbit edita avisos y mueve `listed_at`.
 """
 import asyncio
 import re
@@ -30,12 +35,20 @@ BYBIT_PAGE = "https://api.bybit.com/v5/announcements/index?locale=en-US&type=new
 BYBIT_SPOT = re.compile(r"(?i:Bybit\s+(?:to\s+|will\s+)?lists?)\s+.+?\(([A-Z0-9]{2,15})\)|"
                         r"New listing:\s+([A-Z0-9]{2,15})/USDT\b")
 BYBIT_FUTURES = re.compile(r"New listing: (?:Listing of )?([A-Z0-9]{2,15}?)USDT (?:on Bybit )?Perpetual")
+UPBIT_PAGE = "https://api-manager.upbit.com/api/v1/announcements?os=web&page={page}&per_page=20&category=trade"
+UPBIT_TICKER = re.compile(r"\(([A-Z0-9]{1,15})\)")
+UPBIT_KINDS = (("alerta_levantada", re.compile(r"지정\s*해제")),         # primero: "지정 해제" también dice "지정"
+               ("alerta_extendida", re.compile(r"지정\s*기간\s*연장")),
+               ("listado_spot", re.compile(r"신규\s*거래지원")),
+               ("listado_krw", re.compile(r"KRW[^)]*마켓\s*디지털\s*자산\s*추가")),
+               ("deslistado", re.compile(r"거래지원\s*종료")),
+               ("alerta", re.compile(r"유의\s*종목\s*지정(?!\s*기간)|유의\s*촉구")))
 HORIZONS_MIN = (5, 15, 60, 240)
 STEP_S = 300
 
 
-async def _json(session, url: str):
-    async with session.get(url, timeout=aiohttp.ClientTimeout(total=20),
+async def _json(session, url: str, ssl=None):
+    async with session.get(url, timeout=aiohttp.ClientTimeout(total=20), ssl=ssl,
                            headers={"User-Agent": "Mozilla/5.0 (compatible; TradingAgent/0.1)"}) as r:
         if r.status != 200:
             raise MarketDataError(f"HTTP {r.status}")
@@ -86,6 +99,51 @@ async def bybit_events(session, days: int, now: float, page_url: str = BYBIT_PAG
     return sorted(first.values(), key=lambda e: e["t"])
 
 
+def _iso(s: str) -> float:
+    from datetime import datetime
+    try:
+        return datetime.fromisoformat(str(s)).timestamp()
+    except ValueError:
+        return 0.0
+
+
+async def upbit_events(session, days: int, now: float, page_url: str = UPBIT_PAGE, max_pages: int = 60,
+                       ssl=None, pause_s: float = 2.0) -> list[dict]:
+    """Avisos de trading de Upbit de los últimos `days` días, por tipo (UPBIT_KINDS), con la hora de la primera
+    publicación. Upbit solo responde desde la PC y con el almacén de certificados del sistema (`ssl`).
+    Despacio (`pause_s` entre páginas) y esperando si Upbit frena (HTTP 429): la fuente en vivo del agente también
+    lo lee cada 10 s y no hay que gastarle el cupo."""
+    out = []
+    since = now - days * 86400
+    for page in range(1, max_pages + 1):
+        for wait in (0, 20 * pause_s, 60 * pause_s):
+            await asyncio.sleep(wait)
+            try:
+                data = await _json(session, page_url.format(page=page), ssl=ssl)
+                break
+            except MarketDataError as e:
+                if "429" not in str(e) or wait == 60 * pause_s:
+                    raise
+        notes = ((data or {}).get("data") or {}).get("notices") or []
+        if not notes:
+            break
+        await asyncio.sleep(pause_s)
+        stamps = []
+        for a in notes:
+            t = _iso(a.get("first_listed_at") or a.get("listed_at") or "")
+            title = str(a.get("title") or "")
+            stamps.append(t)
+            m = UPBIT_TICKER.search(title)
+            if t < since or not m:
+                continue
+            kind = next((k for k, rx in UPBIT_KINDS if rx.search(title)), None)
+            if kind:
+                out.append({"tipo": kind, "ticker": m.group(1), "t": t, "titulo": title})
+        if max(stamps) < since:                                       # vienen por fecha: ya pasamos la ventana
+            break
+    return sorted(out, key=lambda e: e["t"])
+
+
 def reaction(candles: dict[int, tuple], t: float) -> dict | None:
     """Retornos desde la apertura de la vela del anuncio: a cada horizonte (cierre de la vela) y el pico en 4 h."""
     b = int(t) // STEP_S * STEP_S
@@ -121,6 +179,10 @@ async def listing_study(session, *, days: int = 180, now: float | None = None, p
     now = time.time() if now is None else now
     if exchange == "bybit":
         events = await bybit_events(session, days, now, page_url or BYBIT_PAGE)
+    elif exchange == "upbit":
+        from .probe import os_trust_ssl
+        events = await upbit_events(session, days, now, page_url or UPBIT_PAGE,
+                                    ssl=None if page_url else os_trust_ssl(), pause_s=0 if page_url else 2.0)
     else:
         events = await binance_events(session, days, now, page_url or BINANCE_PAGE)
     rows = []

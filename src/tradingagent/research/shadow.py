@@ -381,7 +381,7 @@ class _Run:
         if sym in self.st["positions"]:
             reasons.append("ya_en_cartera")
         inst = self.reg.get(sym)
-        if inst is None:
+        if inst is None and not reasons:              # sin datos del contrato solo importa si podía entrar
             reasons.append("par_sin_filtros")
         if reasons:
             self.record(ev, sig, sym, "no_entrar", reasons, analisis=a.as_dict())
@@ -389,9 +389,8 @@ class _Run:
         candles = self.store.candles.get(sym) or {}
         t0 = ev.get("published_at") if a.dt_basis == "publicada" else None
         sigma = bar.sigma_1m(candles, minute(t0 if t0 is not None else self.now))
-        try:
-            book = await self.books.book(sym)
-            tick = await self.market.ticker(self.session, sym)
+        try:                                          # libro y precio a la vez: cada pedido a MEXC tarda
+            book, tick = await asyncio.gather(self.books.book(sym), self.market.ticker(self.session, sym))
         except MarketDataError as e:
             self.record(ev, sig, sym, "no_entrar", [f"sin_datos:{str(e)[:80]}"], analisis=a.as_dict())
             return

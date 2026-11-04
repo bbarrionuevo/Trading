@@ -1,7 +1,7 @@
 # TRASPASO: qué es TRADING, en qué estado está y cómo seguir
 
 Para el agente que toma el sistema, sobre todo si trabaja **en la PC del dueño con dinero real en
-producción**. Leelo entero antes de tocar nada. Al día del 3-nov-2026 (noche), versión `main` después del PR #23.
+producción**. Leelo entero antes de tocar nada. Al día del 4-nov-2026, versión `main` después del PR #26.
 
 ## 1. Qué es y qué quiere el dueño
 
@@ -37,7 +37,8 @@ Lo que pidió, en sus palabras:
 | Simulacro del real | Armado el 3-nov con 100 USDT de mentira, 2 días. Mismo operador real, sin mandar órdenes |
 | **Dinero real** | **Arranca el 4-nov con 100 USDT** en la cuenta de futuros de MEXC. El dueño corre `mexc-real-check` y después `armar-real` (frase `ARMO DINERO REAL CON TODO EL SALDO POR 30 DIAS`). Al armar el real, se reemplaza el simulacro. **4-nov, 7:07:** con la plata ya en Futuros y el modo Cobertura, la prueba falló con HTTP 403 al mandar la orden: el programa usaba la dirección vieja de MEXC (`contract.mexc.com`), que bloquea en la entrada el envío y la cancelación de órdenes. No se creó nada. El arreglo (dirección `api.mexc.com` y ruta `order/create`, sección 11) es ruta protegida: lo fusiona el dueño y después repite la prueba |
 | Aprendizaje | **Arreglado el 3-nov (PR #23).** El meta-modelo había quedado en κ = 0 con 47 muestras, 37 de ellas noticias ajenas con BTC "de referencia" (Ferrari, 3M, "heladeras hackeadas"): p = 1/3 en todo y ninguna entrada posible, listados incluidos, desde la tarde del 3-nov. Ahora solo aprende de lo que se habría operado (sección 9) |
-| Fuentes | 14: Fed; medios cripto; CNBC, Seeking Alpha, Investing; anuncios oficiales de Binance (10 s) y Upbit (10 s, PR #22). OKX y Bitget apagados (sin efecto medido). SEC apagada (falta `SEC_USER_AGENT`) |
+| Fuentes | 14: Fed; medios cripto; CNBC, Seeking Alpha, Investing; anuncios oficiales de Binance (cada 3 s, rotando 72 formas de la URL para saltar la copia de ~120 s del CDN) y Upbit (cada 2 s). OKX y Bybit apagados o sin sumar (sin efecto medido), Bitget apagado. SEC apagada (falta `SEC_USER_AGENT`). **Los medios llegan tarde para operar** (demora mediana de publicada a recibida, 4-nov: The Block 31 s, CoinDesk 56 s, Seeking Alpha 173 s, Investing 424 s, CNBC 592 s): solo sirven de contexto y para salir; lo que se opera son los avisos oficiales |
+| Velocidad (4-nov) | De recibida a decisión: 0,4 s sin IA y 3,8 s con IA (mediana). Las demoras largas (hasta 14 s) eran datos de mercado bajados para noticias que igual se descartaban, con el candado tomado: arreglado en el PR #26. Lo que más tarda ahora es la consulta a la IA (~3,4 s) |
 | IA | Claude Haiku 5.5. Lee toda noticia que las reglas abrirían. Unos 0,002 USD por día. Techo de seguridad: 5 USD por día |
 | Tareas programadas (nube) | "Revisión diaria de TRADING" 7:36 y "Vigilancia de TRADING cada 2 horas" 8 a 24 (hora argentina). Sin conector de GitHub: dejan arreglos en ramas `claude/...` |
 
@@ -213,6 +214,9 @@ dueño qué hiciste y por qué.
   - **entrando a los 5 minutos, todo pierde**: llegar primero es todo.
 - **Lanzamientos de futuros de Binance** (n = 9): saltan y se devuelven. No se operan.
 - **OKX** (n = 4): sin efecto. Bitget: casi todo acciones. Apagados.
+- **Upbit** (4-nov, desde la PC, `docs/ESTUDIO-LISTADOS.md`): alta en wones +20,9 % a 5 min (14 de 14), listado nuevo
+  +13,5 % (21 de 21), fin del soporte −7,4 % (6 de 6), advertencia −2,6 %. Casi todo dentro del primer minuto:
+  entrando al minuto 1 la mediana cae a +1,1 %. Es la señal más fuerte y la más frecuente (~1,4 por semana).
 - **Bybit** (3-nov, desde la PC): listados spot +0,4 % a 5 min (n = 4) y perpetuos +0,03 % (n = 48). Sin efecto: no
   es fuente.
 - **Fed** (`docs/ESTUDIO-MACRO.md`, n = 4): reacción en los primeros minutos y después va para cualquier lado en BTC
@@ -238,8 +242,11 @@ dueño qué hiciste y por qué.
    `armar-real` y vigilar las primeras operaciones reales: llenado, deslizamiento, stop de emergencia en MEXC (la
    prueba no manda `stopLossPrice`: confirmarlo en la primera entrada real, leyendo la orden o en la web de MEXC),
    conciliación y avisos.
-2. **Upbit** (PR #22). La fuente `upbit.avisos` lee bien con el almacén de Windows (3-nov: 20 avisos de historia,
-   sin fallas). Falta ver que un listado en wones ("신규 거래지원") se reconozca y opere.
+2. **Upbit** (PR #22, estudiado el 4-nov: la señal más fuerte). Se lee cada 2 s. Con el próximo aviso, revisar en el
+   simulacro la demora de punta a punta (publicado, recibido, decisión y orden) y el precio de entrada contra el
+   precio del aviso.
+2b. **Ser más rápidos con la IA** (lo que más tarda: ~3,4 s de 3,8 s). Probar caché del prompt y respuesta más corta
+   (leer la guía de la API antes), y bajar datos de mercado en paralelo a la consulta. Medir antes y después.
 3. ~~Bybit~~ **Estudiado el 3-nov desde la PC** (`estudio-listados --exchange bybit`, `docs/ESTUDIO-LISTADOS.md`):
    en 180 días sus listados spot dieron +0,4 % a 5 min (n = 4 con futuro en MEXC; 6 de 10 ni cotizaban) y sus
    perpetuos +0,03 % (n = 48). No mueve el precio como Binance: **no se suma como fuente**.
