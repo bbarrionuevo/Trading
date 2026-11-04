@@ -103,6 +103,17 @@ class Commands:
             await self.reply(f"No pude hacer {cmd}: {type(e).__name__}. Probá en la PC (docs/OPERACION.md).")
 
     async def run(self, stop: asyncio.Event) -> None:
+        try:
+            await self._loop(stop)
+        finally:                       # al apagarse (o cancelarse) cierra su conexión: dejaba "Unclosed client session"
+            close = getattr(self.transport, "close", None)        # en el log en cada reinicio (16 veces al 4-nov)
+            if close is not None:
+                try:
+                    await close()
+                except Exception:                          # noqa: BLE001 (apagando: nada que hacer)
+                    pass
+
+    async def _loop(self, stop: asyncio.Event) -> None:
         delay = 0.0
         while not stop.is_set():
             if delay:

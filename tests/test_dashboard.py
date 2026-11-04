@@ -205,3 +205,27 @@ def test_nunca_usa_un_puerto_que_ya_usa_otro_programa(tmp_path):
     finally:
         other.close()
     assert dashboard.PORT != 8765
+
+
+def test_arriba_solo_las_cuentas_que_corren_y_las_viejas_abajo(tmp_path):
+    """4-nov: el tablero mostraba primero el simulacro viejo de MEXC (MEXC ya no corría). Corren la práctica del
+    mercado del latido y la cuenta del armado; las demás quedan abajo, como inactivas."""
+    home = tmp_path / "home"
+    now = 1_793_900_000
+    for folder in ("paper-vivo", "simulacro"):
+        for mkt in ("binance-futuros", "mexc-futuros"):
+            paths.write_json_atomic(home / folder / mkt / "estado.json", {
+                "mercado": mkt, "initial": "100", "cash": "100", "updated_at": now - 60,
+                "stats": {"operaciones": 0, "ganadas": 0, "perdidas": 0, "pnl_neto": "0"}})
+    paths.write_json_atomic(home / "state" / "heartbeat.json", {"ts": now - 5, "trader": {"mercado": "binance-futuros"},
+                                                                "real": {"mercado": "binance-futuros", "simulacro": True}})
+    paths.write_json_atomic(home / "ARMADO.json", {"venues": ["binance-futuros"], "simulacro": True, "modo": "local",
+                                                   "capital_usdt": 100, "vence": now + 86400})
+    s = dashboard.gather(home, now=now)
+    assert [(a["tipo"], a["mercado"]) for a in s["cuentas"]] == [("simulacro", "binance-futuros"),
+                                                                ("practica", "binance-futuros")]
+    assert {(a["tipo"], a["mercado"]) for a in s["inactivas"]} == {("simulacro", "mexc-futuros"),
+                                                                   ("practica", "mexc-futuros")}
+    html_ = dashboard.fragment(s)
+    assert "Simulacro del dinero real (precios reales, ninguna orden) · binance-futuros" in html_
+    assert "Cuentas que ya no corren" in html_ and html_.index("binance-futuros") < html_.index("mexc-futuros")

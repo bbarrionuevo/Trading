@@ -34,7 +34,7 @@ Lo que pidió, en sus palabras:
 |---|---|
 | PC | Al día. El supervisor la actualiza sola desde `main` con el CI en verde. Tests en Windows OK |
 | Cuenta de práctica (paper) | **Pasa a futuros de Binance (4-nov)**, con 120 USDT simulados nuevos (`paper-vivo/binance-futuros/`): criptos y **TradFi** (acciones, ETF, oro, petróleo), con los precios públicos de Binance. La de MEXC queda guardada en `paper-vivo/mexc-futuros/` (3 operaciones el 3-nov, −0,20 USDT); se vuelve a ella con `trader.mercado: mexc-futuros` en config.yaml |
-| Simulacro del real | **Simulacro LOCAL sobre producción de Binance** (pedido del dueño, 4-nov; PR protegido): `armar-real --simulacro`. Es el operador real completo (misma noticia, decisión, riesgo y venue) con el libro y la comisión REALES de Binance, pero cada orden se ejecuta en la PC (`execution/live/binance_dryrun.py`): nivel por nivel contra el libro del momento, con su tope de precio, y el stop de emergencia simulado con el precio de marca. **Capital real 100 % aislado:** no recibe la clave de trading; la de solo lectura lee saldo y comisión y Binance la rechaza para operar (-2015, probado el 4-nov). Arranca con el saldo real de la cuenta. Registro: `simulacro/binance-futuros/ordenes-simuladas.jsonl`; informe: `informe-simulacro`. Probado contra producción el 4-nov (SOL y Tesla). `--demo` lo hace contra la demo de Binance. El de MEXC del 3-nov ya no corre |
+| Simulacro del real | **Simulacro LOCAL sobre producción de Binance** (pedido del dueño, 4-nov; PR protegido): `armar-real --simulacro`. Es el operador real completo (misma noticia, decisión, riesgo y venue) con el libro y la comisión REALES de Binance, pero cada orden se ejecuta en la PC (`execution/live/binance_dryrun.py`): nivel por nivel contra el libro del momento, con su tope de precio, y el stop de emergencia simulado con el precio de marca. **Capital real 100 % aislado:** no recibe la clave de trading; la de solo lectura lee saldo y comisión y Binance la rechaza para operar (-2015, probado el 4-nov). Arranca con **100 USDT de mentira, nunca con el saldo real**: el simulacro se publica en la rama pública `pc` (el 4-nov se armó con el saldo real y quedó publicado unos minutos: se rearmó con 100). Registro: `simulacro/binance-futuros/ordenes-simuladas.jsonl`; informe: `informe-simulacro`. Probado contra producción el 4-nov (SOL y Tesla). `--demo` lo hace contra la demo de Binance. El de MEXC del 3-nov ya no corre |
 | **Dinero real** | **No arranca hasta que el dueño lo confirme** (4-nov: "debemos estar seguros de que todo funciona"). Va por fases: primero la prueba sin riesgo y el simulacro en Binance; después poca plata con vigilancia constante y actuar de inmediato ante cualquier falla; la última fase, cuando esté comprobado que todo funciona y gana. El armado lo hace siempre el dueño (`armar-real` con la frase). Historia: el 4-nov la prueba de MEXC falló primero por la dirección vieja (403) y después por la restricción de la cuenta (fila siguiente) |
 | **MEXC** | **Descartado (4-nov).** Con la dirección nueva, la prueba llegó a MEXC y respondió código 6002 (la cuenta no puede abrir posiciones), y el dueño informó una restricción permanente de la cuenta. El dueño decidió pasar la ejecución a **Binance Futures USDT-M**: la práctica ya opera con los precios de Binance; el simulacro sigue con los de MEXC hasta que esté el de Binance (ruta protegida, lo fusiona el dueño) |
 | **Binance Futures** | **Nuevo lugar de ejecución (4-nov).** Paso 1 (fusionado, PR #29, #32 y #35): cliente `execution/live/binance_futures.py` con lista cerrada, stop de emergencia por el servicio Algo y prueba sin riesgo `binance-real-check` (contrato XRPUSDT). **Prueba en la DEMO de Binance (plata ficticia, claves `BINANCE_API_KEY_TEST` / `BINANCE_API_SECRET_TEST`, `https://demo-fapi.binance.com`), 4-nov: los 10 pasos OK** (el stop se vio cancelado a los 0,6 s). En la cuenta real la corre el dueño (pone órdenes reales). **Hay 235 perpetuos TradFi** además de los 703 de cripto: ~200 acciones de EE. UU., Corea y Hong Kong, SPY y QQQ, oro, plata, petróleo, gas y cobre, **las 24 h, también el fin de semana**; 170 y 449 con más de 1 M USDT por día. La práctica ya opera con los precios de Binance (PR #36). **Paso 2 (PR protegido, lo fusiona el dueño):** operador real `execution/live/binance_venue.py` (IOC con tope, aislado 1x en cada contrato, stop de emergencia Algo de cierre total al llenarse la entrada, conciliación que lo repone y frena si algo no coincide), armado por exchange, simulacro en la DEMO y `cerrar-todo` para Binance. **Probado de punta a punta en la demo el 4-nov:** SOL largo y XRP corto entraron, pusieron su stop al precio pedido, conciliaron, salieron y no quedó nada abierto (costo: spread y comisión, un centavo). Tesla primero rechazada (falta el acuerdo TradFi, código -4411); **el dueño lo aceptó y Tesla anduvo de punta a punta en la demo** (0,05 TSLA, stop a −15 %, salida, nada abierto). Antes de operar: cuenta en modo unidireccional y de un solo activo |
@@ -76,7 +76,7 @@ del dueño.
    (`SourceSpec.os_trust`, paquete `truststore`).
 2. **Ingesta** (`ingestion/engine.py`, `dedup.py`, `noise.py`). Frescura (`news.max_age_s` del sobre),
    deduplicado por similitud (una sola operación por historia) y ruido.
-3. **Clasificación rápida** (`intelligence/classifier.py`, versión `reglas-3`). Reglas en inglés y coreano:
+3. **Clasificación rápida** (`intelligence/classifier.py`, versión `reglas-4`). Reglas en inglés y coreano:
    hackeo, deslistado, quiebra, regulatorio, ETF, macro, listado, resultados, fusión, etc. Activos en
    `research/assets.py` más el universo de MEXC.
    - Si la noticia no nombra un activo, BTC de referencia **solo** si es un hecho de mercado (macro, regulatorio,
@@ -145,7 +145,7 @@ Siempre así: `cd $env:USERPROFILE\TRADING; .\.venv\Scripts\python -m tradingage
 | `binance-real-check` | Prueba sin riesgo de la clave real de Binance: una orden que no se puede ejecutar y un stop lejísimos, verificación y cancelación. Hace falta antes de armar. **La corre el dueño** (pone órdenes reales) |
 | `binance-real-check --demo` | La misma prueba en la DEMO de Binance (plata ficticia, claves `*_TEST`). No cuenta para armar. La puede correr Claude |
 | `armar-real` | Arma el dinero real en Binance con todo el saldo. **Solo lo corre el dueño:** pide la frase exacta (REGLAS A-2). `--exchange mexc` para MEXC |
-| `armar-real --simulacro --dias 7` | El simulacro local: el operador real con el libro real de Binance y órdenes simuladas en la PC, con el saldo real (leído con la clave de solo lectura). `--capital N` para otro capital, `--demo` contra la demo de Binance, `--exchange mexc` en MEXC |
+| `armar-real --simulacro --dias 7` | El simulacro local: el operador real con el libro real de Binance y órdenes simuladas en la PC, con 100 USDT de mentira (nunca el saldo real: se publica). `--capital N` para otro capital, `--demo` contra la demo de Binance, `--exchange mexc` en MEXC |
 | `informe-simulacro` | Calibración: llegada de las noticias por fuente, de la noticia a la entrada, acierto, ganancia neta por categoría, deslizamiento. `--cuenta practica|demo|real`, `--dias N` |
 | `armar-real --desarmar` | No abre nada nuevo; lo abierto sale normal |
 | `cerrar-todo` | Emergencia: cancela órdenes y stops y cierra todo lo real en Binance (con tope de precio), y desarma. `--demo` en la demo; `--exchange mexc` en MEXC |
@@ -262,39 +262,38 @@ dueño qué hiciste y por qué.
 
 ## 10. Pendiente (en orden)
 
-1. **Binance (MEXC quedó descartado el 4-nov).** Hecho: cliente, prueba sin riesgo (10 OK en la demo), práctica
-   con los precios de Binance (cripto y TradFi) y el operador real probado de punta a punta en la demo. Falta, en
-   orden: (a) el dueño fusiona el PR protegido del operador; (b) el dueño acepta el acuerdo TradFi en la demo y en
-   la cuenta real (hecho el 4-nov; Tesla probada en la demo); (b2) el dueño crea una clave de Binance de solo
-   lectura para el canal de anuncios y la carga como `BINANCE_LECTURA_KEY` / `BINANCE_LECTURA_SECRET`;
-   (c) `armar-real --simulacro` (en la demo) y vigilar unos días: entradas, stops, salidas,
-   conciliación y avisos; (d) con eso, el dueño corre `binance-real-check` en la cuenta real y decide si arma el
-   dinero real (`armar-real`), por fases.
-2. **Upbit** (PR #22, estudiado el 4-nov: la señal más fuerte). Se lee cada 8 s. Con el próximo aviso, revisar en el
-   simulacro la demora de punta a punta (publicado, recibido, decisión y orden) y el precio de entrada contra el
-   precio del aviso.
-2b. **Ser más rápidos con la IA** (lo que más tarda: ~3,4 s de 3,8 s). Probar caché del prompt y respuesta más corta
-   (leer la guía de la API antes), y bajar datos de mercado en paralelo a la consulta. Medir antes y después.
-3. ~~Bybit~~ **Estudiado el 3-nov desde la PC** (`estudio-listados --exchange bybit`, `docs/ESTUDIO-LISTADOS.md`):
-   en 180 días sus listados spot dieron +0,4 % a 5 min (n = 4 con futuro en MEXC; 6 de 10 ni cotizaban) y sus
-   perpetuos +0,03 % (n = 48). No mueve el precio como Binance: **no se suma como fuente**.
-4. **Proteger la ganancia del stop móvil en el exchange** (si se apaga la PC, hoy el stop de emergencia queda en
-   el lugar inicial). Necesita sumar un endpoint de órdenes de stop a la lista de A-3: es ruta protegida, lo
-   aprueba el dueño.
-5. **Dato de inflación (CPI):** la BLS da 403 desde la PC y desde la nube. Buscar otra fuente rápida.
-6. **Tareas programadas con conector de GitHub:** para que abran y fusionen PRs solas, el dueño se lo agrega en
-   claude.ai → Rutinas.
-7. **Más evidencia:** que el aprendizaje junte operaciones reales y de práctica (F-3: 60 operaciones con DSR ≥
+1. **Simulacro local en Binance** (armado el 4-nov por 7 días, 100 USDT de mentira): vigilarlo y calibrar con
+   `informe-simulacro` (acierto, ganancia por categoría, de la noticia a la entrada, deslizamiento). Hecho antes: el
+   cliente, la prueba sin riesgo (10 OK en la demo), el operador real probado en la demo (SOL, XRP y Tesla), el
+   acuerdo TradFi aceptado, la clave de solo lectura y el canal de anuncios. Con evidencia del simulacro, el dueño
+   corre `binance-real-check` en la cuenta real y decide si arma el dinero real (`armar-real`), por fases.
+2. **Upbit** (la señal más fuerte; se lee cada 8 s por su límite de ~10 pedidos por minuto, así que un aviso llega
+   en promedio ~4 s después de publicado más la red). Con el próximo aviso, revisar en el simulacro la demora de
+   punta a punta y el precio de entrada contra el del aviso. Probar un segundo camino a los avisos sin pasar el
+   límite, midiendo con cuidado (un exceso bloquea la IP de la PC).
+2b. **IA:** medido el 4-nov, ~1,9 s por consulta (esfuerzo bajo; sin razonamiento da lo mismo: Haiku 5.5 ya no
+   razona con esfuerzo bajo), ~5.200 tokens de entrada y ~130 de salida. **No es el cuello de botella** (lo son las
+   fuentes). Si hiciera falta: caché del sistema (mínimo cacheable de Haiku 5.5: 512 tokens; dura 5 min, o 1 h
+   pagando el doble de escritura) y un "reason" más corto (~0,2 s).
+3. **Resultados de empresas en los TradFi de Binance** (Tesla, Nvidia, Apple... operan las 24 h): hoy llegan por
+   CNBC y Seeking Alpha con 2 a 3 min de demora. Estudiar primero si el perpetuo de Binance tarda en seguir al
+   after-hours (velas de 1 minuto de los últimos resultados contra la hora del comunicado). Si tarda, sumar las
+   agencias de comunicados (GlobeNewswire, Business Wire, PR Newswire) y el 8-K ítem 2.02.
+4. **Listados de Coinbase:** la PC llega a su API de productos (prueba de red); estudiar si un listado nuevo mueve
+   el precio en Binance antes de sumarlo. Bithumb bloquea la PC (403): no se puede.
+5. **Capital chico:** en Binance BTC pide al menos 50 USDT por orden (ETH 20, lo demás 5). Con ~100 USDT y 3 % de
+   riesgo, muchas entradas de BTC no entran; las altcoins y los TradFi, sí.
+6. **Proteger la ganancia del stop móvil en el exchange** (si se apaga la PC, el stop de emergencia queda donde se
+   puso). En Binance se puede reemplazar el stop Algo: ruta protegida, lo aprueba el dueño.
+7. **Dato de inflación (CPI):** la BLS da 403 desde la PC y desde la nube. Buscar otra fuente rápida.
+8. **Más evidencia:** que el aprendizaje junte operaciones reales y de práctica (F-3: 60 operaciones con DSR ≥
    0,95 da una medida seria). Revisar el meta-modelo con ellas.
-8. **El aprendizaje mide la lectura de las reglas, no la de la IA**, que es la que decide cada entrada (las reglas
-   leen mal: "Mercado Bitcoin", "Roundup settlement" de Bayer como regulatorio cripto). Guardar con cada noticia
-   la lectura de la IA cuando la hubo y aprender con esa.
-9. **La etiqueta del meta-modelo** (triple barrera del etiquetador) expira a los 60 min, y el prior supone un
-   paseo sin vencimiento (1/3 con α = 0). Con entradas reales, revisar si hay que calibrar el prior con la
-   expiración. Hoy no frena: solo cuentan las apuestas que se habrían hecho.
-10. **Datos públicos de MEXC en la dirección nueva:** `marketdata/mexc.py` (`BASE`) todavía lee precios, libros,
-    velas y el saldo de solo lectura en `contract.mexc.com`. Hoy anda (las lecturas no están bloqueadas), pero
-    conviene pasarlo a `api.mexc.com`, que sirve todo lo mismo (verificado el 4-nov), antes de que MEXC lo corte.
+9. **El aprendizaje mide la lectura de las reglas, no la de la IA**, que es la que decide cada entrada. Guardar con
+   cada noticia la lectura de la IA cuando la hubo y aprender con esa.
+10. **La etiqueta del meta-modelo** (triple barrera del etiquetador) expira a los 60 min, y el prior supone un
+    paseo sin vencimiento (1/3 con α = 0). Con entradas reales, revisar si hay que calibrar el prior.
+11. **Tareas programadas:** las de la nube no ven la PC ni tienen conector de GitHub. Una vigilancia programada en
+    la app de la PC sí ve todo (la decide el dueño).
 
 ## 11. Detalles que muerden (Windows y MEXC)
 

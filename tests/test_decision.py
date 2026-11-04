@@ -70,6 +70,9 @@ def test_grounding_sin_activos_inventados():
 
 @pytest.mark.parametrize("title", [                                         # noticias reales de la PC, 3-nov
     "Ferrari raises full-year guidance as Q4 assumptions include personalization",
+    "3M stock soars following $7.35 billion forever chemicals settlement",       # reglas-4: sin cripto, sin BTC
+    "SEC charges hedge fund manager with fraud",
+    "Spirit Airlines files for chapter 11 bankruptcy",
     "3M authorizes $7.5B share buyback",
     "Earnings call transcript: Fibra Mty tops Q3 2026 forecasts on acquisitions",
     "Epidemic of Hacked Freezers Spreads Across Europe",

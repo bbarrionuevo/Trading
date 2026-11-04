@@ -365,13 +365,9 @@ def cmd_armar_real(args) -> int:
             print("Para el simulacro en la demo de Binance faltan BINANCE_API_KEY_TEST y BINANCE_API_SECRET_TEST en",
                   home / ".env")
             return 2
-        capital = args.capital
-        if capital is None and binance and not demo:          # el mismo capital que la cuenta real, sin tocarla
-            capital = _real_balance_read_only()
-            if capital:
-                print(f"Simulacro con el saldo real de tu cuenta de futuros ({capital:.2f} USDT), leído con la clave "
-                      "de solo lectura: la cuenta no se toca.")
-        capital = 100.0 if capital is None else capital
+        # Nunca el saldo real: el simulacro es "plata de mentira" y se publica en la rama pública `pc`. El 4-nov se
+        # armó con el saldo real y quedó publicado unos minutos (REGLAS G-8): por eso, 100 USDT salvo que se pida otro.
+        capital = 100.0 if args.capital is None else args.capital
         try:
             data = arming.arm(home, args.dias, "", "", assets=assets, simulacro=True, capital=capital, venue=venue,
                               mode=("demo" if demo else "local") if binance else None)
@@ -412,29 +408,6 @@ def cmd_armar_real(args) -> int:
     print("Armado con todo el saldo.", "El agente se reinicia solo en segundos y empieza." if ok
           else f"Todavía no opera: {why} (corré python -m tradingagent {check}).")
     return 0
-
-
-def _real_balance_read_only() -> float | None:
-    """Saldo real de futuros de Binance con la clave de SOLO LECTURA (para que el simulacro use el mismo capital)."""
-    key, secret = os.environ.get("BINANCE_LECTURA_KEY"), os.environ.get("BINANCE_LECTURA_SECRET")
-    if not (key and secret):
-        return None
-    import aiohttp
-
-    from .execution.live.binance_futures import BinanceClient
-
-    async def read():
-        async with aiohttp.ClientSession() as session:
-            client = BinanceClient(session, key, secret)
-            await client.sync_time()
-            return float((await client.usdt())["equity"])
-
-    try:
-        value = asyncio.run(read())
-    except Exception as e:                                               # noqa: BLE001 (sin saldo, el de siempre)
-        print(f"No pude leer el saldo real ({type(e).__name__}): uso 100 USDT.")
-        return None
-    return round(value, 2) if value > 0 else None
 
 
 def cmd_informe_simulacro(args) -> int:

@@ -173,22 +173,45 @@ def llm_limit(repo: Path = REPO) -> float | None:
     return float(m.group(1)) if m else None
 
 
+# Carpetas de cuentas: práctica, simulacro local (libro real, órdenes simuladas), simulacro en la demo y real.
+KINDS = (("real", "real"), ("simulacro", "simulacro"), ("demo", "simulacro-demo"), ("practica", "paper-vivo"))
+
+
+def split_accounts(home: Path, hb: dict | None, now: float, include_real: bool = True) -> tuple[list, list]:
+    """(cuentas que están corriendo, cuentas viejas). Corre la práctica del mercado del latido y la del armado
+    (`ARMADO.json`: real, simulacro local o en la demo, con su exchange). Antes se mostraban todas las carpetas, y la
+    primera era el simulacro viejo de MEXC (4-nov: MEXC ya no corría)."""
+    arm = read_json(home / "ARMADO.json", None)
+    armed = None
+    if isinstance(arm, dict):
+        kind = "real" if not arm.get("simulacro") else ("demo" if arm.get("modo") == "demo" else "simulacro")
+        armed = (kind, str((arm.get("venues") or ["mexc-futuros"])[0]))
+    trader = ((hb or {}).get("trader") or {}).get("mercado") if isinstance(hb, dict) else None
+    found = []
+    for kind, folder in KINDS:
+        if kind == "real" and not include_real:
+            continue
+        for d in sorted((home / folder).glob("*")):
+            a = account(d, now) if d.is_dir() else None
+            if a:
+                found.append((kind, d.name, {**a, "tipo": kind, **({kind: True} if kind != "practica" else {})}))
+    practice = [(n, a) for k, n, a in found if k == "practica"]
+    if trader is None and practice:                   # sin latido (o uno viejo): la práctica guardada más reciente
+        trader = max(practice, key=lambda x: float(x[1].get("actualizado") or 0))[0]
+    active, old = [], []
+    for kind, name, a in found:
+        running = name == trader if kind == "practica" else armed == (kind, name)
+        (active if running else old).append(a if running else {**a, "inactiva": True})
+    return active, old
+
+
 def gather(home: Path, now: float | None = None, repo: Path = REPO, include_real: bool = True) -> dict:
     """Todo lo que muestra el tablero, sin E/S de red. Lo que se publica para Claude va sin la cuenta de dinero
     real (`include_real=False`, REGLAS G-8: nunca saldos reales)."""
     now = time.time() if now is None else now
     hb = read_json(home / "state" / "heartbeat.json", None)
     sup = read_json(home / "state" / "supervisor.json", None) or {}
-    accounts = [a for a in (account(d, now) for d in sorted((home / "paper-vivo").glob("*")) if d.is_dir()) if a]
-    for d in sorted((home / "simulacro").glob("*")):                # plata de mentira: se muestra y se publica
-        a = account(d, now) if d.is_dir() else None
-        if a:
-            accounts.insert(0, {**a, "simulacro": True})
-    if include_real:
-        for d in sorted((home / "real").glob("*")):
-            a = account(d, now) if d.is_dir() else None
-            if a:
-                accounts.insert(0, {**a, "real": True})
+    accounts, inactive = split_accounts(home, hb, now, include_real)
     age = None if not isinstance(hb, dict) else round(now - float(hb.get("ts", 0)))
     kill = (home / "KILL").exists()
     halted = [a["mercado"] for a in accounts if a["halt"]]
@@ -205,7 +228,8 @@ def gather(home: Path, now: float | None = None, repo: Path = REPO, include_real
     learned = read_json(home / "datos" / "aprendizaje" / "estado.json", None) or {}
     trader = (hb or {}).get("trader") or {}
     return {"generado": round(now), "version": __version__, "estado": status[0], "estado_texto": status[1],
-            "latido_hace_s": age, "kill": kill, "agente": hb, "cuentas": accounts, "supervisor": sup,
+            "latido_hace_s": age, "kill": kill, "agente": hb, "cuentas": accounts, "inactivas": inactive,
+            "supervisor": sup,
             "tests": tests_summary(home / "logs" / "tests.txt"), "errores": log_errors(home),
             "aprendizaje": {"apagadas": learned.get("apagadas", []), "meta": learned.get("meta") or {},
                             "calculado": learned.get("calculado")},
@@ -296,6 +320,7 @@ def _pnl(x, digits=4) -> str:
 
 
 STATUS_ICON = {"ok": "✓", "pausado": "⏸", "halt": "⛔", "caido": "⚠", "sin_datos": "…"}
+TIPO_ES = {"real": "dinero real", "simulacro": "simulacro", "demo": "simulacro en la demo", "practica": "práctica"}
 
 
 def fragment(s: dict) -> str:
@@ -325,7 +350,9 @@ def fragment(s: dict) -> str:
                  + (f" · tope {fmt_num(llm['tope_usd'], 2)} USD por día" if llm.get("tope_usd") else "")),
         ]
         title = ("💵 Cuenta de DINERO REAL" if a.get("real") else
-                 "🧪 Simulacro del dinero real (sin plata: ninguna orden)" if a.get("simulacro") else "Cuenta de práctica")
+                 "🧪 Simulacro en la demo de Binance (plata ficticia)" if a.get("demo") else
+                 "🧪 Simulacro del dinero real (precios reales, ninguna orden)" if a.get("simulacro") else
+                 "Cuenta de práctica")
         parts.append(f'<h2>{title} · {e(a["mercado"])}</h2><div class="tiles">{"".join(tiles)}</div>')
         parts.append(f'<figure class="card"><figcaption>Equity de la cuenta (USDT): cierres y marca actual'
                      f'</figcaption>{chart(a["curva"], a["inicial"])}</figure>')
@@ -357,6 +384,11 @@ def fragment(s: dict) -> str:
             "Todavía no llegó ninguna noticia operable."))
     if not s["cuentas"]:
         parts.append('<p class="muted">Todavía no hay cuenta paper en vivo (aparece cuando el agente arranca).</p>')
+    if s.get("inactivas"):
+        rows = [[e(TIPO_ES.get(a.get("tipo"), "")), e(a["mercado"]), fmt_num(a["equity"]), str(a["operaciones"]),
+                 _pnl(a["pnl_neto"], 2), e(fmt_ts(a.get("actualizado")))] for a in s["inactivas"]]
+        parts.append('<h2>Cuentas que ya no corren</h2>' + _table(
+            ["Tipo", "Mercado", "Equity", "Operaciones", "PnL neto", "Última vez"], rows, ""))
     src, news, lag = hb.get("sources") or {}, hb.get("news") or {}, hb.get("loop_lag") or {}
     al, jr = hb.get("alerts") or {}, hb.get("journal") or {}
     failing = ", ".join(src.get("failing", [])) or "ninguna"
