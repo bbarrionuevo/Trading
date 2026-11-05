@@ -344,6 +344,12 @@ class LiveTrader:
         except Exception:                                              # una falla no tira al operador
             log.exception("falló la entrada por resultados (CIK %s)", cik)
 
+    async def _book_or_none(self, sym: str):
+        try:
+            return await self.books.book(sym)
+        except MarketDataError:
+            return None
+
     async def _delisting(self, ing, coin: str) -> None:
         """Corto apenas llega el aviso de deslistado de Binance, si el precio todavía no cayó (decision/delistings.py):
         si ya cayó más de 4 % desde el aviso, llegamos tarde y no se entra."""
@@ -363,12 +369,10 @@ class LiveTrader:
                 self.registry = await self.market.instruments(self.session, [sym], self.st["instruments"], now)
                 run.reg = self.registry
                 self.venue.registry = self.registry
-                await run.store.load({sym: [(minute(t0) - 130 * MIN, minute(now))]})
+                # Velas y libro a la vez (un viaje a Binance menos: ~0,3 s, y el precio cae entre los 2 y 5 s)
+                _, book = await asyncio.gather(run.store.load({sym: [(minute(t0) - 130 * MIN, minute(now))]}),
+                                               self._book_or_none(sym))
                 bar = (run.store.candles.get(sym) or {}).get(minute(t0))       # el minuto del aviso: (o, h, l, c)
-                try:
-                    book = await self.books.book(sym)
-                except MarketDataError:
-                    book = None
                 if not bar or book is None or book.mid is None:
                     run.record(ev, sig, sym, "no_entrar", ["sin_datos:precio_del_aviso_o_libro"])
                 elif (drop := float(book.mid) / float(bar[0]) - 1) < -delistings.MAX_DROP:
