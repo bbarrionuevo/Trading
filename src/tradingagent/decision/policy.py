@@ -210,7 +210,7 @@ def news_move(candles: dict, t_pub: float | None, price_now: float, side: int) -
 # Categorías cuyo efecto sigue después del primer salto (estudio del 3-nov, docs/ESTUDIO-LISTADOS.md: con los
 # listados spot de Binance la moneda siguió subiendo en MEXC hasta la hora, mediana +12,5 % a los 5 min y +28 % a
 # los 60). Ahí, que ya se haya movido a favor no es motivo para no entrar.
-DRIFT = {"listado"}
+DRIFT = {"listado", "resultados_impulso"}
 
 
 @dataclass(frozen=True)
@@ -235,9 +235,12 @@ class ExitProfile:
 # listados: REGLAS A-5, aprobado por el dueño el 4-nov.
 # Macro (decisiones de la Fed, 4 casos en MEXC): casi todo el movimiento pasa en los primeros 5 minutos y después
 # en BTC y los índices sigue o se da vuelta como una moneda al aire. Más tarde que eso no hay ventaja medible.
+# Resultados de empresas con impulso (decision/earnings.py, estudio del 4-nov: 88 resultados en los TradFi de
+# Binance): se entra a los 2 minutos del 8-K siguiendo el movimiento, stop FIJO de 5 % y salida a los 30 min.
 EXITS = {"listado": ExitProfile(max_age_s=120, stop=0.10, hold_s=900, target=False, b_kelly=2.5,
                                 max_slippage_bps=50),
-         "macro": ExitProfile(max_age_s=90)}
+         "macro": ExitProfile(max_age_s=90),
+         "resultados_impulso": ExitProfile(max_age_s=300, stop=0.05, hold_s=1800, target=False, b_kelly=1.0)}
 
 
 def chase_blocks(move: float | None, sl_frac: float, tp_frac: float, category: str = "") -> list[str]:

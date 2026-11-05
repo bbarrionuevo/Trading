@@ -16,12 +16,14 @@ Todo es paper: no existe código de órdenes reales (REGLAS A-2, A-3).
 """
 import asyncio
 import logging
+import os
 import time
 from pathlib import Path
 
 from . import paths
 from .alerts.model import asset_es, circuit_breaker_alert, daily_alert, system_alert, usdt_es
 from .core.bus import EventBus
+from .decision import earnings
 from .decision.policy import PolicyConfig, assess, news_blocks
 from .decision.risk import RiskState
 from .execution.paper import PaperConfig, PaperVenue
@@ -72,6 +74,10 @@ class LiveTrader:
         self.counts: dict[str, int] = {}
         self._universe_at, self._universe_n = float("-inf"), None
         self._agreement_day = None                                   # aviso del acuerdo TradFi: uno por día
+        self.sec_tickers_cache = home / "datos" / "sec-tickers.json"
+        self._ciks: dict | None = None                               # CIK de la SEC → tickers (una vez por día)
+        self._ciks_at = float("-inf")
+        self.pending: set[asyncio.Task] = set()                      # resultados esperando su minuto 2
 
     # -- arranque y estado ------------------------------------------------------------------------------
     async def start(self) -> None:
@@ -221,6 +227,11 @@ class LiveTrader:
                    for a in sig.assets)
 
     async def on_news(self, ing) -> None:
+        cik = earnings.filing_cik(ing.item.source, ing.item.title, ing.item.body)
+        if cik is not None and hasattr(self.market, "universe"):    # 8-K de resultados: se mide a los 2 minutos
+            task = asyncio.create_task(self._earnings(ing, cik), name=f"resultados-{cik}")
+            self.pending.add(task)
+            task.add_done_callback(self.pending.discard)
         ev = self._event(ing)
         sig = classify(ev["title"], ev["body"], tier=ev["tier"], cluster_sources=ev["cluster_sources"],
                        hint_assets=tuple(ev["assets_hint"]))
@@ -270,6 +281,58 @@ class LiveTrader:
                     continue
                 await run.enter(ev, sig, asset, blocks)
             await self.save(run)
+
+    async def _cik_tickers(self) -> dict:
+        if self._ciks is None or self.clock.time() - self._ciks_at > 86_400:
+            from .marketdata import sec_tickers
+            self._ciks = await sec_tickers.load(self.session, self.sec_tickers_cache, os.environ.get("SEC_USER_AGENT"))
+            self._ciks_at = self.clock.time()
+        return self._ciks or {}
+
+    async def _earnings(self, ing, cik: int) -> None:
+        """Resultados con impulso (decision/earnings.py): a los 2 minutos de la aceptación del 8-K, si el perpetuo
+        TradFi ya se movió ≥ 0,5 % contra el precio de antes, se entra en esa dirección (stop fijo de 5 %, 30 min)."""
+        try:
+            tickers = await self._cik_tickers()
+            uni = self.market.universe
+            tk = next((t for t in tickers.get(cik, ()) if uni.kind(t) == "accion"), None)
+            t0 = ing.item.published_at
+            if tk is None or t0 is None:
+                return
+            wait = t0 + earnings.ENTRY_DELAY_S - self.clock.time()
+            if wait > 0:
+                await asyncio.sleep(wait)
+            async with self.lock:
+                run = self.run()
+                now, ev, sym = run.now, self._event(ing), self.market.symbol(tk)
+                late = now - t0
+                if late > earnings.MAX_LATE_S:
+                    run.record(ev, earnings.signal(tk, 1), sym, "no_entrar", [f"resultados_tarde:{late:.0f}s"])
+                    await self.save(run)
+                    return
+                self.registry = await self.market.instruments(self.session, [sym], self.st["instruments"], now)
+                run.reg = self.registry
+                self.venue.registry = self.registry
+                await run.store.load({sym: [(minute(t0) - 130 * MIN, minute(now))]})
+                before = (run.store.candles.get(sym) or {}).get(minute(t0) - MIN)
+                try:
+                    book = await self.books.book(sym)
+                except MarketDataError:
+                    book = None
+                if not before or book is None or book.mid is None:
+                    run.record(ev, earnings.signal(tk, 1), sym, "no_entrar", ["sin_datos:precio_antes_o_libro"])
+                    await self.save(run)
+                    return
+                move = float(book.mid) / float(before[3]) - 1                   # contra el cierre de antes del 8-K
+                side = 1 if move > 0 else -1
+                sig = earnings.signal(tk, side)
+                if abs(move) < earnings.THRESHOLD:
+                    run.record(ev, sig, sym, "no_entrar", [f"impulso_chico:{move * 100:+.2f}%"])
+                else:
+                    await run.enter(ev, sig, tk, self.risk_blocks(run), assessment=earnings.assessment(tk, side, late))
+                await self.save(run)
+        except Exception:                                              # una falla no tira al operador
+            log.exception("falló la entrada por resultados (CIK %s)", cik)
 
     def risk_blocks(self, run: _LiveRun) -> list:
         equity = float(run.equity())
