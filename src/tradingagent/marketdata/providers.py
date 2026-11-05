@@ -100,10 +100,14 @@ class RestBookProvider:
             raise ValueError(f"venue sin endpoint conocido: {venue}")
         self.venue, self.session, self.clock = venue, session, clock
         self.url = base_url or VENUES[venue]
-        self.depth, self.cache_s, self.min_gap = depth, cache_ms / 1000, 1.0 / max_rps
+        self.depth, self.cache_s, self.rate = depth, cache_ms / 1000, float(max_rps)
         self.timeout = aiohttp.ClientTimeout(total=timeout_s)
         self._cache: dict[str, OrderBook] = {}
-        self._last_req = 0.0
+        # Balde de fichas (5-nov): el mismo promedio de pedidos por segundo, pero varios pueden salir juntos. Antes había
+        # 200 ms obligatorios entre dos pedidos cualesquiera: el libro de un deslistado esperaba detrás del de una
+        # posición abierta (y la tercera moneda de un aviso, 400 ms), cuando el precio cae entre los 2 y 5 s.
+        self.burst = max(1.0, float(max_rps))
+        self._tokens, self._refill_at = self.burst, None
         self._lock = asyncio.Lock()
         self.requests = self.errors = 0
 
@@ -111,11 +115,16 @@ class RestBookProvider:
         cached = self._cache.get(symbol)
         if cached and self.clock.time() - cached.received_at <= self.cache_s:
             return cached
-        async with self._lock:                                   # tope de pedidos por segundo
-            wait = self._last_req + self.min_gap - self.clock.monotonic()
-            if wait > 0:
-                await asyncio.sleep(wait)
-            self._last_req = self.clock.monotonic()
+        async with self._lock:                                   # tope de pedidos por segundo (con ráfaga)
+            now = self.clock.monotonic()
+            if self._refill_at is not None:
+                self._tokens = min(self.burst, self._tokens + (now - self._refill_at) * self.rate)
+            self._refill_at = now
+            if self._tokens < 1:
+                await asyncio.sleep((1 - self._tokens) / self.rate)
+                self._tokens = 1.0
+                self._refill_at = self.clock.monotonic()
+            self._tokens -= 1
         self.requests += 1
         try:
             async with self.session.get(self.url, params={"symbol": symbol, "limit": str(self.depth)},
