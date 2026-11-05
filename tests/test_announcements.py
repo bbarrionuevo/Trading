@@ -156,3 +156,12 @@ def test_una_fuente_con_almacen_del_sistema_usa_ese_contexto_tls():
     p = PollingSource(spec, None, ManualClock(0), None)
     assert isinstance(p._ssl(), ssl.SSLContext)                            # truststore (almacén de Windows)
     assert PollingSource(SourceSpec("y", "https://example.invalid/y"), None, ManualClock(0), None)._ssl() is True
+
+
+def test_el_pais_en_el_nombre_legal_de_una_empresa_no_es_una_cripto():
+    """8-K real del 5-nov: "Jerash Holdings (US), Inc." se asignó a la cripto US (USUSDT). El país antes de la forma
+    societaria no es un ticker; un listado "Foo (US)" sí lo es."""
+    assets.register([Entry("US", "US_USDT", "cripto", 5e6)])
+    assert assets.detect("8-K - Jerash Holdings (US), Inc. (0001696558) (Filer)") == []
+    assert classify("8-K - Jerash Holdings (US), Inc. (0001696558) (Filer)", tier=1).assets == ()
+    assert assets.detect("Binance Will List Talus (US) with Seed Tag Applied") == ["US"]

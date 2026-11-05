@@ -85,6 +85,8 @@ del dueño.
      operar ni consultar.
    - Los resultados de empresas nunca son de una cripto ("LTC reports Q3 earnings" es LTC Properties).
    - Un ticker sin letras (la moneda "4") no se detecta en el texto: era "$4.2B".
+   - El país en el nombre legal de una empresa ("Jerash Holdings (US), Inc.", 8-K del 5-nov) no es la cripto US:
+     un "(US)", "(UK)", "(HK)"... seguido de Inc, Ltd, Corp, etc. no cuenta como ticker.
 4. **Universo** (`marketdata/universe.py`). Todo MEXC futuros operable por API con volumen de 24 h ≥ 0,1 M USDT
    (~350 activos). Los líquidos (≥ 1 M) se reconocen por nombre o ticker; los chicos, solo por su ticker escrito
    ("(FOO)", "$FOO"). Caché de 6 h.
