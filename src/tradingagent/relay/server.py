@@ -25,7 +25,9 @@ from ..ingestion.sources import PollingSource
 from . import protocol
 
 log = logging.getLogger("tradingagent.relay")
-SOURCES = ("upbit.avisos", "binance.listados")      # avisos oficiales que se sondean
+# Avisos oficiales que se sondean desde Tokio. Upbit NO: su sitio de avisos (Cloudflare) bloquea las IP de AWS (403,
+# medido el 5-nov); no se esquiva. Upbit lo sigue leyendo la PC.
+SOURCES = ("binance.listados",)
 PEER_TTL_S = 45.0                                    # sin latido de la PC en 45 s, no se manda nada
 
 

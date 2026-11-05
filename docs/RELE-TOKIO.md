@@ -42,6 +42,15 @@ para quitar la desventaja geográfica y el cuello de botella de la IA. La PC en 
    mínimo sin apalancamiento. Hoy los listados arriesgan el 3 % aprobado (0,3 veces el saldo).
 9. **Control de peso de la API** (el "PR 1" del pedido): hecho en el PR #50 (`marketdata/peso.py`, freno al 80 %).
 
+## Medido al instalarlo (5-nov)
+
+- **Upbit bloquea su sitio de avisos para las IP de AWS** (Cloudflare devuelve 403 desde Tokio; su API de mercados sí
+  responde). No se esquiva: el relé no lee Upbit y la ganancia de velocidad en Upbit no existe. Upbit lo sigue leyendo
+  la PC.
+- Lo que queda: la lista de anuncios de Binance desde otra IP (respaldo del canal de la PC) y el túnel listo para lo
+  que siga. Con lo empujado sin acelerar y Upbit bloqueado, **la única ganancia grande de velocidad que queda es operar
+  desde Tokio** (abajo).
+
 ## Lo único que daría ~0,3 s más en TODO (decisión del dueño)
 
 Mandar la orden desde Tokio y no desde la PC: ahorra la ida al exchange (~160 ms) y el salto Tokio → PC (~155 ms).
