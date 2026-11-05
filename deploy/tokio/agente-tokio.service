@@ -1,0 +1,24 @@
+# Agente de TRADING en el servidor de Tokio (fase 2 de docs/RELE-TOKIO.md: SIMULACRO, plata de mentira).
+# Instalar o actualizar: deploy/tokio/instalar-agente.sh (lo copia a /etc/systemd/system y lo arranca).
+[Unit]
+Description=TRADING - agente de Tokio (simulacro): avisos del relé, Binance a 2-5 ms, telemetría a la PC
+After=network-online.target rele-tokio.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/trading
+Environment=TRADING_HOME=/home/ubuntu/.trading
+Environment=PYTHONUNBUFFERED=1
+# Sin EnvironmentFile: el agente lee SOLO TRADING_HOME/.env, armado con deploy/tokio/preparar_env.py (la IA, la clave
+# de SOLO LECTURA de Binance y el SEC_USER_AGENT; nunca la clave de trading). El .env del dueño no se carga.
+ExecStart=/home/ubuntu/trading/.venv/bin/python -m tradingagent run
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

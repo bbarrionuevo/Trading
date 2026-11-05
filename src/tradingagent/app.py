@@ -163,6 +163,7 @@ class Agent:
         self.started = time.time()
         self.news_tasks: set[asyncio.Task] = set()     # noticias que el operador está evaluando ahora
         self.streams: list = []                        # fuentes empujadas (no se sondean)
+        self.telemetry = None                          # agente de Tokio: resumen y alertas al tablero de la PC
 
     def stop(self) -> None:
         self.stop_event.set()
@@ -264,20 +265,37 @@ class Agent:
         return streams + [BinanceAnnouncements(key, secret, self.ingestion.handle, self.clock,
                                                max_age_s=safety.news_max_age(float(o.get("max_age_s") or 600), lim))]
 
-    def _build_relay(self) -> list:
-        """Relé de Tokio (relay/client.py): la dirección en TRADING_HOME/relay.json ({"host": ..., "port": 50005}) o en
-        RELAY_HOST/RELAY_PORT, y la clave en TRADING_HOME/relay.key. Sin las dos cosas, queda apagado."""
-        from .relay import client, protocol
+    def _relay_settings(self) -> dict | None:
+        """Relé de Tokio: la dirección en TRADING_HOME/relay.json ({"host": ..., "port": 50005, "telemetria": ...}) o en
+        RELAY_HOST/RELAY_PORT. "local" = el relé corre en esta misma máquina (el agente de Tokio)."""
         conf = paths.read_json(paths.home() / "relay.json", None) or {}
         host = self.env.get("RELAY_HOST") or conf.get("host")
-        key_file = paths.home() / "relay.key"
         if not host:
+            return None
+        return {"host": host, "port": int(self.env.get("RELAY_PORT") or conf.get("port") or 50005),
+                "local": host in ("127.0.0.1", "::1", "localhost"), "telemetria": bool(conf.get("telemetria"))}
+
+    def _build_relay(self) -> list:
+        """Relé de Tokio (relay/client.py), con la clave en TRADING_HOME/relay.key. Sin dirección o sin clave, apagado.
+        - En la PC: el latido lleva la pausa (KILL) y la telemetría de Tokio se guarda para el tablero.
+        - En Tokio (relé local): recibe los avisos y, con "telemetria": true, manda resumen y alertas a la PC."""
+        from .relay import client, protocol
+        from .relay.tablero import TokioSink
+        conf = self._relay_settings()
+        key_file = paths.home() / "relay.key"
+        if conf is None:
             return []
         if not key_file.exists():
             self.sources_off[client.SOURCE_ID] = "falta TRADING_HOME/relay.key"
             return []
-        port = int(self.env.get("RELAY_PORT") or conf.get("port") or 50005)
-        return [client.RelayClient(host, port, protocol.load_key(key_file), self.ingestion.handle, self.clock)]
+        key = protocol.load_key(key_file)
+        if conf["local"]:
+            c = client.RelayClient(conf["host"], conf["port"], key, self.ingestion.handle, self.clock)
+            if self.telemetry is not None:
+                self.telemetry.attach(c)
+            return [c]
+        return [client.RelayClient(conf["host"], conf["port"], key, self.ingestion.handle, self.clock,
+                                   kill_file=paths.kill_file(), on_telemetry=TokioSink(paths.home(), self.clock))]
 
     def _build_trader(self, session, lim):
         from .intelligence.llm import LlmClassifier, api_key
@@ -412,6 +430,12 @@ class Agent:
         self.alerts = AlertDispatcher(alert_transport_factory(cfg, env, self.telegram_base_url),
                                       max_queue=a["max_queue"], rate_per_s=a["rate_per_s"], burst=a["burst"],
                                       startup_alert=boot)
+        relay = self._relay_settings()
+        if relay and relay["local"] and relay["telemetria"]:     # agente de Tokio: cada alerta, también a la PC
+            from .telemetry.remota import AlertTee, RemoteTelemetry
+            self.telemetry = RemoteTelemetry(self)
+            self.alerts = AlertTee(self.alerts, self.telemetry.alert)
+            self.telemetry.alert(boot)                           # "Agente iniciado" también llega al tablero
         self.alerts.start()
         self.journal.record("start", version=__version__, mode=cfg["mode"], sources=[s.id for s in enabled],
                             sources_off=self.sources_off)
@@ -474,6 +498,8 @@ class Agent:
                           asyncio.create_task(self._print_accepted(), name="consola"),
                           asyncio.create_task(self._watch_stop_file(stop_file), name="parada")]
                 tasks.append(asyncio.create_task(self._probe_loop(session), name="red"))
+                if self.telemetry is not None:
+                    tasks.append(asyncio.create_task(self.telemetry.run(self.stop_event), name="telemetria"))
                 commands = self._build_commands()
                 if commands is not None:                             # órdenes del dueño por Telegram
                     tasks.append(asyncio.create_task(commands.run(self.stop_event), name="ordenes"))
@@ -496,7 +522,7 @@ class Agent:
                     if self.news_tasks:                   # una noticia a medio operar se termina y se guarda
                         await asyncio.wait(set(self.news_tasks), timeout=10)
                     for t in tasks:
-                        if t.get_name() in ("lag", "consola", "aprendizaje", "red", "ordenes") or \
+                        if t.get_name() in ("lag", "consola", "aprendizaje", "red", "ordenes", "telemetria") or \
                                 t.get_name().startswith("fuente-"):
                             t.cancel()
                     await asyncio.wait(tasks, timeout=15)

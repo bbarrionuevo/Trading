@@ -31,6 +31,8 @@ from .research import evaluation
 PORT = 18765                        # lejos de los puertos comunes: el 8765 ya lo usa otro programa del dueño
 PORT_TRIES = 20
 HB_STALE_S = 60                     # el latido se escribe cada 15 s: un minuto sin latido es una caída
+TOKIO_STALE_S = 60                  # el agente de Tokio manda su resumen cada 15 s (el relé, cada 30 s)
+TOKIO_EVENTS = 12
 F3_TRADES = 60                      # REGLAS F-3: evidencia que se mide (no frena, decisión del dueño)
 REFRESH_MS = 5000
 REPO = Path(__file__).resolve().parents[2]
@@ -205,6 +207,29 @@ def split_accounts(home: Path, hb: dict | None, now: float, include_real: bool =
     return active, old
 
 
+def tokio(home: Path, now: float, include_real: bool = True) -> dict | None:
+    """Lo que mandó el servidor de Tokio (relay/tablero.py): el agente, el relé y las últimas alertas. Sin nada
+    recibido nunca, None (el tablero no muestra la sección). Lo publicado para Claude va sin cuentas reales (G-8)."""
+    st = read_json(home / "state" / "tokio.json", None)
+    if not isinstance(st, dict) or not st:
+        return None
+    ag, rele = st.get("agente") or {}, st.get("rele") or {}
+    events = []
+    for line in _tail(home / "state" / "tokio-eventos.jsonl", 200_000)[-TOKIO_EVENTS:]:
+        try:
+            events.append(json.loads(line))
+        except ValueError:
+            continue
+    accounts = [a for a in ag.get("cuentas") or [] if include_real or a.get("tipo") != "real"]
+    if not include_real and any(a.get("tipo") == "real" for a in ag.get("cuentas") or []):
+        events = []                                       # con dinero real en Tokio, las alertas no se publican
+    def age(d: dict) -> int | None:
+        return round(now - float(d["recibido"])) if d.get("recibido") else None
+
+    return {"agente": ag, "rele": rele, "agente_hace_s": age(ag), "rele_hace_s": age(rele), "cuentas": accounts,
+            "eventos": events[::-1]}
+
+
 def gather(home: Path, now: float | None = None, repo: Path = REPO, include_real: bool = True) -> dict:
     """Todo lo que muestra el tablero, sin E/S de red. Lo que se publica para Claude va sin la cuenta de dinero
     real (`include_real=False`, REGLAS G-8: nunca saldos reales)."""
@@ -229,7 +254,7 @@ def gather(home: Path, now: float | None = None, repo: Path = REPO, include_real
     trader = (hb or {}).get("trader") or {}
     return {"generado": round(now), "version": __version__, "estado": status[0], "estado_texto": status[1],
             "latido_hace_s": age, "kill": kill, "agente": hb, "cuentas": accounts, "inactivas": inactive,
-            "supervisor": sup,
+            "supervisor": sup, "tokio": tokio(home, now, include_real),
             "tests": tests_summary(home / "logs" / "tests.txt"), "errores": log_errors(home),
             "aprendizaje": {"apagadas": learned.get("apagadas", []), "meta": learned.get("meta") or {},
                             "calculado": learned.get("calculado")},
@@ -329,6 +354,8 @@ def fragment(s: dict) -> str:
              f'</span><div><strong>{e(s["estado_texto"])}</strong><div class="muted">Último latido hace '
              f'{fmt_age(s["latido_hace_s"])} · versión {e(str((s["supervisor"] or {}).get("version", "?"))[:7])} · '
              f'actualizado {e(fmt_ts(s["generado"]))}</div></div></section>']
+    if s.get("tokio"):
+        parts.append(tokio_fragment(s["tokio"]))
     hb = s.get("agente") or {}
     llm = s.get("llm") or {}
     for a in s["cuentas"]:
@@ -433,6 +460,73 @@ def fragment(s: dict) -> str:
             for x in s["errores"]]
     parts.append('<h2>Últimos avisos y errores del log</h2>' + _table(["Hora", "Nivel", "Origen", "Mensaje"], rows,
                                                                        "Sin avisos ni errores."))
+    return "\n".join(parts)
+
+
+def tokio_fragment(t: dict) -> str:
+    """El servidor de Tokio: si el agente de allá está vivo, sus cuentas, el relé y el canal de Upbit."""
+    ag, rele, age = t["agente"], t["rele"], t["agente_hace_s"]
+    if age is None:
+        status, text = "sin_datos", "Tokio: todavía no llegó ningún resumen del agente de allá"
+    elif age > TOKIO_STALE_S:
+        status, text = "caido", f"Tokio: sin noticias del agente hace {fmt_age(age)}"
+    elif ag.get("kill"):
+        status, text = "pausado", "Tokio: en pausa (KILL): no abre nada nuevo"
+    elif any(a.get("halt") for a in t["cuentas"]):
+        status, text = "halt", "Tokio: frenado por drawdown (HALT)"
+    else:
+        status, text = "ok", "Tokio: el agente de allá está funcionando"
+    src, news, peso, ia = ag.get("src") or [0, 0], ag.get("news") or [0, 0, 0], ag.get("peso") or [None, None], \
+        ag.get("ia") or [0, 0, 0]
+    sub = (f"último resumen hace {fmt_age(age)} · versión {e(str(ag.get('v', '?'))[:7])} · encendido hace "
+           f"{fmt_age(ag.get('up'))} · memoria {e(str(ag.get('mem') or '—'))} MB")
+    parts = [f'<h2>Servidor de Tokio (AWS)</h2><section class="status {e(status)}"><span class="icon">'
+             f'{STATUS_ICON.get(status, "?")}</span><div><strong>{e(text)}</strong><div class="muted">{sub}</div>'
+             f'</div></section>']
+    for a in t["cuentas"]:
+        real = a.get("tipo") == "real"
+        tiles = [tile("Retorno", f"{fmt_num(a.get('ret_pct'), 2, True)} %", e(TIPO_ES.get(a.get("tipo"), "")) + " · "
+                      + e(str(a.get("mercado", ""))))]
+        if not real:
+            gain = (a.get("eq") or 0) - (a.get("ini") or 0)
+            tiles += [tile("Equity (USDT)", fmt_num(a.get("eq")), f"de {fmt_num(a.get('ini'), 0)} iniciales",
+                           f"{_arrow(gain)} {fmt_num(gain, 2, True)}", _delta_cls(gain)),
+                      tile("PnL neto cerrado", _pnl(a.get("pnl"), 2), "")]
+        tiles += [tile("Operaciones cerradas", str(a.get("ops", 0)), ""),
+                  tile("Posiciones abiertas", str(a.get("n_pos", 0)), "HALT" if a.get("halt") else "")]
+        parts.append(f'<h3>{"💵 Dinero real" if real else "🧪 " + e(TIPO_ES.get(a.get("tipo"), ""))} en Tokio</h3>'
+                     f'<div class="tiles">{"".join(tiles)}</div>')
+        if a.get("pos"):
+            rows = []
+            for p in a["pos"]:                              # telemetry/remota.py POS_FIELDS
+                p = dict(zip(("s", "lado", "px", "stop", "nocional", "desde", "cat"), p, strict=False)) \
+                    if isinstance(p, list) else p
+                rows.append([e(str(p.get("s", ""))), e(str(p.get("lado", ""))), e(str(p.get("px") or "—")),
+                             e(str(p.get("stop") or "—")), e(str(p.get("nocional") or "—")),
+                             e(fmt_ts(p.get("desde"))), e(str(p.get("cat", "")))])
+            parts.append(_table(["Símbolo", "Lado", "Entrada", "Stop", "Nocional", "Desde", "Categoría"], rows, ""))
+    tg = rele.get("telegram") or {}
+    last = tg.get("ultimo") or {}
+    health = [
+        ["Relé", ("PC conectada" if rele.get("pc") else "sin la PC") + " · agente de Tokio "
+                 + ("conectado" if rele.get("agente") else "NO conectado")
+                 + f" · {rele.get('avisos', 0)} avisos repartidos · estado hace {fmt_age(t['rele_hace_s'])}"
+         if rele else "todavía no mandó su estado"],
+        ["Canal de Upbit (Telegram)", (f"conectado hace {fmt_age(tg.get('desde_s'))}" if tg.get("conectado") else
+                                       "DESCONECTADO" + (f" ({e(str(tg.get('error')))})" if tg.get("error") else ""))
+         + f" · {tg.get('avisos', 0)} avisos de trading · {tg.get('ignorados', 0)} de otro tipo"
+         + (f" · último: {e(str(last.get('titulo', ''))[:80])} ({last.get('demora_s')} s)" if last else "")],
+        ["Fuentes", f"{src[0]}/{src[1]} sanas · fallan: {e(', '.join(ag.get('fallan') or []) or 'ninguna')}"],
+        ["Noticias", f"{news[0]} aceptadas · {news[1]} duplicadas · {news[2]} viejas"],
+        ["Velocidad", f"lag del bucle p99 {e(str(ag.get('lag', '—')))} ms · peso de Binance "
+                      f"{e(str(peso[0] if peso[0] is not None else '—'))}/{e(str(peso[1] or '—'))} por minuto"],
+        ["IA hoy (Claude)", f"{fmt_num(ia[0] or 0, 4)} USD · {_n(ia[1] or 0, 'consulta')} · {_n(ia[2] or 0, 'falla')}"],
+    ]
+    parts.append(_table(["", ""], [[e(k), v] for k, v in health], ""))
+    rows = [[e(fmt_ts(x.get("recibido"))), e(str(x.get("tipo", ""))), e(str(x.get("texto", ""))[:300])]
+            for x in t["eventos"]]
+    parts.append('<h3>Últimas alertas de Tokio</h3>' + _table(["Hora", "Tipo", "Alerta"], rows,
+                                                               "Todavía ninguna."))
     return "\n".join(parts)
 
 
