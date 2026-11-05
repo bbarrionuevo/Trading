@@ -145,9 +145,9 @@ orden bajó de ~220 ms a ~30 ms. La SEC ya no se corta minutos. Los deslistados 
 5. **Upbit, fin del soporte:** 6 casos segundo a segundo, media ~+4 % con mucha dispersión (+19 % a −11 %). Seguir
    midiendo; con 15 casos, decidir. Las advertencias de Upbit no dan ventaja (n 13).
 
-**Relé de Tokio (5-nov, pedido del dueño, `docs/RELE-TOKIO.md`):** hecho el código (`relay/`: protocolo firmado,
-servidor, cliente en la PC) y el servicio para el servidor (`deploy/rele-tokio/`). Falta instalarlo: la llave SSH del
-servidor no está en la PC. Lo medido: el relé acelera lo que se sondea (Upbit, lista de Binance), no lo que Binance
+**Relé de Tokio (5-nov, pedido del dueño, `docs/RELE-TOKIO.md`):** instalado y andando (servicio `rele-tokio` en el
+servidor; túnel firmado PC↔Tokio probado: 288 ms de ida y vuelta). Upbit bloquea las IP de AWS (403): el relé lee la
+lista de anuncios de Binance como respaldo. Lo medido: el relé acelera lo que se sondea (Upbit, lista de Binance), no lo que Binance
 empuja; la IA de segunda lectura va en la PC; `batchOrders` con stop no existe más (−4120 en la demo); el mínimo de 5
 USDT no pide apalancamiento. Lo único que daría ~0,3 s en todo es operar desde Tokio (decisión del dueño, A-3).
 
