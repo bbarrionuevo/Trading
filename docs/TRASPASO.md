@@ -169,6 +169,7 @@ Siempre así: `cd $env:USERPROFILE\TRADING; .\.venv\Scripts\python -m tradingage
 | `armar-real` | Arma el dinero real en Binance con todo el saldo. **Solo lo corre el dueño:** pide la frase exacta (REGLAS A-2). `--exchange mexc` para MEXC |
 | `armar-real --simulacro --dias 7` | El simulacro local: el operador real con el libro real de Binance y órdenes simuladas en la PC, con 100 USDT de mentira (nunca el saldo real: se publica). `--capital N` para otro capital, `--demo` contra la demo de Binance, `--exchange mexc` en MEXC |
 | `informe-simulacro` | Calibración: llegada de las noticias por fuente, de la noticia a la entrada, acierto, ganancia neta por categoría, deslizamiento. `--cuenta practica|demo|real`, `--dias N` |
+| `informe-fiscal` | Registro fiscal (ARCA): operaciones, ganadas, volumen, comisiones y resultado neto por mes de Argentina. `--cuenta real` (por defecto), `--anio 2026`, `--csv archivo` para el contador. Solo en la PC |
 | `armar-real --desarmar` | No abre nada nuevo; lo abierto sale normal |
 | `cerrar-todo` | Emergencia: cancela órdenes y stops y cierra todo lo real en Binance (con tope de precio), y desarma. `--demo` en la demo; `--exchange mexc` en MEXC |
 | `mexc-real-check` | La prueba sin riesgo de MEXC (cuenta restringida desde el 4-nov) |
@@ -435,4 +436,5 @@ sección 11). Un estudio nuevo va con su línea acá.
 | 5-nov | Camino interno del agente | de un aviso a la orden: 220 → 30 ms (balde de fichas) | hecho (PR #49) | sección 9 |
 | 5-nov | Control de peso de la API de Binance | lee `X-MBX-USED-WEIGHT-1M`; > 80 %: lo no urgente espera | hecho | `marketdata/peso.py` |
 | 5-nov | Segunda lectura de la IA para las reglas sin IA | si no confirma el aviso, cierra la posición | hecho | `live.py` |
+| 5-nov | Registro fiscal (ARCA) | `informe-fiscal`: resultado y volumen por mes, CSV para el contador | hecho | `research/fiscal.py` |
 | 5-nov | **1.ª operación del simulacro** | Wendy's, resultados: entró a los 120 s, salió a los 30 min, −0,27 USDT (−0,5 %); su comunicado salió minutos antes del 8-K | normal (pierden ~35 %) | simulacro |

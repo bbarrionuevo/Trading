@@ -30,6 +30,7 @@ import json
 import os
 import sys
 from decimal import Decimal as D
+from pathlib import Path
 
 from . import __version__, config, paths
 
@@ -423,6 +424,21 @@ def cmd_informe_simulacro(args) -> int:
     return 0
 
 
+def cmd_informe_fiscal(args) -> int:
+    """Registro fiscal (ARCA): resultado y volumen operado por mes y por año de una cuenta (research/fiscal.py)."""
+    _setup("WARNING")
+    from .research.fiscal import ledger, render, to_csv
+    home = paths.home()
+    base = {"simulacro": home / "simulacro", "demo": home / "simulacro-demo", "practica": home / "paper-vivo",
+            "real": home / "real"}[args.cuenta] / "binance-futuros"
+    led = ledger(base, args.anio or None)
+    print(render(led, args.cuenta))
+    if args.csv:
+        to_csv(led, Path(args.csv))
+        print(f"Guardado en {args.csv}")
+    return 0
+
+
 def cmd_estudio_listados(args) -> int:
     """Estudio histórico: cómo movieron los listados de Binance a la moneda en MEXC (research/history.py)."""
     _setup("WARNING")
@@ -670,6 +686,10 @@ def main(argv=None) -> int:
     inf = sub.add_parser("informe-simulacro", help="calibración: velocidad, acierto y ganancia")
     inf.add_argument("--cuenta", choices=("simulacro", "demo", "practica", "real"), default="simulacro")
     inf.add_argument("--dias", type=float, default=0, help="solo los últimos N días (0 = todo)")
+    fi = sub.add_parser("informe-fiscal", help="registro fiscal: resultado y volumen por mes (ARCA)")
+    fi.add_argument("--cuenta", choices=("simulacro", "demo", "practica", "real"), default="real")
+    fi.add_argument("--anio", type=int, default=0, help="solo ese año (0 = todo)")
+    fi.add_argument("--csv", default="", help="además, guardarlo en este archivo CSV (para el contador)")
     es = sub.add_parser("estudio-listados")
     es.add_argument("--dias", type=int, default=180)
     es.add_argument("--exchange", choices=("binance", "bybit", "upbit"), default="binance",
@@ -693,7 +713,8 @@ def main(argv=None) -> int:
                 "supervisar": cmd_supervisar, "tablero": cmd_tablero, "mexc-real-check": cmd_mexc_real_check,
                 "binance-real-check": cmd_binance_real_check,
                 "armar-real": cmd_armar_real, "cerrar-todo": cmd_cerrar_todo,
-                "estudio-listados": cmd_estudio_listados, "informe-simulacro": cmd_informe_simulacro}
+                "estudio-listados": cmd_estudio_listados, "informe-simulacro": cmd_informe_simulacro,
+                "informe-fiscal": cmd_informe_fiscal}
     if args.cmd not in handlers:
         ap.print_help()
         return 2

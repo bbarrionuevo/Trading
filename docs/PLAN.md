@@ -139,8 +139,9 @@ orden bajó de ~220 ms a ~30 ms. La SEC ya no se corta minutos. Los deslistados 
 3. ✅ **Segunda lectura de la IA en paralelo** (5-nov, `LiveTrader._ai_second_read`): después de entrar por un
    deslistado o una etiqueta de vigilancia (sin esperar a la IA), la IA lee el aviso; si dice que no es negativo
    para esa moneda, se cierra la posición (`la_ia_no_confirma`). Sin respuesta de la IA, queda lo medido.
-4. **Registro fiscal** (primer informe, ARCA): resultado y volumen operado por mes y por año, para cuando haya dinero
-   real.
+4. ✅ **Registro fiscal** (5-nov, `python -m tradingagent informe-fiscal --cuenta real --anio 2026 [--csv archivo]`,
+   `research/fiscal.py`): operaciones, ganadas, volumen operado, comisiones y resultado neto por mes de Argentina.
+   Queda en la PC (nunca se publica).
 5. **Upbit, fin del soporte:** 6 casos segundo a segundo, media ~+4 % con mucha dispersión (+19 % a −11 %). Seguir
    midiendo; con 15 casos, decidir. Las advertencias de Upbit no dan ventaja (n 13).
 
