@@ -132,6 +132,28 @@ segundos +0,1 %; salida: la última antes del plazo; 0,2 % de costos. Sin stop.
   menos que el del 4-nov (spot de 1 s como sustituto, otros avisos, con stop de 10 %). Al segundo hubo una operación
   rara (un precio 77 veces el anterior) que ensucia la media de ese renglón: la mediana no la mira.
 
+### ¿Al instante o esperando a la IA? (5-nov, pedido del dueño)
+
+`estudios/upbit_ia_o_rapido.py`, con las mismas ventanas y las demoras medidas desde Tokio (Telegram 0-2 s después
+del sitio, mediana 1 s; del aviso a la orden ~0,05 s; la IA 1,3-2,5 s). Las dos variantes con la salida de la regla
+(stop fijo de 10 %, 15 min), deslizamiento y costos:
+
+| Telegram a 1 s del sitio | Mediana | Media | Positivas | 100 USDT después de los 31 (1 % al stop) | con 3 % al stop |
+|---|---|---|---|---|---|
+| **A · al instante** (entra a 1,05 s) | **+9,16 %** | **+12,43 %** | 71 % | **145,8** (peor caída 1,0 %) | **296,6** (3,1 %) |
+| B · esperando a la IA (1,8 s: entra a 2,85 s) | +1,46 % | +5,76 % | 55 % | 119,0 (2,3 %) | 164,7 (6,8 %) |
+
+- Con Telegram a 2 s, A da mediana +1,20 % y media +6,28 %; B, −1,52 % y +3,83 %. A gana en todos los casos.
+- **Falsos positivos: ninguno** en los 31. Las reglas de título de Upbit son exactas, así que la IA no filtra nada:
+  solo agrega demora. El riesgo real de un falso positivo es otro: un ticker de Upbit que en Binance es otra moneda
+  (en los 31, todos los perpetuos subieron con el aviso). La IA tampoco puede verlo solo con el título.
+- **Más tamaño "con certeza"** (B con 3 % al stop) rinde menos que A con 1 %. **Apalancamiento:** no hace falta. Con el
+  stop de 10 %, arriesgar el 3 % del sobre ya es una posición de 0,3 veces el saldo.
+- Con la evidencia en vivo, el paso que sigue es subir A de 1 % a 3 % al stop, dentro del sobre aprobado. Cambia la
+  excepción de REGLAS C-4, así que lo decide el dueño, después de unos listados reales en el simulacro de Tokio. La
+  prueba A/B en vivo queda en `variante-ia.jsonl`: en cada entrada al instante, cuánto tardó la IA y el precio al que
+  se habría entrado esperándola.
+
 ### Binance: la copia del CDN demoraba ~60 s
 
 Medido en la PC el 4-nov: la lista de anuncios de Binance la sirve CloudFront con una copia que dura ~120 s (la
