@@ -104,6 +104,7 @@ del dueño.
      por el dueño el 4-nov: calibración con Upbit en Binance; el stop que seguía al precio a 5 % perdía); tope de
      precio de 50 bps; exento de "ya recorrió el objetivo" (`DRIFT`).
    - **macro:** solo con menos de 90 s.
+   - **Cada estrategia se juzga sola** (F-3, `LiveTrader.refresh_verdicts`, cada 10 min): con 30 o más operaciones cerradas de una categoría y DSR < 0,80, deja de abrir esa categoría (`categoria_descartada_por_resultados`) y avisa una vez por Telegram. Vale también para las que no pasan por la IA.
    - **deslistado_corto** (`decision/delistings.py`): apenas llega por el canal oficial un aviso "Binance Will
      Delist ...", corto en el perpetuo de cada moneda si el precio todavía no cayó más de 4 % desde el minuto del
      aviso; **stop FIJO de 20 % y salida a las 4 h**, arriesgando 2 % (0,10 veces el saldo). Sin IA (C-4 y A-5,

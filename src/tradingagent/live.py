@@ -35,7 +35,7 @@ from .intelligence.meta import MetaModel
 from .marketdata.providers import MarketDataError
 from .marketdata.universe import CRYPTO
 from .research import assets as asset_mod
-from .research import learn, shadow
+from .research import evaluation, learn, shadow
 from .research.labeler import MIN, minute
 
 log = logging.getLogger("tradingagent.live")
@@ -80,6 +80,8 @@ class LiveTrader:
         self._ciks: dict | None = None                               # CIK de la SEC → tickers (una vez por día)
         self._ciks_at = float("-inf")
         self.pending: set[asyncio.Task] = set()                      # resultados esperando su minuto 2
+        self.discarded: frozenset = frozenset()                      # estrategias descartadas por sus resultados
+        self._verdict_at = float("-inf")
 
     # -- arranque y estado ------------------------------------------------------------------------------
     async def start(self) -> None:
@@ -143,9 +145,24 @@ class LiveTrader:
 
     def run(self) -> _LiveRun:
         store = self.market.candle_store(self.session)
-        return _LiveRun(self.market, self.st, self.pf, self.registry, self.service, self.books, store, self.clock,
-                        self.limits, self, self.clock.time(), self.cfg, MetaModel(self.learned().get("meta")),
-                        self.session)
+        run = _LiveRun(self.market, self.st, self.pf, self.registry, self.service, self.books, store, self.clock,
+                       self.limits, self, self.clock.time(), self.cfg, MetaModel(self.learned().get("meta")),
+                       self.session)
+        run.discarded = self.discarded
+        return run
+
+    async def refresh_verdicts(self) -> None:
+        """Cada estrategia (categoría) con sus propias operaciones cerradas: con 30 o más y DSR < 0,80 deja de abrir
+        operaciones (F-3), y se avisa una vez. Corre con la limpieza, como mucho cada 10 minutos."""
+        self._verdict_at = self.clock.time()
+        trades = await asyncio.to_thread(shadow._all_trades, self.base)
+        cats = evaluation.by_version(trades, key="category")
+        new = frozenset(c for c, v in cats.items() if v["veredicto"] == "descartar")
+        for c in sorted(new - self.discarded):
+            await self.send_alert(system_alert(
+                f"📉 La estrategia «{c}» viene dando mal resultado ({cats[c]['n']} operaciones, DSR "
+                f"{cats[c]['dsr']}): dejo de abrir operaciones con ella. Lo abierto sale normal.", silent=False))
+        self.discarded = new
 
     async def send_alert(self, alert) -> None:                    # _Run avisa con esto: nunca bloquea
         if self.alerts is not None:
@@ -548,6 +565,8 @@ class LiveTrader:
     async def housekeeping(self) -> None:
         """Saldo real, spreads (z-score), frenos con el equity marcado, funding y estado guardado."""
         await self.refresh_universe()                                  # de la caché salvo cada 6 h
+        if self.clock.time() - self._verdict_at >= 600:
+            await self.refresh_verdicts()
         async with self.lock:
             await self.reconcile()
             await self.sync_capital()
