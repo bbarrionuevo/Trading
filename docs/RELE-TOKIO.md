@@ -51,8 +51,11 @@ dueño. Mientras tanto, el relé no tiene ninguna clave.
 
 ## Instalación
 
-- En el servidor: `deploy/rele-tokio/instalar.sh` (Python, chrony para la hora, el repo, el servicio `rele-tokio` de
-  systemd que se reinicia solo). La clave `/home/ubuntu/relay.key` la copia la PC por `scp`.
-- En la PC: `RELAY_HOST=176.32.87.26` en el `.env` y la misma clave en `TRADING_HOME/relay.key`. Con eso el agente
-  arranca el cliente (latido cada 10 s) y el latido muestra `relay.tokio` como fuente.
-- Falta la llave SSH del servidor (`C:\Users\Brian\.ssh\lightsail-tokio.pem` no está en la PC).
+- En el servidor (Ubuntu 22.04, 2 núcleos, 416 MB): `bash deploy/rele-tokio/instalar.sh [rama]` (Python 3.11, el
+  repo, el servicio `rele-tokio` de systemd que se reinicia solo; la hora la sincroniza el NTP de Ubuntu). La clave
+  `/home/ubuntu/relay.key` la copia la PC por `scp`. Logs: `journalctl -u rele-tokio -f`.
+- En la PC: `TRADING_HOME/relay.json` (`{"host": "<IP de Tokio>", "port": 50005}`, fuera del repo) y la misma
+  clave en `TRADING_HOME/relay.key`. Con eso el agente arranca el cliente (latido cada 10 s). Llave SSH del
+  servidor: `C:\Users\Brian\.ssh\lightsail-tokio.pem` (autorizada el 5-nov).
+- Medido desde Tokio (pedido completo con conexión nueva): Binance Futures 48 ms, Upbit 57 ms, lista de anuncios de
+  Binance 51 ms, Anthropic 220 ms (está en EE. UU.).

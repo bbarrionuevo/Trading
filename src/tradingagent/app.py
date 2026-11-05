@@ -265,16 +265,18 @@ class Agent:
                                                max_age_s=safety.news_max_age(float(o.get("max_age_s") or 600), lim))]
 
     def _build_relay(self) -> list:
-        """Relé de Tokio (relay/client.py): con RELAY_HOST en el .env y la clave en TRADING_HOME/relay.key."""
+        """Relé de Tokio (relay/client.py): la dirección en TRADING_HOME/relay.json ({"host": ..., "port": 50005}) o en
+        RELAY_HOST/RELAY_PORT, y la clave en TRADING_HOME/relay.key. Sin las dos cosas, queda apagado."""
         from .relay import client, protocol
-        host = self.env.get("RELAY_HOST")
+        conf = paths.read_json(paths.home() / "relay.json", None) or {}
+        host = self.env.get("RELAY_HOST") or conf.get("host")
         key_file = paths.home() / "relay.key"
         if not host:
             return []
         if not key_file.exists():
             self.sources_off[client.SOURCE_ID] = "falta TRADING_HOME/relay.key"
             return []
-        port = int(self.env.get("RELAY_PORT") or 50005)
+        port = int(self.env.get("RELAY_PORT") or conf.get("port") or 50005)
         return [client.RelayClient(host, port, protocol.load_key(key_file), self.ingestion.handle, self.clock)]
 
     def _build_trader(self, session, lim):
