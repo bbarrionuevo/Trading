@@ -15,6 +15,7 @@ pero reaccionando a cada noticia en el momento en que llega y vigilando las barr
 Todo es paper: no existe código de órdenes reales (REGLAS A-2, A-3).
 """
 import asyncio
+import json
 import logging
 import os
 import time
@@ -480,9 +481,13 @@ class LiveTrader:
         respuesta, queda lo medido."""
         try:
             expected = expected or delistings.signal(coin, category)
+            asked = time.perf_counter()
             res = await self.llm.classify(ing.item.title, ing.item.body, expected)
             ai = res.signal
-            if ai is None or (ai.polarity * expected.polarity > 0 and coin in ai.assets):
+            confirmed = ai is not None and ai.polarity * expected.polarity > 0 and coin in ai.assets
+            await self._ai_variant(ing, sym, category, time.perf_counter() - asked, confirmed, ai is not None,
+                                   expected.polarity)
+            if ai is None or confirmed:
                 return
             async with self.lock:
                 if sym not in self.st["positions"]:
@@ -494,6 +499,31 @@ class LiveTrader:
                         coin, ai.category, ai.polarity, ",".join(ai.assets))
         except Exception:                                              # una falla no tira al operador
             log.exception("falló la segunda lectura de la IA (%s)", coin)
+
+    async def _ai_variant(self, ing, sym: str, category: str, ai_s: float, confirmed: bool, answered: bool,
+                          polarity: float) -> None:
+        """La prueba A/B que pidió el dueño (5-nov): ¿y si se esperaba a la IA? Al llegar su respuesta se anota cuánto
+        tardó y el precio al que se habría entrado ahí (`variante-ia.jsonl`, al lado de las operaciones). La entrada al
+        instante (A) es la operación real; la de la IA (B) se compara con su misma salida: retorno de B ≈ (salida de A /
+        precio de B) − 1, solo si la IA confirmó (`estudios/upbit_ia_o_rapido.py` lo midió con los 31 listados)."""
+        try:
+            book = await self._book_or_none(sym)
+            pos = self.st["positions"].get(sym) or {}
+            px = None if book is None else (book.best_ask if polarity > 0 else book.best_bid)
+            row = {"ts": round(self.clock.time(), 3), "symbol": sym, "categoria": category, "evento": ing.item.id,
+                   "publicado": ing.item.published_at, "ia_s": round(ai_s, 3), "contesto": answered,
+                   "confirma": confirmed, "entrada_al_instante": pos.get("avg_price"),
+                   "precio_con_la_ia": None if px is None else str(px)}
+            path = self.base / "variante-ia.jsonl"
+
+            def write():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with path.open("a", encoding="utf-8") as f:
+                    f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+            await asyncio.to_thread(write)
+        except Exception:                                              # la medición nunca frena al operador
+            log.warning("no pude anotar la variante con la IA (%s)", sym, exc_info=True)
 
     async def check_launches(self) -> None:
         """Perpetuos de cripto nuevos de Binance (decision/launches.py): cada uno se decide a los 15 minutos."""

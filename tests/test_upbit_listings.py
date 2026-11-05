@@ -148,3 +148,7 @@ async def test_si_la_ia_confirma_el_listado_queda_abierto(tmp_path):
         await t.on_news(notice("u5"))
         await settle(t)
         assert t.st["positions"]["SOLUSDT"]["category"] == "listado_upbit"
+    ab = [json.loads(x) for x in (tmp_path / "home" / "paper-vivo" / "binance-futuros" / "variante-ia.jsonl")
+          .read_text(encoding="utf-8").splitlines()]                     # la prueba A/B: ¿y si se esperaba a la IA?
+    assert ab[0]["confirma"] is True and ab[0]["contesto"] is True and ab[0]["symbol"] == "SOLUSDT"
+    assert float(ab[0]["precio_con_la_ia"]) > 0 and ab[0]["entrada_al_instante"] and ab[0]["ia_s"] >= 0
