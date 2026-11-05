@@ -49,6 +49,7 @@ class FakeBinance:
         self.dual = False
         self.multi_assets = False
         self.locked = False
+        self.onboard: dict[str, int] = {}                          # contrato → inicio (ms) en el catálogo
         self.throttle = 0                         # cuántos pedidos responder con 429
         self.swap_sides = False                   # el exchange "entiende" el otro lado
         self.orders: dict[str, dict] = {}
@@ -283,6 +284,7 @@ class FakeBinance:
         return {"symbol": sym, "pair": sym, "contractType": ctype, "status": "TRADING", "baseAsset": base,
                 "quoteAsset": "USDT", "marginAsset": "USDT", "maintMarginPercent": "2.5000",
                 "requiredMarginPercent": "5.0000", "underlyingType": under,
+                "onboardDate": self.onboard.get(sym, 1569888000000),
                 "underlyingSubType": ["TradFi"] if ctype == "TRADIFI_PERPETUAL" else ["Crypto"],
                 "filters": [{"filterType": "PRICE_FILTER", "tickSize": tick, "minPrice": tick, "maxPrice": "1000000"},
                             {"filterType": "LOT_SIZE", "stepSize": step, "minQty": min_qty, "maxQty": "1000000"},

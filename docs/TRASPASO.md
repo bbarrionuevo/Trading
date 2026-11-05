@@ -103,6 +103,10 @@ del dueño.
      por el dueño el 4-nov: calibración con Upbit en Binance; el stop que seguía al precio a 5 % perdía); tope de
      precio de 50 bps; exento de "ya recorrió el objetivo" (`DRIFT`).
    - **macro:** solo con menos de 90 s.
+   - **lanzamiento_corto** (`decision/launches.py`): el operador mira el catálogo de Binance cada minuto; a los 15
+     min del inicio de un perpetuo de cripto nuevo, si el precio quedó en o debajo del primero, corto con **stop
+     FIJO de 30 % y salida a las 72 h**, arriesgando 2 % (0,065 veces el saldo). Sin IA (C-4 y A-5, excepción
+     medida, `docs/ESTUDIO-LANZAMIENTOS.md`). Con pocas velas, σ se mide con 10 retornos (solo para costos).
    - **resultados_impulso** (`decision/earnings.py`): solo entre los minutos 2 y 4 del 8-K de resultados y si el
      perpetuo TradFi ya se movió ≥ 0,5 % en esa dirección; **stop FIJO de 5 % y salida a los 30 min**, sin objetivo;
      exento de "ya recorrió el objetivo" (`DRIFT`). Sin IA: la dirección la da el precio (C-4 y A-5, excepción
@@ -110,6 +114,12 @@ del dueño.
 8. **Riesgo** (`decision/risk.py`, `config/limits.yaml`).
    - **3 % del saldo por operación al stop** (el dueño, 4-nov; antes 1 %); 40 % por posición; 80 % bruto; 30 % neto;
      3 posiciones; 1x. Con el stop de 10 % de los listados, la posición es ~30 % del saldo (el tope neto).
+   - **Tope por estrategia** (`ExitProfile.max_x`, veces el saldo, `docs/ESTUDIO-APALANCAMIENTO.md`): resultados
+     0,6 (con su stop de 5 % arriesga el 3 %); listados 0,3; sin estudio propio 0,3. El sobre manda por encima: con
+     el de antes (neta 30 %) quedaban en 0,3. **Sobre del PR `claude/operar-mas`** (protegido): posición ≤ 60 %,
+     bruto ≤ 100 %, neto ≤ 60 %, 4 posiciones, **1x**; el riesgo por operación y los frenos no cambian. **El
+     apalancamiento es consecuencia de un stop cercano, nunca un objetivo**; hoy ninguna estrategia lo necesita y
+     con 2x la liquidación quedaría demasiado cerca del stop de 30 % de los lanzamientos.
    - Con 3 %, un stop completo pasa el freno del día (no abre hasta la noche) y tres pérdidas seguidas llegan al
      halt del 8 % (vuelve con rearme del dueño). Simulación de la calibración: mes típico +8 %, mes malo −3 %,
      caída máxima típica en un año ~10 % (`docs/ESTUDIO-LISTADOS.md`).
@@ -227,6 +237,18 @@ dueño qué hiciste y por qué.
   - con stop que sigue al precio a 5 %: +12,7 % por operación (contra +4,9 % con objetivo fijo);
   - **entrando a los 5 minutos, todo pierde**: llegar primero es todo.
 - **Lanzamientos de futuros de Binance** (n = 9): saltan y se devuelven. No se operan.
+- **Perpetuos nuevos** (4-nov, `docs/ESTUDIO-LANZAMIENTOS.md`, 521 desde 2023 con funding y costos): largo
+  pierde siempre; corto a todos rinde poco (+1,1 % de media a las 72 h con stop de 30 %); **los que a los 15 min ya
+  bajaban: n = 250, mediana +7,4 %, media +4,2 %, 62 % positivas** (2023 −0,6 %, 2024 +3,1 %, 2025 +7,5 %, 2026
+  +2,4 %); los que subieron más de 30 % siguen subiendo.
+- **Tamaño** (4-nov, `docs/ESTUDIO-APALANCAMIENTO.md`, las 60 operaciones de resultados): 0,3 veces el saldo da
+  mediana +32 % al año (remuestreado); 0,6 (el 3 % aprobado) +73 % con 9 % de años con caída ≥ 8 %; 1x o más pasa
+  el freno de 8 % casi siempre y arriesga 5 a 15 % por operación. Kelly da 11 a 15 veces: no se usa (muestra chica).
+- **Tendencia** (4-nov, `docs/ESTUDIO-TENDENCIA.md`, 114 perpetuos incluidos los cerrados, 2020-2026, con costos y
+  funding): 20 a 60 días, diversificada en todo lo líquido y a volatilidad de 20 %, gana en 2020-2022 y en 2023+
+  (30 días: +32 % y +16 % por año, caída −11 % y −24 %); concentrada en 3 a 10 contratos pierde o casi no gana;
+  "momentum entre activos" no funciona. Necesita ~1.000 a 2.000 USDT (35 a 90 posiciones sobre el mínimo de
+  Binance) y un presupuesto de caída propio (sus caídas pasan el 8 %). Los estudios se repiten con `estudios/`.
 - **Resultados de empresas en los TradFi de Binance** (4-nov, `docs/ESTUDIO-RESULTADOS.md`, 88 resultados de 36
   empresas): el perpetuo reacciona despacio (~16 % del movimiento de la hora en el primer minuto). Entrando a los 2
   minutos detrás del movimiento (≥ 0,5 %), stop de 5 % y salida a los 30 min: mediana +1,01 %, media +1,17 % neto de
@@ -300,8 +322,14 @@ dueño qué hiciste y por qué.
    cada noticia la lectura de la IA cuando la hubo y aprender con esa.
 10. **La etiqueta del meta-modelo** (triple barrera del etiquetador) expira a los 60 min, y el prior supone un
     paseo sin vencimiento (1/3 con α = 0). Con entradas reales, revisar si hay que calibrar el prior.
-11. **Tareas programadas:** las de la nube no ven la PC ni tienen conector de GitHub. Una vigilancia programada en
-    la app de la PC sí ve todo (la decide el dueño).
+11. **Tareas programadas:** las de la nube no ven la PC ni tienen conector de GitHub. Hecho el 4-nov: la vigilancia
+    del simulacro corre cada 3 h (8 a 23 h) desde la app de la PC.
+12. **Tendencia diversificada** (`docs/ESTUDIO-TENDENCIA.md`): es la estrategia de los fondos CTA y gana fuera de
+    muestra, pero necesita ~1.000 a 2.000 USDT y un presupuesto de caída propio (sus caídas pasan el 8 %). Cuando el
+    capital lo permita, programarla con ajuste semanal y su propio freno (lo decide el dueño).
+13. **Órdenes maker** (0,02 % en vez de 0,05 % de comisión) para lo que no tiene apuro (salidas por tiempo).
+14. **Más velocidad, con costo (lo decide el dueño):** titulares de resultados con "supera / no alcanza lo esperado"
+    en segundos (Benzinga por Alpaca: cuenta propia del dueño) y un servidor cerca de Binance (Tokio) en vez de la PC.
 
 ## 11. Detalles que muerden (Windows y MEXC)
 

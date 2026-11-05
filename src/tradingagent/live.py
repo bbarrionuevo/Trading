@@ -23,7 +23,7 @@ from pathlib import Path
 from . import paths
 from .alerts.model import asset_es, circuit_breaker_alert, daily_alert, system_alert, usdt_es
 from .core.bus import EventBus
-from .decision import earnings
+from .decision import earnings, launches
 from .decision.policy import PolicyConfig, assess, news_blocks
 from .decision.risk import RiskState
 from .execution.paper import PaperConfig, PaperVenue
@@ -39,6 +39,7 @@ from .research.labeler import MIN, minute
 
 log = logging.getLogger("tradingagent.live")
 WATCH_S, HOUSEKEEP_S, LEARN_EVERY_S = 1.0, 30.0, 900.0
+LAUNCH_POLL_S = 60.0                      # catálogo de Binance: contratos nuevos (peso 1 por pedido)
 # La caché del universo dura 6 h. Releerla en cada vuelta (30 s, por cuenta) costaba ~17 ms del bucle (leer 140 KB
 # y registrar ~1.000 tickers, medido en la PC el 3-nov) y dejó 1.538 líneas iguales en el log en un día.
 UNIVERSE_EVERY_S = 600.0
@@ -334,6 +335,60 @@ class LiveTrader:
         except Exception:                                              # una falla no tira al operador
             log.exception("falló la entrada por resultados (CIK %s)", cik)
 
+    async def check_launches(self) -> None:
+        """Perpetuos de cripto nuevos de Binance (decision/launches.py): cada uno se decide a los 15 minutos."""
+        if getattr(self.market, "name", "") != "binance-futuros" or not hasattr(self, "st"):
+            return
+        from .marketdata import binance_futures as bfd
+        try:
+            cat = await bfd.catalog(self.session, base=self.market.base)
+        except MarketDataError:
+            return
+        now = self.clock.time()
+        seen = self.st.setdefault("lanzamientos", {})
+        for sym in [s for s, t in seen.items() if now - t > 86_400]:      # se olvidan al día
+            del seen[sym]
+        for sym, t0 in launches.new_contracts(cat, now, seen):
+            seen[sym] = t0
+            task = asyncio.create_task(self._launch(sym, t0), name=f"lanzamiento-{sym}")
+            self.pending.add(task)
+            task.add_done_callback(self.pending.discard)
+
+    async def _launch(self, sym: str, t0: float) -> None:
+        """Corto a los 15 minutos del inicio si el precio quedó en o debajo del primero (decision/launches.py)."""
+        try:
+            wait = t0 + launches.ENTRY_DELAY_S - self.clock.time()
+            if wait > 0:
+                await asyncio.sleep(wait)
+            async with self.lock:
+                run = self.run()
+                now, asset = run.now, sym[:-4]
+                ev, sig = launches.event(sym, t0, now), launches.signal(asset)
+                late = now - t0
+                if late > launches.MAX_LATE_S:
+                    run.record(ev, sig, sym, "no_entrar", [f"lanzamiento_tarde:{late:.0f}s"])
+                    await self.save(run)
+                    return
+                self.registry = await self.market.instruments(self.session, [sym], self.st["instruments"], now)
+                run.reg = self.registry
+                self.venue.registry = self.registry
+                await run.store.load({sym: [(minute(t0), minute(now))]})
+                first = (run.store.candles.get(sym) or {}).get(minute(t0))     # la primera vela: (o, h, l, c)
+                try:
+                    book = await self.books.book(sym)
+                except MarketDataError:
+                    book = None
+                if not first or book is None or book.mid is None:
+                    run.record(ev, sig, sym, "no_entrar", ["sin_datos:primer_precio_o_libro"])
+                elif (rise := float(book.mid) / float(first[0]) - 1) > launches.MAX_RISE:
+                    run.record(ev, sig, sym, "no_entrar", [f"no_bajo:{rise * 100:+.2f}%"])
+                else:
+                    await run.enter(ev, sig, asset, self.risk_blocks(run),
+                                    assessment=launches.assessment(asset, late))
+                await self.save(run)
+        except Exception:                                              # una falla no tira al operador
+            log.exception("falló la entrada por lanzamiento (%s)", sym)
+
     def risk_blocks(self, run: _LiveRun) -> list:
         equity = float(run.equity())
         run.risk.roll(run.now, equity)                                 # día o semana nuevos: se rearman solos
@@ -516,13 +571,16 @@ class LiveTrader:
             total_closed=self.st["stats"]["operaciones"], llm=llm, calib=calib))
 
     async def watch(self, stop: asyncio.Event) -> None:
-        last_house = 0.0
+        last_house = last_launch = 0.0
         while not stop.is_set():
             try:
                 await self.watch_once()
                 if time.monotonic() - last_house >= HOUSEKEEP_S:
                     last_house = time.monotonic()
                     await self.housekeeping()
+                if time.monotonic() - last_launch >= LAUNCH_POLL_S:
+                    last_launch = time.monotonic()
+                    await self.check_launches()
             except Exception:                                          # la vigilancia no se cae nunca
                 log.exception("falló una vuelta de vigilancia")
             try:

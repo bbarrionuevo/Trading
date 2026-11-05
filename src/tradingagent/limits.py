@@ -18,13 +18,13 @@ BASELINE = {
     # Lo que acota el riesgo son los porcentajes de abajo, que crecen o se achican con ese saldo.
     ("capital", "todo_el_saldo"): ("eq", True),
     ("per_trade", "max_risk_pct"): ("max", 3.0),          # el dueño, 4-nov-2026 (antes 1,0)
-    ("per_trade", "max_position_pct"): ("max", 40),
+    ("per_trade", "max_position_pct"): ("max", 60),       # el dueño, 4-nov-2026 (antes 40)
     ("per_trade", "max_leverage"): ("max", 1),
     ("per_trade", "max_slippage_bps"): ("max", 50),
     ("per_trade", "require_stop"): ("eq", True),
-    ("portfolio", "max_gross_exposure_pct"): ("max", 80),
-    ("portfolio", "max_net_exposure_pct"): ("max", 30),
-    ("portfolio", "max_positions"): ("max", 3),
+    ("portfolio", "max_gross_exposure_pct"): ("max", 100),  # el dueño, 4-nov-2026 (antes 80)
+    ("portfolio", "max_net_exposure_pct"): ("max", 60),   # el dueño, 4-nov-2026 (antes 30)
+    ("portfolio", "max_positions"): ("max", 4),           # el dueño, 4-nov-2026 (antes 3)
     ("loss", "daily_pct"): ("max", 2.0),
     ("loss", "weekly_pct"): ("max", 4.0),
     ("loss", "max_drawdown_pct"): ("max", 8.0),

@@ -9,14 +9,16 @@ capital:
 per_trade:
   max_risk_pct: 3.0             # pérdida al stop ≤ 3% del equity (el dueño, 4-nov-2026, con la simulación de la
                                 # calibración: mes típico +8 %, caída máxima típica en un año ~10 %; antes 1 %)
-  max_position_pct: 40          # nocional por activo ≤ 40% del equity
+  max_position_pct: 60          # nocional por activo ≤ 60% del equity (4-nov-2026: los resultados arriesgan el 3 %
+                                # al stop de 5 %; cada estrategia tiene además su tope medido, policy.EXITS)
   max_leverage: 1               # sin apalancamiento (los perpetuos 1x permiten corto)
   max_slippage_bps: 50          # tope de precio de toda orden: nunca a mercado sin tope
   require_stop: true            # ninguna posición sin stop-loss
 portfolio:
-  max_gross_exposure_pct: 80    # suma de nocionales ≤ 80% del equity
-  max_net_exposure_pct: 30      # |largos − cortos| ≤ 30% del equity (informe: cartera casi neutral al mercado)
-  max_positions: 3
+  max_gross_exposure_pct: 100   # suma de nocionales ≤ 100% del equity (1x: sin margen prestado)
+  max_net_exposure_pct: 60      # |largos − cortos| ≤ 60% del equity (operaciones de minutos a días: el riesgo lo
+                                # acota el stop de cada una, docs/ESTUDIO-APALANCAMIENTO.md)
+  max_positions: 4
 loss:
   daily_pct: 2.0                # circuit breaker: no abre más hasta 00:00 UTC
   weekly_pct: 4.0
