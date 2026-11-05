@@ -73,13 +73,14 @@ def verdict(value: float | None, n: int, min_n: int = 30) -> str:
     return "en_evaluacion"
 
 
-def by_version(trades: list[dict], min_n: int = 30) -> dict[str, dict]:
-    """Evidencia por versión de estrategia (`strategy_tag`, REGLAS C-5) con el DSR corregido por la cantidad
-    de versiones probadas y la dispersión de sus Sharpe."""
+def by_version(trades: list[dict], min_n: int = 30, key: str = "strategy_tag") -> dict[str, dict]:
+    """Evidencia por versión de estrategia (`strategy_tag`, REGLAS C-5) o por lo que diga `key` (por ejemplo
+    "category": cada estrategia por separado), con el DSR corregido por la cantidad de versiones probadas y la
+    dispersión de sus Sharpe."""
     rets: dict[str, list[float]] = {}
     for t in trades:
         if t.get("tipo") == "salida" and t.get("notional_entrada"):
-            rets.setdefault(t.get("strategy_tag", "?"), []).append(float(t["pnl_neto"]) / float(t["notional_entrada"]))
+            rets.setdefault(t.get(key, "?"), []).append(float(t["pnl_neto"]) / float(t["notional_entrada"]))
     srs = [s for s in (sharpe(r) for r in rets.values()) if s is not None]
     n_trials = max(1, len(rets))
     var_sr = (sum((s - sum(srs) / len(srs)) ** 2 for s in srs) / (len(srs) - 1)) if len(srs) > 1 else 0.0

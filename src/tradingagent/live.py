@@ -35,7 +35,7 @@ from .intelligence.meta import MetaModel
 from .marketdata.providers import MarketDataError
 from .marketdata.universe import CRYPTO
 from .research import assets as asset_mod
-from .research import learn, shadow
+from .research import evaluation, learn, shadow
 from .research.labeler import MIN, minute
 
 log = logging.getLogger("tradingagent.live")
@@ -80,6 +80,8 @@ class LiveTrader:
         self._ciks: dict | None = None                               # CIK de la SEC → tickers (una vez por día)
         self._ciks_at = float("-inf")
         self.pending: set[asyncio.Task] = set()                      # resultados esperando su minuto 2
+        self.discarded: frozenset = frozenset()                      # estrategias descartadas por sus resultados
+        self._verdict_at = float("-inf")
 
     # -- arranque y estado ------------------------------------------------------------------------------
     async def start(self) -> None:
@@ -143,9 +145,24 @@ class LiveTrader:
 
     def run(self) -> _LiveRun:
         store = self.market.candle_store(self.session)
-        return _LiveRun(self.market, self.st, self.pf, self.registry, self.service, self.books, store, self.clock,
-                        self.limits, self, self.clock.time(), self.cfg, MetaModel(self.learned().get("meta")),
-                        self.session)
+        run = _LiveRun(self.market, self.st, self.pf, self.registry, self.service, self.books, store, self.clock,
+                       self.limits, self, self.clock.time(), self.cfg, MetaModel(self.learned().get("meta")),
+                       self.session)
+        run.discarded = self.discarded
+        return run
+
+    async def refresh_verdicts(self) -> None:
+        """Cada estrategia (categoría) con sus propias operaciones cerradas: con 30 o más y DSR < 0,80 deja de abrir
+        operaciones (F-3), y se avisa una vez. Corre con la limpieza, como mucho cada 10 minutos."""
+        self._verdict_at = self.clock.time()
+        trades = await asyncio.to_thread(shadow._all_trades, self.base)
+        cats = evaluation.by_version(trades, key="category")
+        new = frozenset(c for c, v in cats.items() if v["veredicto"] == "descartar")
+        for c in sorted(new - self.discarded):
+            await self.send_alert(system_alert(
+                f"📉 La estrategia «{c}» viene dando mal resultado ({cats[c]['n']} operaciones, DSR "
+                f"{cats[c]['dsr']}): dejo de abrir operaciones con ella. Lo abierto sale normal.", silent=False))
+        self.discarded = new
 
     async def send_alert(self, alert) -> None:                    # _Run avisa con esto: nunca bloquea
         if self.alerts is not None:
@@ -344,6 +361,12 @@ class LiveTrader:
         except Exception:                                              # una falla no tira al operador
             log.exception("falló la entrada por resultados (CIK %s)", cik)
 
+    async def _book_or_none(self, sym: str):
+        try:
+            return await self.books.book(sym)
+        except MarketDataError:
+            return None
+
     async def _delisting(self, ing, coin: str) -> None:
         """Corto apenas llega el aviso de deslistado de Binance, si el precio todavía no cayó (decision/delistings.py):
         si ya cayó más de 4 % desde el aviso, llegamos tarde y no se entra."""
@@ -363,12 +386,10 @@ class LiveTrader:
                 self.registry = await self.market.instruments(self.session, [sym], self.st["instruments"], now)
                 run.reg = self.registry
                 self.venue.registry = self.registry
-                await run.store.load({sym: [(minute(t0) - 130 * MIN, minute(now))]})
+                # Velas y libro a la vez (un viaje a Binance menos: ~0,3 s, y el precio cae entre los 2 y 5 s)
+                _, book = await asyncio.gather(run.store.load({sym: [(minute(t0) - 130 * MIN, minute(now))]}),
+                                               self._book_or_none(sym))
                 bar = (run.store.candles.get(sym) or {}).get(minute(t0))       # el minuto del aviso: (o, h, l, c)
-                try:
-                    book = await self.books.book(sym)
-                except MarketDataError:
-                    book = None
                 if not bar or book is None or book.mid is None:
                     run.record(ev, sig, sym, "no_entrar", ["sin_datos:precio_del_aviso_o_libro"])
                 elif (drop := float(book.mid) / float(bar[0]) - 1) < -delistings.MAX_DROP:
@@ -544,6 +565,8 @@ class LiveTrader:
     async def housekeeping(self) -> None:
         """Saldo real, spreads (z-score), frenos con el equity marcado, funding y estado guardado."""
         await self.refresh_universe()                                  # de la caché salvo cada 6 h
+        if self.clock.time() - self._verdict_at >= 600:
+            await self.refresh_verdicts()
         async with self.lock:
             await self.reconcile()
             await self.sync_capital()

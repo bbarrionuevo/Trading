@@ -374,12 +374,16 @@ class _Run:
         st.update(bps, self.now)
         return z
 
+    discarded: frozenset = frozenset()          # estrategias (categorías) descartadas por sus resultados
+
     async def enter(self, ev: dict, sig, asset: str, blocks: list, assessment=None) -> None:
         """Entrada con el núcleo de riesgo de siempre. `assessment`: una evaluación ya hecha (resultados con impulso,
         decision/earnings.py: la dirección la da el precio y la probabilidad es el acierto medido)."""
         sym = self.market.symbol(asset)
         a = assessment or assess(ev, sig, asset, self.now, self.cfg, self.meta, allows_short=self.market.allows_short)
         reasons = list(a.reasons) + [why for _, why in blocks]           # primero lo del evento, después el resto
+        if sig.category in self.discarded:                               # sus propias operaciones dieron mal (F-3)
+            reasons.append(f"categoria_descartada_por_resultados:{sig.category}")
         if sym in self.st["positions"]:
             reasons.append("ya_en_cartera")
         inst = self.reg.get(sym)
