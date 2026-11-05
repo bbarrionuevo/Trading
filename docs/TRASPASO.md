@@ -105,6 +105,7 @@ del dueño.
      precio de 50 bps; exento de "ya recorrió el objetivo" (`DRIFT`).
    - **macro:** solo con menos de 90 s.
    - **Cada estrategia se juzga sola** (F-3, `LiveTrader.refresh_verdicts`, cada 10 min): con 30 o más operaciones cerradas de una categoría y DSR < 0,80, deja de abrir esa categoría (`categoria_descartada_por_resultados`) y avisa una vez por Telegram. Vale también para las que no pasan por la IA.
+   - **Segunda lectura de la IA** (deslistado y vigilancia): se entra sin esperarla; después la IA lee el aviso y, si dice que no es negativo para esa moneda, se cierra (`la_ia_no_confirma`).
    - **vigilancia_corto** (`decision/delistings.py`, mismo camino): aviso "Binance Will Extend the Monitoring Tag to …": corto si el precio todavía no cayó más de 2 %; **stop FIJO de 10 %, salida a las 4 h**, arriesgando 1 %. A los 3 s casi todo ya cayó: el filtro deja afuera las veces que se llega tarde.
    - **deslistado_corto** (`decision/delistings.py`): apenas llega por el canal oficial un aviso "Binance Will
      Delist ...", corto en el perpetuo de cada moneda si el precio todavía no cayó más de 4 % desde el minuto del
@@ -433,4 +434,5 @@ sección 11). Un estudio nuevo va con su línea acá.
 | 5-nov | Canal de anuncios de Binance | de publicado a recibido 1,2-1,8 s (5 avisos) | medido | sección 2 |
 | 5-nov | Camino interno del agente | de un aviso a la orden: 220 → 30 ms (balde de fichas) | hecho (PR #49) | sección 9 |
 | 5-nov | Control de peso de la API de Binance | lee `X-MBX-USED-WEIGHT-1M`; > 80 %: lo no urgente espera | hecho | `marketdata/peso.py` |
+| 5-nov | Segunda lectura de la IA para las reglas sin IA | si no confirma el aviso, cierra la posición | hecho | `live.py` |
 | 5-nov | **1.ª operación del simulacro** | Wendy's, resultados: entró a los 120 s, salió a los 30 min, −0,27 USDT (−0,5 %); su comunicado salió minutos antes del 8-K | normal (pierden ~35 %) | simulacro |

@@ -136,8 +136,9 @@ orden bajó de ~220 ms a ~30 ms. La SEC ya no se corta minutos. Los deslistados 
 2. ✅ **Control de peso de la API de Binance** (5-nov, `marketdata/peso.py`): cada respuesta de Binance informa el
    peso usado de la IP; pasado el 80 %, el catálogo, los volúmenes y los intervalos de funding esperan al minuto
    siguiente (lo urgente nunca espera) y pasado el 90 % queda un aviso en el log. El latido muestra `peso_binance`.
-3. **Segunda lectura de la IA en paralelo** para las reglas sin IA (deslistados, etiqueta): si la IA dice que el aviso
-   no es lo que la regla entendió, se cierra la posición (el "nivel 2 que aborta" del segundo informe).
+3. ✅ **Segunda lectura de la IA en paralelo** (5-nov, `LiveTrader._ai_second_read`): después de entrar por un
+   deslistado o una etiqueta de vigilancia (sin esperar a la IA), la IA lee el aviso; si dice que no es negativo
+   para esa moneda, se cierra la posición (`la_ia_no_confirma`). Sin respuesta de la IA, queda lo medido.
 4. **Registro fiscal** (primer informe, ARCA): resultado y volumen operado por mes y por año, para cuando haya dinero
    real.
 5. **Upbit, fin del soporte:** 6 casos segundo a segundo, media ~+4 % con mucha dispersión (+19 % a −11 %). Seguir

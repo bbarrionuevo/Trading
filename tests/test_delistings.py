@@ -132,3 +132,50 @@ async def test_etiqueta_de_vigilancia_corto_con_stop_de_10_si_todavia_no_cayo_2(
         assert t.st["positions"] == {}
     why = [r["motivos"] for r in decisions(home2) if r["signal"].get("category") == "vigilancia_corto"]
     assert why and why[0][0].startswith("ya_cayo:-2.67")
+
+
+class FakeLlm:
+    """La IA de mentira: siempre contesta la misma lectura."""
+    enabled = True
+
+    def __init__(self, signal):
+        self.signal, self.budget, self.calls = signal, None, 0
+
+    async def classify(self, title, body, fallback):
+        from tradingagent.intelligence.llm import LlmResult
+        self.calls += 1
+        return LlmResult(self.signal)
+
+
+async def ai_trader(session, url, clock, home, llm):
+    t = LiveTrader(BinanceFutures(base=url), session, clock, copy.deepcopy(limits_mod.load()), alerts=Alerts(),
+                   home=home, capital=120.0, paper_config=PaperConfig(latency=LatencyModel(median_ms=0)), llm=llm)
+    await t.start()
+    return t
+
+
+async def test_si_la_ia_no_confirma_el_deslistado_se_cierra(tmp_path):
+    from tradingagent.intelligence.classifier import Signal
+    clock = ManualClock(T0 + 3)
+    llm = FakeLlm(Signal("otro", 0.4, 0.6, ("SOL",), 60))           # la IA lee otra cosa
+    async with serve(FakeBinance(price=market(149.0), clock=clock).app()) as url, aiohttp.ClientSession() as s:
+        t = await ai_trader(s, url, clock, tmp_path / "home", llm)
+        await t.on_news(notice("a1"))
+        while t.pending:
+            await asyncio.gather(*list(t.pending))
+        assert t.st["positions"] == {} and llm.calls >= 1
+    f = tmp_path / "home" / "paper-vivo" / "binance-futuros" / "operaciones" / "2026-11.jsonl"
+    exits = [json.loads(x) for x in f.read_text(encoding="utf-8").splitlines() if '"salida"' in x]
+    assert exits and exits[0]["motivo"] == "la_ia_no_confirma"
+
+
+async def test_si_la_ia_confirma_queda_abierta(tmp_path):
+    from tradingagent.intelligence.classifier import Signal
+    clock = ManualClock(T0 + 3)
+    llm = FakeLlm(Signal("deslistado", -0.8, 0.7, ("SOL",), 120))
+    async with serve(FakeBinance(price=market(149.0), clock=clock).app()) as url, aiohttp.ClientSession() as s:
+        t = await ai_trader(s, url, clock, tmp_path / "home", llm)
+        await t.on_news(notice("a2"))
+        while t.pending:
+            await asyncio.gather(*list(t.pending))
+        assert "SOLUSDT" in t.st["positions"]
