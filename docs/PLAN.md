@@ -151,10 +151,26 @@ lista de anuncios de Binance como respaldo. Lo medido: el relé acelera lo que s
 empuja; la IA de segunda lectura va en la PC; `batchOrders` con stop no existe más (−4120 en la demo); el mínimo de 5
 USDT no pide apalancamiento. Lo único que daría ~0,3 s en todo es operar desde Tokio (decisión del dueño, A-3).
 
+**Todo en Tokio (5-nov, pedido del dueño):**
+- ✅ Fase 2: el agente completo corre en Tokio en simulacro (`agente-tokio`): todas las fuentes y estrategias,
+  Binance a 2-5 ms, Claude responde en 1,8 s, telemetría al tablero de la PC y la pausa de la PC lo frena (PR #53).
+- ✅ Medido: los listados de Upbit rinden solo si se entra en los primeros ~3 s (`estudios/upbit_segundos.py`: a los
+  2 s, 5 min mediana +1,45 %, media +4,85 %; a los 9 s de la PC, −2,12 %).
+- **Espera al dueño (PR #54, protegido):** REGLAS v3.2 (dinero real desde Tokio con un solo ejecutor, G-9) y los
+  listados de Upbit al instante (por Telegram, sin esperar a la IA, 1 % al stop). Después, la fase 3 la arma él.
+- ✅ **Canales oficiales de Telegram para noticias generales** (5-nov, `estudios/telegram_canales.py`): el de Upbit
+  es el único que adelanta (0-2 s después del sitio, ya en uso). El de Binance llega 160 s (mediana) después del
+  sitio: el WebSocket (1,2-1,8 s) le gana por lejos. Cointelegraph, 25 min después de su RSS; CoinDesk, The Block y
+  Decrypt no tienen canal público. El canal oficial de Bithumb solo manda señales de precio (lo que ya pasó), no
+  avisos. Coinbase anuncia sus listados en X (@CoinbaseAssets), no en Telegram: leerlo al instante necesita la API
+  paga de X (decisión del dueño). Para empresas (SEC, comunicados) no hay canales oficiales: las fuentes directas
+  que ya leemos son las primeras (8-K en 144 ms desde Tokio).
+
 **Necesita una decisión del dueño** (cuesta plata o hace falta una cuenta suya):
-- **Servidor en Tokio** (idea 1, ~5 USD por mes): ahorraría ~0,2 s por aviso. Conviene si la medición del punto 1
-  muestra que llegamos tarde por décimas. La cuenta la crea el dueño y me da acceso.
+- ✅ ~~Servidor en Tokio~~: lo creó el dueño el 5-nov.
 - Noticias pagas con "supera / no alcanza lo esperado" (Benzinga por Alpaca).
+- La API de X para los listados de Coinbase (@CoinbaseAssets), si se quiere sumar Coinbase: antes, medir con su
+  historial cuánto mueve un listado de Coinbase en el perpetuo de Binance.
 
 **Para investigar más adelante:** billeteras de Upbit en la cadena antes de un listado (idea 2); el vacío del libro
 como alarma previa (idea 3).
