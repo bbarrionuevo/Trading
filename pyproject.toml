@@ -22,6 +22,10 @@ dev = [
     "hypothesis==6.170.14",
     "ruff==0.17.3",
 ]
+# Solo el servidor de Tokio (relay/telegram_upbit.py): el canal oficial de Upbit en Telegram.
+relay = [
+    "telethon==1.45.0",
+]
 
 [project.scripts]
 tradingagent = "tradingagent.__main__:main"

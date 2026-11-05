@@ -70,6 +70,13 @@ aparte (sección 7).
 **Nunca toques nexus:** `%USERPROFILE%\nexus`, `%LOCALAPPDATA%\nexus` y las tareas `nexus-*` son otro proyecto
 del dueño.
 
+### Relé de Tokio (desde el 5-nov, `docs/RELE-TOKIO.md`)
+
+- Servidor AWS Lightsail en Tokio (ap-northeast-1), usuario `ubuntu`, llave `C:\Users\Brian\.ssh\lightsail-tokio.pem`. Código en `/home/ubuntu/trading` (el repo), servicio `rele-tokio` (systemd, se reinicia solo), clave del relé en `/home/ubuntu/relay.key`.
+- En la PC: `TRADING_HOME/relay.json` (dirección y puerto UDP) y `TRADING_HOME/relay.key` (la misma clave; nunca se muestra). El agente manda un latido firmado cada 10 s y recibe los avisos.
+- Ver cómo anda: `ssh -i C:\Users\Brian\.ssh\lightsail-tokio.pem ubuntu@<IP> "sudo journalctl -u rele-tokio -n 50"`. Actualizar: `cd ~/trading && git pull && sudo systemctl restart rele-tokio` (o `bash deploy/rele-tokio/instalar.sh`).
+- El servidor no tiene claves de trading ni de la IA.
+
 ## 4. Cómo funciona (de la noticia a la orden)
 
 1. **Fuentes** (`ingestion/catalog.py`, `sources.py`, `announcements.py`). RSS y APIs JSON, leídas cada 10 a 60
@@ -439,4 +446,5 @@ sección 11). Un estudio nuevo va con su línea acá.
 | 5-nov | Control de peso de la API de Binance | lee `X-MBX-USED-WEIGHT-1M`; > 80 %: lo no urgente espera | hecho | `marketdata/peso.py` |
 | 5-nov | Segunda lectura de la IA para las reglas sin IA | si no confirma el aviso, cierra la posición | hecho | `live.py` |
 | 5-nov | Registro fiscal (ARCA) | `informe-fiscal`: resultado y volumen por mes, CSV para el contador | hecho | `research/fiscal.py` |
+| 5-nov | **Relé de Tokio instalado** | túnel firmado PC↔Tokio OK (ida y vuelta 288 ms); desde Tokio Binance 48 ms; lo empujado no se acelera; **Upbit bloquea las IP de AWS (403)**; batchOrders con stop: −4120 | en marcha: lee la lista de Binance (respaldo); la ganancia grande sería operar desde Tokio (decisión del dueño) | `docs/RELE-TOKIO.md` |
 | 5-nov | **1.ª operación del simulacro** | Wendy's, resultados: entró a los 120 s, salió a los 30 min, −0,27 USDT (−0,5 %); su comunicado salió minutos antes del 8-K | normal (pierden ~35 %) | simulacro |

@@ -1,0 +1,23 @@
+# Relé de Tokio (Tier-0) como servicio de systemd en el servidor de AWS Lightsail (Ubuntu).
+# Instalar: deploy/rele-tokio/instalar.sh (lo copia a /etc/systemd/system y lo arranca).
+[Unit]
+Description=TRADING - relé de avisos oficiales (Tokio) a la PC por UDP firmado
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/trading
+# Sin EnvironmentFile: el .env del servidor también tiene la clave de Binance y la de la IA, que el relé no usa.
+# Del .env el relé lee solo TG_API_ID y TG_API_HASH (relay/telegram_upbit.py).
+ExecStart=/home/ubuntu/trading/.venv/bin/python -m tradingagent.relay.server --clave /home/ubuntu/relay.key --puerto 50005
+Restart=always
+RestartSec=5
+# Sin claves de trading ni de la IA: solo lee avisos públicos y la clave del relé.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
