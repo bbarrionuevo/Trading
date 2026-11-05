@@ -37,7 +37,8 @@ class PolicyConfig:
     p_min: float = 0.60
     kelly_fraction: float = 0.25
     barrier: BarrierConfig = field(default_factory=BarrierConfig)
-    max_net_exposure_pct: float = 30.0      # del informe; el sobre puede ser más estricto
+    max_net_exposure_pct: float = 100.0     # el que manda es el del sobre (config/limits.yaml, lo fija el dueño)
+    default_max_x: float = 0.30             # nominal máximo de una posición sin estudio propio, en veces el saldo
     max_spread_z: float = 2.5
     l3_multiple: float = 5.0
     max_divergence: float = 0.01
@@ -168,7 +169,10 @@ def plan(a: Assessment, sig: Signal, symbol: str, *, equity: float, cash: float,
     risk_target = equity * pt["max_risk_pct"] / 100
     lev = min(float(max_leverage), float(pt["max_leverage"]))
     net_cap = equity * min(cfg.max_net_exposure_pct, pf.get("max_net_exposure_pct", cfg.max_net_exposure_pct)) / 100
-    caps = [equity * pt["max_position_pct"] / 100, equity * lev,
+    # El tamaño lo fija el riesgo al stop (3 % del saldo) y lo acotan el sobre y lo que respalda el estudio de la
+    # estrategia (`max_x`): el apalancamiento es consecuencia de un stop cercano, nunca un objetivo.
+    max_x = prof.max_x if prof is not None and prof.max_x else cfg.default_max_x
+    caps = [equity * pt["max_position_pct"] / 100, equity * lev, equity * max_x,
             equity * pf["max_gross_exposure_pct"] / 100 - gross, net_cap - a.side * net]
     if kind == "spot":
         caps.append(cash * cfg.cash_buffer)
@@ -225,6 +229,7 @@ class ExitProfile:
     hold_s: float = 0.0                     # salida por tiempo (reemplaza el horizonte de la noticia)
     target: bool = True                     # False: sin objetivo de ganancia
     max_slippage_bps: float = 30            # tope de precio de la entrada (nunca más que el del sobre)
+    max_x: float = 0.0                      # nominal máximo en veces el saldo que respalda el estudio (0: el general)
 
 
 # Listados (calibración del 4-nov con los avisos de Upbit operados en Binance Futures, segundo a segundo, n = 23;
@@ -238,9 +243,15 @@ class ExitProfile:
 # Resultados de empresas con impulso (decision/earnings.py, estudio del 4-nov: 88 resultados en los TradFi de
 # Binance): se entra a los 2 minutos del 8-K siguiendo el movimiento, stop FIJO de 5 % y salida a los 30 min.
 EXITS = {"listado": ExitProfile(max_age_s=120, stop=0.10, hold_s=900, target=False, b_kelly=2.5,
-                                max_slippage_bps=50),
+                                max_slippage_bps=50, max_x=0.30),
          "macro": ExitProfile(max_age_s=90),
-         "resultados_impulso": ExitProfile(max_age_s=300, stop=0.05, hold_s=1800, target=False, b_kelly=1.0)}
+         # 0,6 veces el saldo: con el stop de 5 % arriesga el 3 % aprobado (docs/ESTUDIO-APALANCAMIENTO.md)
+         "resultados_impulso": ExitProfile(max_age_s=300, stop=0.05, hold_s=1800, target=False, b_kelly=1.0,
+                                           max_x=0.60),
+         # Perpetuos nuevos que a los 15 min ya bajaban (decision/launches.py, docs/ESTUDIO-LANZAMIENTOS.md): corto
+         # con stop FIJO de 30 % y salida a las 72 h. Evidencia más débil: 0,065 veces el saldo = 2 % al stop.
+         "lanzamiento_corto": ExitProfile(max_age_s=1200, stop=0.30, hold_s=72 * 3600, target=False, b_kelly=0.91,
+                                          max_slippage_bps=50, max_x=0.065)}
 
 
 def chase_blocks(move: float | None, sl_frac: float, tp_frac: float, category: str = "") -> list[str]:

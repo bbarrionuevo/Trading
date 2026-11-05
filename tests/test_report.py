@@ -155,15 +155,19 @@ def test_plan_triple_barrera_costos_kelly_y_topes(lim):
     assert p.b_net < 2 and p.cost > 2 * 0.001                               # comisiones, spread e impacto
     risk = p.sl_frac + p.cost                                               # Kelly dice cuánto ARRIESGAR:
     budget = 1000 * lim["per_trade"]["max_risk_pct"] / 100               # el % de riesgo del sobre
-    assert float(p.notional) == pytest.approx(min(1000 * p.kelly / risk, budget / risk, 400, 300), abs=0.01)
+    pos_cap = 1000 * lim["per_trade"]["max_position_pct"] / 100
+    net_cap = 1000 * lim["portfolio"]["max_net_exposure_pct"] / 100
+    x_cap = 1000 * cfg.default_max_x                                        # sin estudio propio: 0,3 del saldo
+    assert float(p.notional) == pytest.approx(min(1000 * p.kelly / risk, budget / risk, pos_cap, net_cap, x_cap),
+                                              abs=0.01)
     assert p.risk_usd <= 1000 * lim["per_trade"]["max_risk_pct"] / 100 + 1e-9
     assert p.slices == 1                                                    # Almgren-Chriss: un solo tramo
-    capped, _ = plan(a, s, "PEPEUSDT", **{**kw, "net": 250.0})              # exposición neta ≤ 30 %
+    capped, _ = plan(a, s, "PEPEUSDT", **{**kw, "net": net_cap - 50.0})     # la neta del sobre deja 50
     assert float(capped.notional) == pytest.approx(50.0)
     shorted = assess(ev("Binance hacked: $40M in BTC stolen"), classify("Binance hacked: $40M in BTC stolen"),
                      "BTC", T0, cfg)
     p2, _ = plan(shorted, classify("Binance hacked: $40M in BTC stolen"), "BTCUSDT",
-                 **{**kw, "net": 250.0, "kind": "perp"})                     # un corto achica la neta: entra entero
+                 **{**kw, "net": net_cap - 50.0, "kind": "perp"})            # un corto achica la neta: entra entero
     assert p2.side == -1 and float(p2.notional) > 50
     funded, _ = plan(a, s, "PEPEUSDT", **{**kw, "funding": 0.001})          # funding en contra: un costo más
     assert funded.cost == pytest.approx(p.cost + 0.001, abs=1e-5) and funded.b_net < p.b_net   # (el impacto se mueve con el tamaño)
@@ -172,7 +176,7 @@ def test_plan_triple_barrera_costos_kelly_y_topes(lim):
     assert no_edge is None and why[0].startswith("sin_ventaja_neta")
     expensive, why = plan(a, s, "PEPEUSDT", **{**kw, "fee_taker": 0.04})     # el costo supera al take-profit
     assert expensive is None and why[0].startswith("costos_mayores_que_el_objetivo")
-    assert plan(a, s, "PEPEUSDT", **{**kw, "n_positions": 3})[1] == ["maximo_de_posiciones"]
+    assert plan(a, s, "PEPEUSDT", **{**kw, "n_positions": lim["portfolio"]["max_positions"]})[1] == ["maximo_de_posiciones"]
     assert plan(a, s, "PEPEUSDT", **{**kw, "sigma_1m": None})[1] == ["sin_volatilidad_medible"]
     assert plan(a, s, "PEPEUSDT", **{**kw, "cash": 3.0})[1][0].startswith("nominal_menor_al_minimo")
     risky, _ = plan(a, s, "PEPEUSDT", **{**kw, "sigma_1m": 0.02})            # mucha volatilidad: stop lejos

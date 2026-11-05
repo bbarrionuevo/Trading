@@ -55,7 +55,8 @@ def parse_symbol(s: dict) -> dict | None:
                 "mmr": str(D(str(s.get("maintMarginPercent") or "2.5")) / 100),
                 "max_leverage": max(1, int(D(100) / required)) if required > 0 else 1,
                 "tipo": s["contractType"], "subyacente": s.get("underlyingType") or "COIN",
-                "trading": s.get("status") == "TRADING"}
+                "trading": s.get("status") == "TRADING",
+                "alta": float(s.get("onboardDate") or 0) / 1000}    # cuándo empezó a operar (s)
     except (KeyError, TypeError, ArithmeticError):
         return None
 

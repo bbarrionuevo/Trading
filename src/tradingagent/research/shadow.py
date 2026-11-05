@@ -391,6 +391,9 @@ class _Run:
         candles = self.store.candles.get(sym) or {}
         t0 = ev.get("published_at") if a.dt_basis == "publicada" else None
         sigma = bar.sigma_1m(candles, minute(t0 if t0 is not None else self.now))
+        prof = self.cfg.exits.get(sig.category)
+        if sigma is None and prof is not None and prof.stop:       # stop fijo medido (un contrato nuevo tiene pocas
+            sigma = bar.sigma_1m(candles, minute(self.now), min_returns=10)   # velas): σ solo para costos y tramos
         try:                                          # libro y precio a la vez: cada pedido a MEXC tarda
             book, tick = await asyncio.gather(self.books.book(sym), self.market.ticker(self.session, sym))
         except MarketDataError as e:
