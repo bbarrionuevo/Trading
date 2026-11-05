@@ -9,8 +9,8 @@ Wants=network-online.target
 Type=simple
 User=ubuntu
 WorkingDirectory=/home/ubuntu/trading
-# TG_API_ID y TG_API_HASH (Telegram, número secundario del dueño): los lee el relé, nunca se muestran.
-EnvironmentFile=-/home/ubuntu/.env
+# Sin EnvironmentFile: el .env del servidor también tiene la clave de Binance y la de la IA, que el relé no usa.
+# Del .env el relé lee solo TG_API_ID y TG_API_HASH (relay/telegram_upbit.py).
 ExecStart=/home/ubuntu/trading/.venv/bin/python -m tradingagent.relay.server --clave /home/ubuntu/relay.key --puerto 50005
 Restart=always
 RestartSec=5

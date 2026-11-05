@@ -43,15 +43,20 @@ NOTICE = re.compile(r"https?://(?:www\.)?upbit\.com/service_center/notice\?id=(?
 TRADE_TAG = "거래"                              # avisos de trading (la categoría "trade" que lee la PC)
 
 
+WANTED = ("TG_API_ID", "TG_API_HASH")
+
+
 def credentials(env_file: Path = ENV_FILE) -> tuple[int, str]:
-    """TG_API_ID y TG_API_HASH del entorno o del .env del servidor. Nunca se imprimen."""
+    """TG_API_ID y TG_API_HASH del entorno o del .env del servidor; las demás líneas (la clave de Binance, la de la
+    IA) ni se guardan: el relé solo necesita Telegram. Nunca se imprimen."""
     vals: dict[str, str] = {}
     if env_file.exists():
         for line in env_file.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:
                 k, v = line.split("=", 1)
-                vals[k.strip()] = v.strip().strip('"').strip("'")
+                if k.strip() in WANTED:
+                    vals[k.strip()] = v.strip().strip('"').strip("'")
     api_id = os.environ.get("TG_API_ID") or vals.get("TG_API_ID")
     api_hash = os.environ.get("TG_API_HASH") or vals.get("TG_API_HASH")
     if not api_id or not api_hash:

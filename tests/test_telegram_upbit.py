@@ -45,7 +45,7 @@ def test_credenciales_del_env_sin_mostrarlas(tmp_path, monkeypatch):
     monkeypatch.delenv("TG_API_ID", raising=False)
     monkeypatch.delenv("TG_API_HASH", raising=False)
     env = tmp_path / ".env"
-    env.write_text('TG_API_ID=12345\nTG_API_HASH="abcdef"\n', encoding="utf-8")
+    env.write_text('TG_API_ID=12345\nTG_API_HASH="abcdef"\nAPI_Key_Binance=no-se-lee\n', encoding="utf-8")
     assert telegram_upbit.credentials(env) == (12345, "abcdef")
     monkeypatch.setenv("TG_API_ID", "999")
     assert telegram_upbit.credentials(env)[0] == 999                                    # el entorno manda
