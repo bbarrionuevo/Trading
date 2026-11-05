@@ -374,9 +374,11 @@ class _Run:
         st.update(bps, self.now)
         return z
 
-    async def enter(self, ev: dict, sig, asset: str, blocks: list) -> None:
+    async def enter(self, ev: dict, sig, asset: str, blocks: list, assessment=None) -> None:
+        """Entrada con el núcleo de riesgo de siempre. `assessment`: una evaluación ya hecha (resultados con impulso,
+        decision/earnings.py: la dirección la da el precio y la probabilidad es el acierto medido)."""
         sym = self.market.symbol(asset)
-        a = assess(ev, sig, asset, self.now, self.cfg, self.meta, allows_short=self.market.allows_short)
+        a = assessment or assess(ev, sig, asset, self.now, self.cfg, self.meta, allows_short=self.market.allows_short)
         reasons = list(a.reasons) + [why for _, why in blocks]           # primero lo del evento, después el resto
         if sym in self.st["positions"]:
             reasons.append("ya_en_cartera")

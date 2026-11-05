@@ -16,8 +16,13 @@ from ..core.events import TIER_MEDIA, TIER_OFFICIAL
 from .announcements import BINANCE_LISTINGS, BITGET_LISTINGS, OKX_LISTINGS, UPBIT_NOTICES
 from .sources import SourceSpec
 
+# 100 por página (en el pico de los resultados se presentan decenas de 8-K por minuto) y cada 20 s: el 8-K de
+# resultados (ítem 2.02) dispara la entrada con impulso a los 2 minutos (decision/earnings.py).
 EDGAR_8K = ("https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&company=&dateb=&owner=include"
-            "&start=0&count=40&output=atom")
+            "&start=0&count=100&output=atom")
+# PR Newswire, canal de resultados (medido desde la PC el 4-nov: responde a lectores; su CDN guarda copia 60 s).
+# GlobeNewswire, Business Wire (su página) y Accesswire bloquean a los programas: no se usan.
+PRN_EARNINGS = "https://www.prnewswire.com/rss/financial-services-latest-news/earnings-list.rss"
 
 
 def binance_variants(sizes=(10, 15, 20)) -> tuple[str, ...]:
@@ -39,8 +44,9 @@ DEFAULT_SOURCES = (
                interval_s=30, max_age_s=600, category="macro", assets=("BTC", "ETH")),
     SourceSpec("sec.press", "https://www.sec.gov/news/pressreleases.rss", tier=TIER_OFFICIAL,
                interval_s=60, max_age_s=600, category="regulatorio", requires_env=("SEC_USER_AGENT",)),
-    SourceSpec("sec.edgar.8k", EDGAR_8K, tier=TIER_OFFICIAL, interval_s=60, max_age_s=600, category="filings",
+    SourceSpec("sec.edgar.8k", EDGAR_8K, tier=TIER_OFFICIAL, interval_s=20, max_age_s=600, category="filings",
                requires_env=("SEC_USER_AGENT",)),
+    SourceSpec("prn.resultados", PRN_EARNINGS, tier=TIER_OFFICIAL, interval_s=30, max_age_s=600, category="bolsa"),
     SourceSpec("coindesk", "https://www.coindesk.com/arc/outboundfeeds/rss/", tier=TIER_MEDIA,
                interval_s=45, max_age_s=300, category="cripto"),
     SourceSpec("cointelegraph", "https://cointelegraph.com/rss", tier=TIER_MEDIA,

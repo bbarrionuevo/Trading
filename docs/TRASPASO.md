@@ -39,7 +39,7 @@ Lo que pidió, en sus palabras:
 | **MEXC** | **Descartado (4-nov).** Con la dirección nueva, la prueba llegó a MEXC y respondió código 6002 (la cuenta no puede abrir posiciones), y el dueño informó una restricción permanente de la cuenta. El dueño decidió pasar la ejecución a **Binance Futures USDT-M**: la práctica ya opera con los precios de Binance; el simulacro sigue con los de MEXC hasta que esté el de Binance (ruta protegida, lo fusiona el dueño) |
 | **Binance Futures** | **Nuevo lugar de ejecución (4-nov).** Paso 1 (fusionado, PR #29, #32 y #35): cliente `execution/live/binance_futures.py` con lista cerrada, stop de emergencia por el servicio Algo y prueba sin riesgo `binance-real-check` (contrato XRPUSDT). **Prueba en la DEMO de Binance (plata ficticia, claves `BINANCE_API_KEY_TEST` / `BINANCE_API_SECRET_TEST`, `https://demo-fapi.binance.com`), 4-nov: los 10 pasos OK** (el stop se vio cancelado a los 0,6 s). En la cuenta real la corre el dueño (pone órdenes reales). **Hay 235 perpetuos TradFi** además de los 703 de cripto: ~200 acciones de EE. UU., Corea y Hong Kong, SPY y QQQ, oro, plata, petróleo, gas y cobre, **las 24 h, también el fin de semana**; 170 y 449 con más de 1 M USDT por día. La práctica ya opera con los precios de Binance (PR #36). **Paso 2 (PR protegido, lo fusiona el dueño):** operador real `execution/live/binance_venue.py` (IOC con tope, aislado 1x en cada contrato, stop de emergencia Algo de cierre total al llenarse la entrada, conciliación que lo repone y frena si algo no coincide), armado por exchange, simulacro en la DEMO y `cerrar-todo` para Binance. **Probado de punta a punta en la demo el 4-nov:** SOL largo y XRP corto entraron, pusieron su stop al precio pedido, conciliaron, salieron y no quedó nada abierto (costo: spread y comisión, un centavo). Tesla primero rechazada (falta el acuerdo TradFi, código -4411); **el dueño lo aceptó y Tesla anduvo de punta a punta en la demo** (0,05 TSLA, stop a −15 %, salida, nada abierto). Antes de operar: cuenta en modo unidireccional y de un solo activo |
 | Aprendizaje | **Arreglado el 3-nov (PR #23).** El meta-modelo había quedado en κ = 0 con 47 muestras, 37 de ellas noticias ajenas con BTC "de referencia" (Ferrari, 3M, "heladeras hackeadas"): p = 1/3 en todo y ninguna entrada posible, listados incluidos, desde la tarde del 3-nov. Ahora solo aprende de lo que se habría operado (sección 9) |
-| Fuentes | 14: Fed; medios cripto; CNBC, Seeking Alpha, Investing; anuncios oficiales de Binance (cada 3 s, rotando 72 formas de la URL para saltar la copia de ~120 s del CDN) y Upbit (cada 8 s: su límite es ~10 pedidos por minuto). OKX y Bybit apagados o sin sumar (sin efecto medido), Bitget apagado. SEC prendida desde el 4-nov (el dueño cargó `SEC_USER_AGENT`): los 8-K llegan con ~43 s de demora mediana. **Nuevo (PR protegido): el canal oficial de anuncios de Binance por WebSocket** (`ingestion/binance_ws.py`), que empuja cada anuncio de todos los catálogos cuando se publica (sin sondeo ni copia del CDN). Usa una clave de Binance de SOLO LECTURA aparte (`BINANCE_LECTURA_KEY` / `BINANCE_LECTURA_SECRET`): la crea el dueño; sin ella queda apagado y el sondeo de listados sigue igual. Probado desde la PC el 4-nov: conecta en ~1,2 s. **Los medios llegan tarde para operar** (demora mediana de publicada a recibida, 4-nov: The Block 31 s, CoinDesk 56 s, Seeking Alpha 173 s, Investing 424 s, CNBC 592 s): solo sirven de contexto y para salir; lo que se opera son los avisos oficiales |
+| Fuentes | 15: Fed; medios cripto; CNBC, Seeking Alpha, Investing; anuncios oficiales de Binance (cada 3 s, rotando 72 formas de la URL para saltar la copia de ~120 s del CDN) y Upbit (cada 8 s: su límite es ~10 pedidos por minuto). OKX y Bybit apagados o sin sumar (sin efecto medido), Bitget apagado. SEC prendida desde el 4-nov (el dueño cargó `SEC_USER_AGENT`): los 8-K llegaban con ~72 s de demora mediana (392 del 4-nov, leídos cada 60 s); ahora se leen cada 20 s y 100 por página (en el pico de los resultados entran ~56 por hora con el ítem 2.02). **PR Newswire, canal de resultados**, cada 30 s (su CDN guarda 60 s). Business Wire guarda 5 min en su CDN y GlobeNewswire y Accesswire bloquean a los programas: no se usan (no se fuerza un bloqueo). **Nuevo (PR protegido): el canal oficial de anuncios de Binance por WebSocket** (`ingestion/binance_ws.py`), que empuja cada anuncio de todos los catálogos cuando se publica (sin sondeo ni copia del CDN). Usa una clave de Binance de SOLO LECTURA aparte (`BINANCE_LECTURA_KEY` / `BINANCE_LECTURA_SECRET`): la crea el dueño; sin ella queda apagado y el sondeo de listados sigue igual. Probado desde la PC el 4-nov: conecta en ~1,2 s. **Los medios llegan tarde para operar** (demora mediana de publicada a recibida, 4-nov: The Block 31 s, CoinDesk 56 s, Seeking Alpha 173 s, Investing 424 s, CNBC 592 s): solo sirven de contexto y para salir; lo que se opera son los avisos oficiales |
 | Velocidad (4-nov) | De recibida a decisión: 0,4 s sin IA y 3,8 s con IA (mediana). Las demoras largas (hasta 14 s) eran datos de mercado bajados para noticias que igual se descartaban, con el candado tomado: arreglado en el PR #26. Lo que más tarda ahora es la consulta a la IA (~3,4 s) |
 | IA | Claude Haiku 5.5. Lee toda noticia que las reglas abrirían. Unos 0,002 USD por día. Techo de seguridad: 5 USD por día |
 | Tareas programadas (nube) | "Revisión diaria de TRADING" 7:36 y "Vigilancia de TRADING cada 2 horas" 8 a 24 (hora argentina). Sin conector de GitHub: dejan arreglos en ramas `claude/...` |
@@ -103,6 +103,10 @@ del dueño.
      por el dueño el 4-nov: calibración con Upbit en Binance; el stop que seguía al precio a 5 % perdía); tope de
      precio de 50 bps; exento de "ya recorrió el objetivo" (`DRIFT`).
    - **macro:** solo con menos de 90 s.
+   - **resultados_impulso** (`decision/earnings.py`): solo entre los minutos 2 y 4 del 8-K de resultados y si el
+     perpetuo TradFi ya se movió ≥ 0,5 % en esa dirección; **stop FIJO de 5 % y salida a los 30 min**, sin objetivo;
+     exento de "ya recorrió el objetivo" (`DRIFT`). Sin IA: la dirección la da el precio (C-4 y A-5, excepción
+     medida, `docs/ESTUDIO-RESULTADOS.md`).
 8. **Riesgo** (`decision/risk.py`, `config/limits.yaml`).
    - **3 % del saldo por operación al stop** (el dueño, 4-nov; antes 1 %); 40 % por posición; 80 % bruto; 30 % neto;
      3 posiciones; 1x. Con el stop de 10 % de los listados, la posición es ~30 % del saldo (el tope neto).
@@ -223,6 +227,10 @@ dueño qué hiciste y por qué.
   - con stop que sigue al precio a 5 %: +12,7 % por operación (contra +4,9 % con objetivo fijo);
   - **entrando a los 5 minutos, todo pierde**: llegar primero es todo.
 - **Lanzamientos de futuros de Binance** (n = 9): saltan y se devuelven. No se operan.
+- **Resultados de empresas en los TradFi de Binance** (4-nov, `docs/ESTUDIO-RESULTADOS.md`, 88 resultados de 36
+  empresas): el perpetuo reacciona despacio (~16 % del movimiento de la hora en el primer minuto). Entrando a los 2
+  minutos detrás del movimiento (≥ 0,5 %), stop de 5 % y salida a los 30 min: mediana +1,01 %, media +1,17 % neto de
+  costos, 39 de 60 positivas. Entrando al minuto 1 o al 5, sin ventaja.
 - **OKX** (n = 4): sin efecto. Bitget: casi todo acciones. Apagados.
 - **Upbit** (4-nov, desde la PC, `docs/ESTUDIO-LISTADOS.md`): alta en wones +20,9 % a 5 min (14 de 14), listado nuevo
   +13,5 % (21 de 21), fin del soporte −7,4 % (6 de 6), advertencia −2,6 %. Casi todo dentro del primer minuto:
@@ -275,10 +283,10 @@ dueño qué hiciste y por qué.
    razona con esfuerzo bajo), ~5.200 tokens de entrada y ~130 de salida. **No es el cuello de botella** (lo son las
    fuentes). Si hiciera falta: caché del sistema (mínimo cacheable de Haiku 5.5: 512 tokens; dura 5 min, o 1 h
    pagando el doble de escritura) y un "reason" más corto (~0,2 s).
-3. **Resultados de empresas en los TradFi de Binance** (Tesla, Nvidia, Apple... operan las 24 h): hoy llegan por
-   CNBC y Seeking Alpha con 2 a 3 min de demora. Estudiar primero si el perpetuo de Binance tarda en seguir al
-   after-hours (velas de 1 minuto de los últimos resultados contra la hora del comunicado). Si tarda, sumar las
-   agencias de comunicados (GlobeNewswire, Business Wire, PR Newswire) y el 8-K ítem 2.02.
+3. **Resultados de empresas con impulso** (PR protegido del 4-nov, `docs/ESTUDIO-RESULTADOS.md`): a los 2 min del
+   8-K de resultados, si el perpetuo TradFi ya se movió ≥ 0,5 %, se entra en esa dirección (stop fijo de 5 %,
+   salida a los 30 min). Estudio de 88 resultados: mediana +1,01 %, media +1,17 % neto, 39 de 60 positivas. La SEC
+   se lee cada 20 s y PR Newswire (resultados) cada 30 s. Revisar con las operaciones del simulacro y la práctica.
 4. **Listados de Coinbase:** la PC llega a su API de productos (prueba de red); estudiar si un listado nuevo mueve
    el precio en Binance antes de sumarlo. Bithumb bloquea la PC (403): no se puede.
 5. **Capital chico:** en Binance BTC pide al menos 50 USDT por orden (ETH 20, lo demás 5). Con ~100 USDT y 3 % de
