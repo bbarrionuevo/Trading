@@ -19,6 +19,7 @@ from decimal import Decimal as D
 import aiohttp
 
 from ..core.redact import redact
+from .peso import MONITOR
 from .providers import MarketDataError, RestBookProvider
 
 log = logging.getLogger("tradingagent.binance")
@@ -33,6 +34,7 @@ async def get(session, path: str, params: dict | None = None, what: str = "", *,
               timeout_s: float = 10.0):
     try:
         async with session.get(f"{base}{path}", params=params, timeout=aiohttp.ClientTimeout(total=timeout_s)) as r:
+            MONITOR.observe(r.headers)                           # peso usado de la IP (marketdata/peso.py)
             if r.status != 200:
                 raise MarketDataError(f"binance {what or path}: HTTP {r.status}")
             return await r.json(content_type=None)
@@ -62,7 +64,9 @@ def parse_symbol(s: dict) -> dict | None:
 
 
 async def catalog(session, base: str = BASE) -> dict[str, dict]:
-    """Todos los perpetuos en USDT, de cripto y TradFi (un solo pedido, peso 1)."""
+    """Todos los perpetuos en USDT, de cripto y TradFi (un solo pedido, peso 1). No es urgente: espera si el peso de
+    la IP pasó el 80 %."""
+    await MONITOR.wait_if_busy()
     data = await get(session, "/fapi/v1/exchangeInfo", None, "catálogo", base=base, timeout_s=20)
     out = {}
     for s in (data or {}).get("symbols", []):
@@ -73,7 +77,8 @@ async def catalog(session, base: str = BASE) -> dict[str, dict]:
 
 
 async def volumes(session, base: str = BASE) -> dict[str, float]:
-    """Volumen de 24 h en USDT de cada contrato."""
+    """Volumen de 24 h en USDT de cada contrato (peso 40). No es urgente: espera si el peso de la IP pasó el 80 %."""
+    await MONITOR.wait_if_busy()
     data = await get(session, "/fapi/v1/ticker/24hr", None, "volúmenes", base=base, timeout_s=20)
     return {t["symbol"]: float(t.get("quoteVolume") or 0) for t in data or [] if isinstance(t, dict) and "symbol" in t}
 
@@ -101,7 +106,8 @@ async def premium(session, symbol: str, base: str = BASE) -> dict:
 
 
 async def funding_hours(session, base: str = BASE) -> dict[str, int]:
-    """Intervalo de cobro de los contratos que no cobran cada 8 h (el oro, cada 4)."""
+    """Intervalo de cobro de los contratos que no cobran cada 8 h (el oro, cada 4). No es urgente."""
+    await MONITOR.wait_if_busy()
     data = await get(session, "/fapi/v1/fundingInfo", None, "intervalos de funding", base=base)
     return {x["symbol"]: int(x.get("fundingIntervalHours") or 8) for x in data or []
             if isinstance(x, dict) and "symbol" in x}

@@ -406,9 +406,34 @@ class LiveTrader:
                 else:
                     await run.enter(ev, sig, coin, self.risk_blocks(run),
                                     assessment=delistings.assessment(coin, late, category), prefetched=(book, tick))
+                    if sym in self.st["positions"] and self.llm is not None and self.llm.enabled:
+                        task = asyncio.create_task(self._ai_second_read(ing, coin, sym, category),
+                                                   name=f"segunda-lectura-{coin}")
+                        self.pending.add(task)
+                        task.add_done_callback(self.pending.discard)
                 await self.save(run)
         except Exception:                                              # una falla no tira al operador
             log.exception("falló la entrada por deslistado (%s)", coin)
+
+    async def _ai_second_read(self, ing, coin: str, sym: str, category: str) -> None:
+        """Segunda lectura de la IA, después de entrar (el "nivel 2 que aborta" del plan del 5-nov): la regla entró sin
+        esperarla porque el precio cae entre los 2 y 5 s; si la IA lee que el aviso NO es negativo para esta moneda
+        (otra moneda, o no es un deslistado ni una advertencia), se cierra la posición. Sin respuesta, queda lo medido."""
+        try:
+            res = await self.llm.classify(ing.item.title, ing.item.body, delistings.signal(coin, category))
+            ai = res.signal
+            if ai is None or (ai.polarity < 0 and coin in ai.assets):
+                return
+            async with self.lock:
+                if sym not in self.st["positions"]:
+                    return
+                run = self.run()
+                await run.close(sym, "la_ia_no_confirma")
+                await self.save(run)
+            log.warning("la IA no confirmó el aviso de %s (%s, polaridad %+.2f, activos %s): cerré la posición",
+                        coin, ai.category, ai.polarity, ",".join(ai.assets))
+        except Exception:                                              # una falla no tira al operador
+            log.exception("falló la segunda lectura de la IA (%s)", coin)
 
     async def check_launches(self) -> None:
         """Perpetuos de cripto nuevos de Binance (decision/launches.py): cada uno se decide a los 15 minutos."""
