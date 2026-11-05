@@ -46,6 +46,9 @@ _NOT_ASSET = re.compile(
     r"(?i)\b(mercado bitcoin|bitcoin (cash|sv|gold|depot|suisse|magazine|well|group)|bitcoin\.com|"
     r"ethereum (classic|name service|pow)|ltc properties|eth z(u|ü)rich)\b|"
     r"\([A-Z, ]*마켓\)|"                                  # Upbit: "(KRW, BTC, USDT 마켓)" son mercados, no la moneda
+    # El país en el nombre legal de una empresa: "8-K - Jerash Holdings (US), Inc." (5-nov) se leyó como la cripto US.
+    # Solo seguido de la forma societaria: en "Binance Will List Foo (US)" el paréntesis sí es el ticker.
+    r"\((US|USA|UK|HK|BVI)\)(?=,?\s+(Inc|Corp|Corporation|Co|Ltd|Limited|LLC|LP|L\.P|plc|PLC|N\.V|S\.A)\b)|"
     r"/(BTC|ETH)\b")                       # BTC o ETH como cotización de un par: "KAIA/BTC" es KAIA ("FOO/USDT" sigue)
 
 
