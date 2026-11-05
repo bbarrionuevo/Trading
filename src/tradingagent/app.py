@@ -252,16 +252,30 @@ class Agent:
         """Fuentes empujadas: el canal oficial de anuncios de Binance (WebSocket), con una clave de SOLO LECTURA
         (`BINANCE_LECTURA_KEY` / `BINANCE_LECTURA_SECRET`). Sin esa clave queda apagado (y lo dice el latido)."""
         from .ingestion.binance_ws import SOURCE_ID, BinanceAnnouncements
+        streams = self._build_relay()
         o = (self.cfg["ingestion"].get("sources") or {}).get(SOURCE_ID) or {}
         if o.get("enabled") is False:
             self.sources_off[SOURCE_ID] = "apagada en la configuración"
-            return []
+            return streams
         key, secret = self.env.get("BINANCE_LECTURA_KEY"), self.env.get("BINANCE_LECTURA_SECRET")
         if not (key and secret):
             self.sources_off[SOURCE_ID] = "falta BINANCE_LECTURA_KEY y BINANCE_LECTURA_SECRET en TRADING_HOME/.env"
+            return streams
+        return streams + [BinanceAnnouncements(key, secret, self.ingestion.handle, self.clock,
+                                               max_age_s=safety.news_max_age(float(o.get("max_age_s") or 600), lim))]
+
+    def _build_relay(self) -> list:
+        """Relé de Tokio (relay/client.py): con RELAY_HOST en el .env y la clave en TRADING_HOME/relay.key."""
+        from .relay import client, protocol
+        host = self.env.get("RELAY_HOST")
+        key_file = paths.home() / "relay.key"
+        if not host:
             return []
-        return [BinanceAnnouncements(key, secret, self.ingestion.handle, self.clock,
-                                     max_age_s=safety.news_max_age(float(o.get("max_age_s") or 600), lim))]
+        if not key_file.exists():
+            self.sources_off[client.SOURCE_ID] = "falta TRADING_HOME/relay.key"
+            return []
+        port = int(self.env.get("RELAY_PORT") or 50005)
+        return [client.RelayClient(host, port, protocol.load_key(key_file), self.ingestion.handle, self.clock)]
 
     def _build_trader(self, session, lim):
         from .intelligence.llm import LlmClassifier, api_key

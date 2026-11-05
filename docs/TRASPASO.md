@@ -437,4 +437,5 @@ sección 11). Un estudio nuevo va con su línea acá.
 | 5-nov | Control de peso de la API de Binance | lee `X-MBX-USED-WEIGHT-1M`; > 80 %: lo no urgente espera | hecho | `marketdata/peso.py` |
 | 5-nov | Segunda lectura de la IA para las reglas sin IA | si no confirma el aviso, cierra la posición | hecho | `live.py` |
 | 5-nov | Registro fiscal (ARCA) | `informe-fiscal`: resultado y volumen por mes, CSV para el contador | hecho | `research/fiscal.py` |
+| 5-nov | Relé de Tokio (código y mediciones) | PC↔Tokio ~308 ms; PC→Binance ~320 ms; empujado no se acelera, sondeado sí; batchOrders con stop: −4120 | código listo, falta la llave SSH | `docs/RELE-TOKIO.md` |
 | 5-nov | **1.ª operación del simulacro** | Wendy's, resultados: entró a los 120 s, salió a los 30 min, −0,27 USDT (−0,5 %); su comunicado salió minutos antes del 8-K | normal (pierden ~35 %) | simulacro |
