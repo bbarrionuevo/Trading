@@ -113,3 +113,51 @@ reconexión) termina en un estado conciliado; calibración con hasta 20 USDT (F-
 
 Cuando se cumple F-3: armado del dueño (N2), seguimiento diario de paper contra real y
 retroceso automático a N1 ante cualquier divergencia.
+
+## Plan de acción del 5-nov-2026: lo que sirve de los dos informes y de las cuatro ideas del dueño
+
+Fuentes: "Arquitectura de Sistemas de Trading Cuantitativo Autónomo en Futuros de Criptomonedas" y "Arquitectura de
+Sistemas HFT y Microestructura Cuantitativa" (los dos informes que pasó el dueño), más sus cuatro ideas (relevo en
+Tokio, datos de la cadena, vacío del libro, foco en deslistados). Cada punto se contrastó con lo medido en la PC.
+
+**Ya estaba hecho** (lo piden los informes y el sistema ya lo tiene): deduplicación MinHash/LSH; dos niveles (reglas
+exactas al instante para los avisos con formato fijo, la IA para el resto); triple barrera con stop medido (listados
+10 %); Kelly fraccional (¼); frenos de pérdida por día, semana y total; λ de Kyle y raíz cuadrada del impacto; tope de
+precio en cada orden (IOC con tope); DSR para juzgar cada estrategia (sola, desde el 5-nov); estudios con la demora
+real (sin mirar el futuro); deslistados y etiqueta de vigilancia de Binance (la idea 4).
+
+**Hecho el 5-nov:** balde de fichas en el lector de libros (los dos informes): el camino interno de un aviso a la
+orden bajó de ~220 ms a ~30 ms. La SEC ya no se corta minutos. Los deslistados piden todo en un solo viaje a Binance.
+
+**Próximo, en orden y con evidencia:**
+1. **Medir la demora de punta a punta** en el primer deslistado o etiqueta real (canal 1,2-1,8 s + agente ~0,03 s +
+   orden). Si la entrada queda después de los 2,5 s: libro en la sombra por WebSocket (`!bookTicker` de todos los
+   contratos) para decidir sin pedir nada por REST.
+2. **Control de peso de la API de Binance** compartido por todo el agente (`X-MBX-USED-WEIGHT-1M`, freno al 80 %),
+   para que nunca llegue un 429 o un 418 (bloqueo de hasta 3 días).
+3. **Segunda lectura de la IA en paralelo** para las reglas sin IA (deslistados, etiqueta): si la IA dice que el aviso
+   no es lo que la regla entendió, se cierra la posición (el "nivel 2 que aborta" del segundo informe).
+4. **Registro fiscal** (primer informe, ARCA): resultado y volumen operado por mes y por año, para cuando haya dinero
+   real.
+5. **Upbit, fin del soporte:** 6 casos segundo a segundo, media ~+4 % con mucha dispersión (+19 % a −11 %). Seguir
+   midiendo; con 15 casos, decidir. Las advertencias de Upbit no dan ventaja (n 13).
+
+**Necesita una decisión del dueño** (cuesta plata o hace falta una cuenta suya):
+- **Servidor en Tokio** (idea 1, ~5 USD por mes): ahorraría ~0,2 s por aviso. Conviene si la medición del punto 1
+  muestra que llegamos tarde por décimas. La cuenta la crea el dueño y me da acceso.
+- Noticias pagas con "supera / no alcanza lo esperado" (Benzinga por Alpaca).
+
+**Para investigar más adelante:** billeteras de Upbit en la cadena antes de un listado (idea 2); el vacío del libro
+como alarma previa (idea 3).
+
+**Descartado con datos o porque no aplica:**
+- 6-K y 8-K que no son resultados: medido, sin ventaja. (Los 8-K de **resultados** sí la tienen: el primer informe
+  generaliza de más.)
+- Arbitraje de funding: riesgo de cola y necesita spot. Funding extremo como señal: medido, sin ventaja.
+- Apalancamiento 2-5x para pasar el mínimo de 5 USDT: con 100 USDT, 1 % de riesgo y stop de 10 % ya dan 10 USDT.
+- uvloop (no anda en Windows), batchOrders (los stops de Binance van por el servicio Algo, aparte), reescribir en
+  NautilusTrader o Rust: el cuello es la red y el exchange, no Python (el agente decide en ~30 ms).
+- Los "picos" de la tabla del primer informe (+33,6 % Upbit, +39,7 % futuros nuevos): se ven después, no son ganancias
+  operables. Medido: ir largo en los futuros nuevos pierde.
+- "Entrar a los 10-20 s": sirve en los listados de Upbit (calibrado), no en los deslistados ni en la etiqueta de
+  Binance (a los 5-10 s ya no hay ventaja: la caída pasa entre los 2 y 5 s).
