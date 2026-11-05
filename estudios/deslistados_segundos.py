@@ -68,7 +68,8 @@ def summary(xs):
             f"positivas {sum(x > 0 for x in xs) * 100 / len(xs):3.0f}% peor {min(xs) * 100:+4.0f}%")
 
 
-events = [e for e in json.loads((D / "deslistados.json").read_text(encoding="utf-8")) if e["t0"] >= 1735689600000]
+NAME = sys.argv[2] if len(sys.argv) > 2 else "deslistados.json"
+events = [e for e in json.loads((D / NAME).read_text(encoding="utf-8")) if e["t0"] >= 1735689600000]
 rows = []
 for e in events:
     tr = window(e)

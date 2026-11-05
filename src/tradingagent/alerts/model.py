@@ -289,6 +289,11 @@ def startup_alert(mode: str, sources_active: int, sources_total: int, version: s
     return Alert(Priority.SYSTEM, "startup", clip(text), key="startup")
 
 
+# Nombres de las estrategias para el dueño (las categorías del sistema).
+STRATEGY_ES = {"resultados_impulso": "resultados", "lanzamiento_corto": "contratos nuevos",
+               "deslistado_corto": "deslistados", "listado": "listados"}
+
+
 def daily_alert(day: str, *, mode: str, closed: int, won: int, pnl, equity, initial, total_closed: int,
                 needed: int = 60, llm: dict | None = None, calib: dict | None = None) -> Alert:
     """Resumen diario de la cuenta de la PC, en una mirada."""
@@ -308,6 +313,11 @@ def daily_alert(day: str, *, mode: str, closed: int, won: int, pnl, equity, init
         if calib.get("reaccion_s") is not None:
             line += f" De la noticia a la entrada: {esc(num_es(round(calib['reaccion_s'], 1)))} s (mediana)."
         lines.append(line)
+        cats = sorted((calib.get("por_categoria") or {}).items(), key=lambda kv: -kv[1]["n"])[:5]
+        if cats:                                           # cómo le va a cada estrategia (toda la historia)
+            lines.append("Por estrategia: " + " · ".join(
+                f"{esc(STRATEGY_ES.get(c, c))} {v['n']} ({v['ganadas']} ganada{'s' if v['ganadas'] != 1 else ''}, "
+                f"{esc(usdt_es(v['pnl']))})" for c, v in cats) + ".")
     if llm:
         calls, usd, fails = llm.get("calls", 0), llm.get("usd", 0.0), llm.get("failures", 0)
         line = f"IA: {calls} consulta{'s' if calls != 1 else ''} ({esc(num_es(round(usd, 4)))} USD)."

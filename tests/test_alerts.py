@@ -251,3 +251,14 @@ def test_los_avisos_se_entienden_sin_saber_de_trading():
                                         calib={"acierto": None, "cerradas": 0, "reaccion_s": None}).text
     for a in (e, x, w, d, c):
         assert not any(j in a.text for j in ("LONG", "SHORT", "PnL", "SL ", "TP ", "p=", "α", "bps", "DSR", "HALT"))
+
+
+def test_el_resumen_diario_muestra_cada_estrategia():
+    from tradingagent.alerts.model import daily_alert
+
+    c = daily_alert("2026-11-06", mode="SIMULACRO futuros Binance", closed=1, won=1, pnl="1.2", equity="101.2",
+                    initial="100", total_closed=4,
+                    calib={"acierto": 0.75, "cerradas": 4, "reaccion_s": 2.1,
+                           "por_categoria": {"deslistado_corto": {"n": 1, "ganadas": 1, "pnl": "0.9"},
+                                             "resultados_impulso": {"n": 3, "ganadas": 2, "pnl": "1.5"}}})
+    assert "Por estrategia: resultados 3 (2 ganadas, +1,50 USDT) · deslistados 1 (1 ganada, +0,90 USDT)." in c.text
