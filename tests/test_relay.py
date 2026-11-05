@@ -48,10 +48,10 @@ async def test_latido_aviso_y_datagrama_falso():
     task = asyncio.create_task(pc.run(stop))
     try:
         for _ in range(100):                                         # el latido abre el túnel
-            if srv.peer is not None and pc.counts["acks"]:
+            if srv.live() and pc.counts["acks"]:
                 break
             await asyncio.sleep(0.02)
-        assert srv.peer is not None and pc.rtt_ms is not None
+        assert srv.live() and pc.rtt_ms is not None
         item = NewsItem(id="abc123", source="upbit.avisos", tier=1, kind="api", title="[거래] 신규 거래지원 안내 (FOO)",
                         published_at=clock.time() - 3, received_at=clock.time())
         assert srv.forward(item)

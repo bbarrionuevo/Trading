@@ -75,7 +75,9 @@ del dueño.
 - Servidor AWS Lightsail en Tokio (ap-northeast-1), usuario `ubuntu`, llave `C:\Users\Brian\.ssh\lightsail-tokio.pem`. Código en `/home/ubuntu/trading` (el repo), servicio `rele-tokio` (systemd, se reinicia solo), clave del relé en `/home/ubuntu/relay.key`.
 - En la PC: `TRADING_HOME/relay.json` (dirección y puerto UDP) y `TRADING_HOME/relay.key` (la misma clave; nunca se muestra). El agente manda un latido firmado cada 10 s y recibe los avisos.
 - Ver cómo anda: `ssh -i C:\Users\Brian\.ssh\lightsail-tokio.pem ubuntu@<IP> "sudo journalctl -u rele-tokio -n 50"`. Actualizar: `cd ~/trading && git pull && sudo systemctl restart rele-tokio` (o `bash deploy/rele-tokio/instalar.sh`).
-- El servidor no tiene claves de trading ni de la IA.
+- Desde el 5-nov también corre ahí el **agente completo en simulacro** (servicio `agente-tokio`, `TRADING_HOME=/home/ubuntu/.trading`, fase 2 de `docs/RELE-TOKIO.md`): todas las fuentes y estrategias, con Binance a 2-5 ms. Su `.env` tiene la IA, la clave de SOLO LECTURA y el `SEC_USER_AGENT`; **no** la de trading (esa está en `/home/ubuntu/.env`, del dueño, y no se usa hasta la fase 3, con REGLAS aprobadas).
+- Su estado llega al tablero de la PC (sección "Servidor de Tokio") por telemetría firmada a través del relé; la pausa de la PC (KILL o /pausa) se copia sola al agente de Tokio.
+- Actualizar los dos servicios (con el CI de `main` en verde): `ssh -i C:\Users\Brian\.ssh\lightsail-tokio.pem ubuntu@176.32.87.26 "bash ~/trading/deploy/tokio/instalar-agente.sh"`. Logs: `sudo journalctl -u agente-tokio -n 50` y `-u rele-tokio`.
 
 ## 4. Cómo funciona (de la noticia a la orden)
 

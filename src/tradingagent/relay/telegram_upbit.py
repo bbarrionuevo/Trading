@@ -43,6 +43,24 @@ NOTICE = re.compile(r"https?://(?:www\.)?upbit\.com/service_center/notice\?id=(?
 TRADE_TAG = "거래"                              # avisos de trading (la categoría "trade" que lee la PC)
 
 
+class Status:
+    """Cómo anda la escucha (el relé lo manda al tablero de la PC cada 30 s)."""
+
+    def __init__(self):
+        self.connected_at: float | None = None
+        self.notices = self.ignored = 0
+        self.last: dict | None = None
+        self.error: str | None = None
+
+    def snapshot(self, now: float) -> dict:
+        return {"conectado": self.connected_at is not None, "avisos": self.notices, "ignorados": self.ignored,
+                "desde_s": round(now - self.connected_at) if self.connected_at else None, "ultimo": self.last,
+                "error": self.error}
+
+
+STATUS = Status()
+
+
 WANTED = ("TG_API_ID", "TG_API_HASH")
 
 
@@ -157,6 +175,11 @@ async def listen(on_item, stop: asyncio.Event, env_file: Path = ENV_FILE) -> Non
                 msg, now = event.message, time.time()
                 sent_at = msg.date.timestamp() if msg.date else now
                 item = parse_post(msg.message or "", message_urls(msg), sent_at, now)
+                if item is None:
+                    STATUS.ignored += 1
+                else:
+                    STATUS.notices += 1
+                    STATUS.last = {"titulo": item.title[:80], "demora_s": round(now - sent_at, 2), "ts": round(now)}
                 log.info("Telegram %s: %.2f s desde el envío · %s", "aviso" if item else "ignorado", now - sent_at,
                          (msg.message or "").split("\n")[0][:100])
                 if item is not None:
@@ -165,6 +188,7 @@ async def listen(on_item, stop: asyncio.Event, env_file: Path = ENV_FILE) -> Non
             client.add_event_handler(on_message, events.NewMessage(chats=[peer]))
             log.info("Telegram: escuchando «%s» (ID %s)", pin.get("titulo"), peer)
             delay = 5.0
+            STATUS.connected_at, STATUS.error = time.time(), None
             done = asyncio.ensure_future(stop.wait())
             gone = asyncio.ensure_future(client.disconnected)
             await asyncio.wait({done, gone}, return_when=asyncio.FIRST_COMPLETED)
@@ -173,8 +197,10 @@ async def listen(on_item, stop: asyncio.Event, env_file: Path = ENV_FILE) -> Non
         except SystemExit:
             raise
         except Exception as e:                       # noqa: BLE001 (sin Telegram, el relé sigue con lo demás)
+            STATUS.error = type(e).__name__
             log.warning("Telegram cortado (%s): reintento en %.0f s", type(e).__name__, delay)
         finally:
+            STATUS.connected_at = None
             await client.disconnect()
         if not stop.is_set():
             try:

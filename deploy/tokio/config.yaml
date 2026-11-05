@@ -1,0 +1,12 @@
+# Agente de Tokio (fase 2: simulacro). Pisa los valores por defecto (src/tradingagent/config.py); lo demás, igual que
+# en la PC. instalar-agente.sh lo copia a ~/.trading/config.yaml solo si no existe.
+alerts:
+  # El bot de Telegram lo usa la PC (dos lectores del mismo bot se pisan y la PC perdería /pausa): las alertas de
+  # Tokio van al tablero de la PC por la telemetría (telemetry/remota.py).
+  telegram: false
+ingestion:
+  sources:
+    upbit.avisos:
+      enabled: false   # el sitio de Upbit bloquea las IP de AWS (403): llega por el canal oficial de Telegram (relé)
+    binance.listados:
+      enabled: false   # la lee el relé y la reparte (una sola lectura por IP: el límite de www.binance.com es por IP)

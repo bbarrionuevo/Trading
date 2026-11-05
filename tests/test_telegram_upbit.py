@@ -64,7 +64,7 @@ async def test_el_rele_manda_el_aviso_de_telegram_a_la_pc():
 
     relay = server.RelayServer(key)
     relay.transport = Transport()
-    relay.peer, relay.peer_at = ("203.0.113.7", 40000), relay.clock.time()
+    relay.add_peer(("203.0.113.7", 40000), relay.clock.time())
     it = telegram_upbit.parse_post(LISTING, [LINK], relay.clock.time() - 1, relay.clock.time())
     await relay.on_telegram(it)
     msg = protocol.decode(sent[0][0], key, protocol.NonceCache())
