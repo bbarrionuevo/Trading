@@ -97,3 +97,38 @@ async def test_si_ya_cayo_llegamos_tarde_y_no_entra(tmp_path):
         assert t.st["positions"] == {}
     why = [r["motivos"] for r in decisions(home) if r["signal"].get("category") == "deslistado_corto"]
     assert why and why[0][0].startswith("ya_cayo:-6.67")
+
+
+TAG = "Binance Will Extend the Monitoring Tag to Include SOL, D, FOO & BAR on 2026-11-20"
+
+
+def test_la_etiqueta_de_vigilancia_es_otro_aviso_con_su_regla():
+    n, coins = delistings.notice("binance.ws", TAG)
+    assert n.category == "vigilancia_corto" and coins == ("SOL", "FOO", "BAR")       # "D" (una letra) no cuenta
+    n, coins = delistings.notice("binance.ws", "Binance Will Extend the Monitoring Tag to GPS on 2025-03-07")
+    assert n.category == "vigilancia_corto" and coins == ("GPS",)
+    assert delistings.notice("binance.ws", TITLE)[0].category == "deslistado_corto"
+    assert delistings.coins("binance.ws", TAG) == ()                               # coins(): solo deslistados
+
+
+async def test_etiqueta_de_vigilancia_corto_con_stop_de_10_si_todavia_no_cayo_2(tmp_path):
+    clock = ManualClock(T0 + 3)
+    fake = FakeBinance(price=market(149.0), clock=clock)                # −0,7 %: todavía no cayó
+    home = tmp_path / "home"
+    async with serve(fake.app()) as url, aiohttp.ClientSession() as s:
+        t = await trader(s, url, clock, home)
+        await t.on_news(notice("v1", title=TAG))
+        await asyncio.gather(*t.pending)
+        pos = t.st["positions"]["SOLUSDT"]
+        assert pos["side"] == "corto" and pos["category"] == "vigilancia_corto"
+        assert 1.09 < float(pos["stop"]) / float(pos["avg_price"]) < 1.11      # stop fijo de 10 %
+        assert float(pos["avg_price"]) * float(pos["qty"]) <= 0.10 * 120 + 0.5  # 1 % del saldo al stop
+    fake2 = FakeBinance(price=market(146.0), clock=clock)               # −2,7 %: ya cayó más de 2 %
+    home2 = tmp_path / "home2"
+    async with serve(fake2.app()) as url, aiohttp.ClientSession() as s:
+        t = await trader(s, url, clock, home2)
+        await t.on_news(notice("v2", title=TAG))
+        await asyncio.gather(*t.pending)
+        assert t.st["positions"] == {}
+    why = [r["motivos"] for r in decisions(home2) if r["signal"].get("category") == "vigilancia_corto"]
+    assert why and why[0][0].startswith("ya_cayo:-2.67")
