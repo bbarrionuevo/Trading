@@ -102,6 +102,36 @@ Ganancia neta (0,2 % de costos) según cuándo se entra y cómo se sale, listado
 - Cuidado: n chico; el spot reemplaza al perpetuo en los segundos; en plena noticia el costo real puede pasar el
   0,2 % (con 0,5 % la mediana a 20 s y 15 min sigue en +2,7 %).
 
+### Upbit en el perpetuo de Binance, operación por operación (5-nov): la ventana es de 2-3 s
+
+`estudios/upbit_segundos.py`: los 56 listados de Upbit de los últimos 180 días (listado nuevo y alta en wones, con
+la hora exacta del aviso del sitio), con cada operación del perpetuo de Binance (archivo público data.binance.vision).
+31 ya tenían perpetuo antes del aviso (22 no tenían; 3 sin operaciones antes). Entrada: la primera operación a los s
+segundos +0,1 %; salida: la última antes del plazo; 0,2 % de costos. Sin stop.
+
+- **Al segundo, nada** (mediana +0,06 %). **A los 2 s, +15 %** (97 % positivas): es el tope de precio de Binance en
+  los primeros segundos (en 15 de los 31 el precio quedó clavado en +15,0 %). A los 5-9 s, +17,6 a +17,9 %.
+
+| Entrar a los | 1 min | 5 min | 15 min | 60 min |
+|---|---|---|---|---|
+| 2 s (Tokio, por Telegram) | med +2,03 %, media +5,12 % (61 %) | **+1,45 %, +4,85 % (61 %)** | +1,37 %, +6,62 % (58 %) | +4,50 %, +7,42 % (58 %) |
+| 3 s | +0,75 %, +4,71 % (55 %) | +1,85 %, +4,52 % (58 %) | +1,47 %, +6,23 % (55 %) | +3,29 %, +7,07 % (61 %) |
+| 5 s | −0,86 %, +1,70 % (45 %) | −1,72 %, +1,40 % (42 %) | −0,87 %, +3,18 % (48 %) | +2,03 %, +3,93 % (52 %) |
+| 9 s (el sondeo de la PC) | −1,66 %, +0,31 % (39 %) | −2,12 %, +0,02 % (45 %) | −0,92 %, +1,80 % (48 %) | +0,92 %, +2,52 % (52 %) |
+| 15 s | +0,13 %, +0,09 % (52 %) | −0,10 %, −0,22 % (48 %) | +0,47 %, +1,50 % (52 %) | +1,79 %, +2,19 % (58 %) |
+
+- Por tipo, a los 2 s y 5 min: listado nuevo (n 17) mediana +1,45 %, media +1,35 %; alta en wones (n 14) +4,45 % y
+  +9,11 %. A los 9 s: −2,51 % y −1,71 %; +0,36 % y +2,12 %.
+- **Lo que decide es la velocidad:** entre los 3 y los 5 s la mediana pasa de positiva a negativa. Desde Tokio, el
+  aviso llega por el canal oficial de Telegram 0-2 s después del sitio y Binance responde en 2-5 ms; esperar a la IA
+  (~1,8 s) empuja la entrada al borde. Propuesta: **listados de Upbit al instante** (`decision/upbit_listings.py`,
+  excepción a REGLAS C-4, B-4 y A-5, la aprueba el dueño): ≤ 3 s desde el mensaje de Telegram, sin subir más de 16 %,
+  stop fijo de 10 %, salida a los 15 min, 1 % al stop; la IA lee después y, si no confirma, se cierra.
+- **Cuidado:** n 31; sin stop en el estudio (el peor a 15 min desde los 2 s fue −10,4 %); en el tope de +15 % hay fila
+  para comprar y una orden con tope de precio puede no llenarse (o llenarse en parte); a los 10-20 s este estudio da
+  menos que el del 4-nov (spot de 1 s como sustituto, otros avisos, con stop de 10 %). Al segundo hubo una operación
+  rara (un precio 77 veces el anterior) que ensucia la media de ese renglón: la mediana no la mira.
+
 ### Binance: la copia del CDN demoraba ~60 s
 
 Medido en la PC el 4-nov: la lista de anuncios de Binance la sirve CloudFront con una copia que dura ~120 s (la

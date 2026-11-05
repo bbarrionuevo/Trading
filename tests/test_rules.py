@@ -75,6 +75,33 @@ def test_a2_dinero_real_solo_con_el_armado_del_dueno(tmp_path):
     assert callers == ["__main__.py"]                             # solo el comando del dueño arma
 
 
+def test_g9_un_solo_ejecutor_del_dinero_real(tmp_path):
+    """Si el agente de Tokio informa (telemetría de la última hora) que opera dinero real, la PC no abre con dinero
+    real; el simulacro sigue. El relé copia la pausa de la PC a Tokio y nunca lee claves de trading."""
+    import time
+
+    from tradingagent.execution.live import arming
+    from tradingagent.relay import server, telegram_upbit
+    home, now = tmp_path / "h", time.time()
+    arming.arm(home, 7, "k", arming.phrase(7), now=now)
+    arming.save_verification(home, {"ok": True}, "k", now=now)
+    assert arming.status(home, "k", now=now + 60)[0]
+
+    def tokio(kind, ago):
+        paths.write_json_atomic(home / "state" / "tokio.json",
+                                {"agente": {"recibido": now - ago, "cuentas": [{"tipo": kind}]}})
+
+    tokio("real", 30)
+    assert arming.status(home, "k", now=now + 60)[1] == "otro_ejecutor"
+    tokio("simulacro", 30)
+    assert arming.status(home, "k", now=now + 60)[0]
+    tokio("real", 2 * 3600)                                      # Tokio calló hace 2 h: decide el armado de acá
+    assert arming.status(home, "k", now=now + 60)[0]
+    assert server.KILL_MARK and telegram_upbit.WANTED == ("TG_API_ID", "TG_API_HASH")
+    unit = (ROOT / "deploy" / "rele-tokio" / "rele-tokio.service").read_text(encoding="utf-8")
+    assert "EnvironmentFile" not in [line.split("=")[0].strip() for line in unit.splitlines()]
+
+
 def test_a3_ordenes_solo_en_el_modulo_real_y_nunca_retiros_ni_transferencias():
     everywhere = [r"capital/withdraw", r"\bwithdraw(al)?s?\s*\(", r"/withdraw", r"/transfer", r"X-MEXC-APIKEY",
                   r"\bccxt\b", r"/api/v3/order\b", r"\bnewOrder\b", r"\bplaceOrder\b", r"change_margin",

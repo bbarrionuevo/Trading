@@ -93,11 +93,13 @@ Las reglas exactas de los títulos de Upbit ("신규 거래지원", "KRW 마켓 
 son igual de rápidas (microsegundos) y no se equivocan de tipo de aviso. La IA queda como segunda lectura que puede
 cerrar (ya existe para deslistados y etiquetas), y todo cierre va con IOC y tope de precio (nunca a mercado sin tope).
 
-### Lo que falta medir antes de entrar a los ~2 s en los listados de Upbit
+### Entrar a los ~2 s en los listados de Upbit: medido el 5-nov
 
-El estudio de Upbit midió entradas a los 5-30 s (el salto pasa en los primeros 5 s y el primer pico se devuelve en
-parte). Entrar a los ~2 s no está medido: se mide segundo a segundo con el archivo público de Binance (como los
-deslistados) antes de usarlo con plata real.
+`estudios/upbit_segundos.py` (31 listados con perpetuo en Binance, 180 días, cada operación del perpetuo): a los 2 s
+el precio ya subió +15 % (el tope de Binance) y comprar ahí todavía rinde (a 5 min mediana +1,45 %, media +4,85 %);
+a los 5 s ya no (−1,72 %), ni a los 9 s del sondeo de la PC (−2,12 %). Detalle en docs/ESTUDIO-LISTADOS.md. Por eso
+la regla al instante (`decision/upbit_listings.py`, PR protegido para el dueño) entra apenas llega el aviso por
+Telegram, sin esperar a la IA, y la IA lee después.
 
 ### Todo en Tokio (pedido del dueño): por fases
 
