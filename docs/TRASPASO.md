@@ -103,6 +103,10 @@ del dueño.
      por el dueño el 4-nov: calibración con Upbit en Binance; el stop que seguía al precio a 5 % perdía); tope de
      precio de 50 bps; exento de "ya recorrió el objetivo" (`DRIFT`).
    - **macro:** solo con menos de 90 s.
+   - **deslistado_corto** (`decision/delistings.py`): apenas llega por el canal oficial un aviso "Binance Will
+     Delist ...", corto en el perpetuo de cada moneda si el precio todavía no cayó más de 4 % desde el minuto del
+     aviso; **stop FIJO de 20 % y salida a las 4 h**, arriesgando 2 % (0,10 veces el saldo). Sin IA (C-4 y A-5,
+     excepción medida, `docs/ESTUDIO-DESLISTADOS.md`); la regla general no vuelve a entrar con ese aviso.
    - **lanzamiento_corto** (`decision/launches.py`): el operador mira el catálogo de Binance cada minuto; a los 15
      min del inicio de un perpetuo de cripto nuevo, si el precio quedó en o debajo del primero, corto con **stop
      FIJO de 30 % y salida a las 72 h**, arriesgando 2 % (0,065 veces el saldo). Sin IA (C-4 y A-5, excepción
@@ -237,6 +241,12 @@ dueño qué hiciste y por qué.
   - con stop que sigue al precio a 5 %: +12,7 % por operación (contra +4,9 % con objetivo fijo);
   - **entrando a los 5 minutos, todo pierde**: llegar primero es todo.
 - **Lanzamientos de futuros de Binance** (n = 9): saltan y se devuelven. No se operan.
+- **Deslistados de Binance** (4-nov, `docs/ESTUDIO-DESLISTADOS.md`, segundo a segundo con el archivo público de
+  Binance): el precio cae entre los 2 y 5 s del aviso (mediana −8 % a los 5 s). Corto a los 2 s, stop 20 %, 4 h:
+  mediana +18 %, media +13 %, 79 % positivas (34 monedas de 17 avisos desde 2025); a los 5 s sin filtro +2,6 % (2025:
+  −3 %). Si todavía no cayó más de 4 %, +7 a +12 % de media aunque se llegue a los 3-5 s.
+- **Funding extremo** (4-nov, `estudios/funding.py`, 114 perpetuos 2020-2026): sin ventaja estable (se da vuelta según
+  el período y unos pocos saltos enormes mandan en el promedio). No se opera.
 - **Perpetuos nuevos** (4-nov, `docs/ESTUDIO-LANZAMIENTOS.md`, 521 desde 2023 con funding y costos): largo
   pierde siempre; corto a todos rinde poco (+1,1 % de media a las 72 h con stop de 30 %); **los que a los 15 min ya
   bajaban: n = 250, mediana +7,4 %, media +4,2 %, 62 % positivas** (2023 −0,6 %, 2024 +3,1 %, 2025 +7,5 %, 2026

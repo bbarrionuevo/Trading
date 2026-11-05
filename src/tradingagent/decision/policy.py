@@ -251,7 +251,11 @@ EXITS = {"listado": ExitProfile(max_age_s=120, stop=0.10, hold_s=900, target=Fal
          # Perpetuos nuevos que a los 15 min ya bajaban (decision/launches.py, docs/ESTUDIO-LANZAMIENTOS.md): corto
          # con stop FIJO de 30 % y salida a las 72 h. Evidencia más débil: 0,065 veces el saldo = 2 % al stop.
          "lanzamiento_corto": ExitProfile(max_age_s=1200, stop=0.30, hold_s=72 * 3600, target=False, b_kelly=0.91,
-                                          max_slippage_bps=50, max_x=0.065)}
+                                          max_slippage_bps=50, max_x=0.065),
+         # Deslistados de Binance (decision/delistings.py, docs/ESTUDIO-DESLISTADOS.md): corto apenas llega el aviso si
+         # el precio todavía no cayó, stop FIJO de 20 % y salida a las 4 h. Muestra chica: 0,10 veces = 2 % al stop.
+         "deslistado_corto": ExitProfile(max_age_s=60, stop=0.20, hold_s=4 * 3600, target=False, b_kelly=1.0,
+                                         max_slippage_bps=50, max_x=0.10)}
 
 
 def chase_blocks(move: float | None, sl_frac: float, tp_frac: float, category: str = "") -> list[str]:
