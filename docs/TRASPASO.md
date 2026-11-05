@@ -443,6 +443,7 @@ sección 11). Un estudio nuevo va con su línea acá.
 | 5-nov | Precio de marca en resultados | frena 1 de 60 | se queda | sección 9 |
 | 5-nov | Upbit, advertencias y fin del soporte (al segundo) | advertencias sin ventaja (n 13); fin n 6, media ~+4 % | seguir midiendo | `estudios/upbit_negativos.py` |
 | 5-nov | Coinbase como fuente | su página de estado no publica listados | no | — |
+| 5-nov | Canales oficiales de Telegram (noticias generales) | Upbit 0-2 s del sitio (en uso); Binance +160 s de mediana (el WebSocket da 1,2-1,8 s); Cointelegraph +25 min de su RSS; CoinDesk, The Block y Decrypt sin canal; Bithumb solo señales de precio; Coinbase anuncia en X | solo Upbit; Coinbase por X es decisión del dueño (API paga) | `estudios/telegram_canales.py` |
 | 5-nov | Canal de anuncios de Binance | de publicado a recibido 1,2-1,8 s (5 avisos) | medido | sección 2 |
 | 5-nov | Camino interno del agente | de un aviso a la orden: 220 → 30 ms (balde de fichas) | hecho (PR #49) | sección 9 |
 | 5-nov | Control de peso de la API de Binance | lee `X-MBX-USED-WEIGHT-1M`; > 80 %: lo no urgente espera | hecho | `marketdata/peso.py` |
