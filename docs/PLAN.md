@@ -133,8 +133,9 @@ orden bajó de ~220 ms a ~30 ms. La SEC ya no se corta minutos. Los deslistados 
 1. **Medir la demora de punta a punta** en el primer deslistado o etiqueta real (canal 1,2-1,8 s + agente ~0,03 s +
    orden). Si la entrada queda después de los 2,5 s: libro en la sombra por WebSocket (`!bookTicker` de todos los
    contratos) para decidir sin pedir nada por REST.
-2. **Control de peso de la API de Binance** compartido por todo el agente (`X-MBX-USED-WEIGHT-1M`, freno al 80 %),
-   para que nunca llegue un 429 o un 418 (bloqueo de hasta 3 días).
+2. ✅ **Control de peso de la API de Binance** (5-nov, `marketdata/peso.py`): cada respuesta de Binance informa el
+   peso usado de la IP; pasado el 80 %, el catálogo, los volúmenes y los intervalos de funding esperan al minuto
+   siguiente (lo urgente nunca espera) y pasado el 90 % queda un aviso en el log. El latido muestra `peso_binance`.
 3. **Segunda lectura de la IA en paralelo** para las reglas sin IA (deslistados, etiqueta): si la IA dice que el aviso
    no es lo que la regla entendió, se cierra la posición (el "nivel 2 que aborta" del segundo informe).
 4. **Registro fiscal** (primer informe, ARCA): resultado y volumen operado por mes y por año, para cuando haya dinero

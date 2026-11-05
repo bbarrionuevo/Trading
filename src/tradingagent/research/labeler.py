@@ -27,6 +27,7 @@ import aiohttp
 
 from ..core.redact import redact
 from ..decision.barriers import barriers, sigma_1m, walk
+from ..marketdata.peso import MONITOR
 
 log = logging.getLogger("tradingagent.labeler")
 BINANCE_URL = "https://data-api.binance.vision/api/v3/klines"
@@ -50,6 +51,7 @@ class LabelError(Exception):
 async def _get_json(session, url: str, params: dict, timeout_s: float, what: str):
     try:
         async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=timeout_s)) as r:
+            MONITOR.observe(r.headers)                           # peso usado de la IP (marketdata/peso.py)
             if r.status != 200:
                 raise LabelError(f"{what}: HTTP {r.status}")
             return await r.json(content_type=None)

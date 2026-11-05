@@ -403,3 +403,34 @@ dueño qué hiciste y por qué.
     spread, Tesla ~30): sirve para la mecánica (órdenes, ejecuciones, stops, conciliación), no para medir
     deslizamiento ni ganancia.
 - **Upbit:** solo con `truststore` (la cadena del certificado viene incompleta).
+
+## 12. Registro de estudios y pruebas (para el que siga)
+
+**El plan de acción vigente está en `docs/PLAN.md`** (sección del 5-nov: lo que sirve de los dos informes de
+investigación del dueño y de sus cuatro ideas, lo próximo en orden, lo que necesita su decisión y lo descartado).
+Cada estudio se puede repetir con su script de `estudios/` (datos públicos; ojo con los límites por IP de la
+sección 11). Un estudio nuevo va con su línea acá.
+
+| Fecha | Qué se probó | Resultado | Decisión | Dónde |
+|---|---|---|---|---|
+| 3-nov | Listados spot de Binance (n 7) | +12,6 % a 5 min; entrando a los 5 min pierde | se opera (`listado`) | ESTUDIO-LISTADOS |
+| 3-nov | FOMC (n 4) | después de los 5 min, moneda al aire | macro solo con < 90 s | ESTUDIO-MACRO |
+| 4-nov | Upbit en MEXC (velas de 5 min) | listado +13,5 %; fin del soporte −7,4 % (n 6); advertencia −2,6 % | listados se operan | ESTUDIO-LISTADOS |
+| 4-nov | Resultados 8-K 2.02 en TradFi (88) | a los 2 min, si se movió ≥ 0,5 %: media +1,17 %, 39 de 60 | se opera (`resultados_impulso`) | ESTUDIO-RESULTADOS |
+| 4-nov | Tamaño y apalancamiento (60 ops) | 0,6 veces = el 3 % aprobado; ≥ 1x salta el freno de 8 % | tope por estrategia, 1x | ESTUDIO-APALANCAMIENTO |
+| 4-nov | Tendencia, 114 perpetuos 2020-26 | diversificada gana fuera de muestra; concentrada no | no (falta capital) | ESTUDIO-TENDENCIA |
+| 4-nov | Momentum entre activos | sin ventaja | no | ESTUDIO-TENDENCIA |
+| 4-nov | Perpetuos nuevos (521) | corto si a los 15 min ya bajó: media +4,2 % | se opera (`lanzamiento_corto`) | ESTUDIO-LANZAMIENTOS |
+| 4-nov | Funding extremo | sin ventaja estable | no | `estudios/funding.py` |
+| 4-nov | Deslistados de Binance (34, al segundo) | a los 2 s media +12,8 %; si no cayó 4 %, +7 a +12 % | se opera (`deslistado_corto`) | ESTUDIO-DESLISTADOS |
+| 5-nov | Otros 8-K de la SEC (1.136) | mueven el precio, seguirlo no rinde | no | `estudios/eventos_sec.py` |
+| 5-nov | 6-K de extranjeras (473) | sin ventaja (resultados publicados antes en su país) | no | `estudios/eventos_6k.py` |
+| 5-nov | Etiqueta de vigilancia de Binance (31) | a los 2 s, si no cayó 2 %: media +3,6 %, 85 % | se opera (`vigilancia_corto`) | ESTUDIO-DESLISTADOS |
+| 5-nov | Freno de liquidez (Kyle) en resultados | saca 23 %, las más flojas | se queda | sección 9 |
+| 5-nov | Precio de marca en resultados | frena 1 de 60 | se queda | sección 9 |
+| 5-nov | Upbit, advertencias y fin del soporte (al segundo) | advertencias sin ventaja (n 13); fin n 6, media ~+4 % | seguir midiendo | `estudios/upbit_negativos.py` |
+| 5-nov | Coinbase como fuente | su página de estado no publica listados | no | — |
+| 5-nov | Canal de anuncios de Binance | de publicado a recibido 1,2-1,8 s (5 avisos) | medido | sección 2 |
+| 5-nov | Camino interno del agente | de un aviso a la orden: 220 → 30 ms (balde de fichas) | hecho (PR #49) | sección 9 |
+| 5-nov | Control de peso de la API de Binance | lee `X-MBX-USED-WEIGHT-1M`; > 80 %: lo no urgente espera | hecho | `marketdata/peso.py` |
+| 5-nov | **1.ª operación del simulacro** | Wendy's, resultados: entró a los 120 s, salió a los 30 min, −0,27 USDT (−0,5 %); su comunicado salió minutos antes del 8-K | normal (pierden ~35 %) | simulacro |

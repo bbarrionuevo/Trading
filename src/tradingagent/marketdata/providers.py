@@ -15,6 +15,7 @@ import aiohttp
 
 from ..core.redact import redact
 from .book import OrderBook
+from .peso import MONITOR
 
 
 class MarketDataError(Exception):
@@ -129,6 +130,7 @@ class RestBookProvider:
         try:
             async with self.session.get(self.url, params={"symbol": symbol, "limit": str(self.depth)},
                                         timeout=self.timeout) as r:
+                MONITOR.observe(r.headers)                       # peso usado de la IP (marketdata/peso.py)
                 if r.status != 200:
                     raise MarketDataError(f"{self.venue} {symbol}: HTTP {r.status}")
                 data = await r.json(content_type=None)

@@ -34,6 +34,7 @@ from .ingestion.engine import TOPIC_ACCEPTED, IngestionEngine
 from .ingestion.noise import NoiseConfig, NoiseFilter
 from .ingestion.sources import PollingSource, SourceSpec, with_overrides
 from .ingestion.webhook import WebhookSource
+from .marketdata.peso import MONITOR as PESO
 from .marketdata.providers import RestBookProvider
 from .telemetry.heartbeat import Heartbeat
 from .telemetry.journal import Journal
@@ -189,7 +190,7 @@ class Agent:
                 "news": {"aceptadas": c.get("aceptadas", 0), "stale": c.get("stale", 0),
                          "duplicadas": c.get("duplicado_exact", 0) + c.get("duplicado_near", 0),
                          "ruido": c.get("ruido", 0), "backlog": c.get("backlog", 0)},
-                "dedup": self.ingestion.dedup.stats(), "loop_lag": self.lag.stats(),
+                "dedup": self.ingestion.dedup.stats(), "loop_lag": self.lag.stats(), "peso_binance": PESO.snapshot(),
                 "portfolio": self.venue.portfolio.snapshot(self.venue.marks), "paper": self.venue.summary()
                 | {"portfolio": None}, "execution": self.execution.counts, "alerts": self.alerts.snapshot(),
                 "journal": self.journal.snapshot(), "bus": self.bus.stats(),
