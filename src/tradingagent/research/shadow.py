@@ -376,9 +376,12 @@ class _Run:
 
     discarded: frozenset = frozenset()          # estrategias (categorías) descartadas por sus resultados
 
-    async def enter(self, ev: dict, sig, asset: str, blocks: list, assessment=None, prefetched=None) -> None:
+    async def enter(self, ev: dict, sig, asset: str, blocks: list, assessment=None, prefetched=None,
+                    relaxed: bool = False) -> None:
         """Entrada con el núcleo de riesgo de siempre. `assessment`: una evaluación ya hecha (resultados con impulso,
-        decision/earnings.py: la dirección la da el precio y la probabilidad es el acierto medido)."""
+        decision/earnings.py: la dirección la da el precio y la probabilidad es el acierto medido). `relaxed`: sin las
+        alarmas del libro de B-4 (listados de Upbit al instante, decision/upbit_listings.py: el salto vacía el libro y
+        las dispara todas); queda que haya libro y el tope de precio de la orden (D-2)."""
         sym = self.market.symbol(asset)
         a = assessment or assess(ev, sig, asset, self.now, self.cfg, self.meta, allows_short=self.market.allows_short)
         reasons = list(a.reasons) + [why for _, why in blocks]           # primero lo del evento, después el resto
@@ -426,9 +429,10 @@ class _Run:
             analysis["plan"] = p.as_dict()
             moved = news_move(candles, t0, price, p.side)
             analysis["movido_desde_la_noticia"] = None if moved is None else round(moved, 5)
-            why = chase_blocks(moved, p.sl_frac, p.tp_frac, sig.category) + market_blocks(
-                book, p.notional, self.limits, self.cfg, p.side, spread_z=z, last=tick["last"],
-                kyle_ratio=kyle_ratio(candles, minute(self.now)), fair=tick.get("fair") or None)
+            why = chase_blocks(moved, p.sl_frac, p.tp_frac, sig.category) + (
+                ([] if book.spread_bps is not None else ["libro_vacio"]) if relaxed else market_blocks(
+                    book, p.notional, self.limits, self.cfg, p.side, spread_z=z, last=tick["last"],
+                    kyle_ratio=kyle_ratio(candles, minute(self.now)), fair=tick.get("fair") or None))
             if self.market.kind != "spot" and not liquidation_ok(1.0, p.side, p.sl_frac, float(inst.max_leverage),
                                                                  self.market.mmr_for(sym), self.cfg):
                 why.append("liquidacion_cerca_del_stop")

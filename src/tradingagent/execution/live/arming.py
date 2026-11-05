@@ -17,6 +17,9 @@
   "demo"). En MEXC, contra un exchange simulado sobre el libro real (dryrun.py).
 - Vencido, revocado (`armar-real --desarmar`) o con KILL: no se abre nada nuevo. Las posiciones abiertas
   salen normal: salir siempre se puede.
+- Un solo ejecutor por cuenta (REGLAS G-9): si el agente del servidor de Tokio informó en la última hora (su
+  telemetría, `state/tokio.json`) que opera DINERO REAL, esta máquina no abre con dinero real. En Tokio ese archivo
+  no existe: allá no frena nada.
 """
 import hashlib
 import time
@@ -33,6 +36,7 @@ ALL = "todo_el_saldo"                             # capital del armado real: tod
 VENUES = ("binance-futuros", "mexc-futuros")
 DEFAULT_VENUE = "binance-futuros"
 ALL_ASSETS = "TODOS"                              # cualquier activo del universo operable (lo que mueva la noticia)
+OTHER_EXECUTOR_S = 3600                           # G-9: Tokio dijo "dinero real" hace menos de una hora
 DEFAULT_ASSETS = (ALL_ASSETS,)
 
 
@@ -110,6 +114,8 @@ def status(home: Path, access_key: str | None, now: float | None = None,
     capital = data.get("capital_usdt")
     if sim and not (isinstance(capital, int | float) and capital > 0):
         return False, "simulacro_sin_saldo", data
+    if not sim and other_executor(home, now):          # G-9: el dinero real ya lo opera el servidor de Tokio
+        return False, "otro_ejecutor", data
     if not sim and capital != ALL:                    # un armado viejo, con tope: hay que volver a armar
         return False, "volver_a_armar", data
     if now >= float(data.get("vence", 0)) or float(data.get("vence", 0)) - float(data.get("armado_en", 0)) > \
@@ -123,6 +129,19 @@ def status(home: Path, access_key: str | None, now: float | None = None,
     if now - float(ver.get("ts", 0)) > VERIFY_MAX_AGE_S:
         return False, "verificacion_vieja", data
     return True, "", data
+
+
+def other_executor(home: Path, now: float) -> bool:
+    """REGLAS G-9: ¿el agente de Tokio opera dinero real (según su telemetría de la última hora)?"""
+    data = paths.read_json(Path(home) / "state" / "tokio.json", None)
+    ag = data.get("agente") if isinstance(data, dict) else None
+    if not isinstance(ag, dict):
+        return False
+    try:
+        fresh = now - float(ag.get("recibido") or 0) <= OTHER_EXECUTOR_S
+    except (TypeError, ValueError):
+        return False
+    return fresh and any(isinstance(a, dict) and a.get("tipo") == "real" for a in ag.get("cuentas") or [])
 
 
 def asset_allowed(data: dict, symbol: str, key: str | None = None) -> bool:
