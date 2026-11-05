@@ -18,6 +18,12 @@ Cómo opera:
   cierra TODA la posición, disparado por el precio de marca (`intent.tags["emergency_stop"]`, a 1,5 veces la
   distancia del stop del plan), por si la PC se apaga. Al quedar sin posición se cancela. Se guarda en disco, y la
   conciliación (cada 30 s) lo repone si falta y cancela el que quedó sin posición.
+- **Nunca se cancela una orden a menos de 5 s de puesta** (reglas cuantitativas de Binance: cancelar órdenes
+  recién puestas cuenta en contra; el dueño, 5-nov: "a binance no le gusta que quites la compra en menos de 5
+  segundos"). Las entradas y salidas son IOC (terminan solas, no se cancelan). El stop de emergencia que sobra (la
+  posición se cerró antes: por ejemplo, la segunda lectura de la IA a los ~2 s) se cancela en segundo plano cuando
+  cumple 5,5 s: cierra TODA la posición y la posición ya no está, así que esperar no arriesga nada, y el operador
+  no espera.
 - Las ejecuciones (precio, cantidad, comisión) salen de `userTrades`; si todavía no aparecen, de la orden misma con
   la comisión de taker estimada.
 - Un 503 o un corte al mandar una orden NO es una falla: la orden pudo entrar. Se consulta por el id propio
@@ -25,6 +31,7 @@ Cómo opera:
 """
 import asyncio
 import logging
+import time
 from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 from pathlib import Path
 
@@ -40,6 +47,7 @@ BALANCE_TTL_S = 60                        # el saldo se relee en cada conciliaci
 MARGIN_BUFFER = Decimal("0.98")           # tiene más de 1 min; se deja 2 % para comisiones
 POLL_S, POLL_TRIES = 0.25, 12             # una IOC termina enseguida: hasta 3 s para ver su estado final
 FILL_TRIES = 6                            # userTrades puede tardar un instante en mostrar la ejecución
+MIN_CANCEL_AGE_S = 5.5                    # Binance: nada se cancela a menos de 5 s de puesto (con margen)
 STOP_CONFIRM_TRIES = 10                   # el servicio Algo muestra la cancelación con demora (4-nov)
 TIME_SYNC_S = 3600                        # la hora del servidor se vuelve a leer cada hora (recvWindow de 5 s)
 TAKER_FEE = Decimal("0.0005")             # comisión estimada si Binance la cobra en otra moneda (BNB)
@@ -75,6 +83,8 @@ class BinanceVenue:
         self._synced_at = float("-inf")
         self._seq = 0
         self.stops: dict[str, dict] = {}          # contrato → stop de emergencia {"id", "side", "trigger"}
+        self._placed: dict[str, float] = {}       # id de cada stop puesto por este proceso → cuándo (reloj monótono)
+        self._later: set[asyncio.Task] = set()    # cancelaciones que esperan los 5 s
         self.stats = {"ordenes": 0, "rechazadas": 0, "llenadas": 0, "stops_puestos": 0, "stops_cancelados": 0}
         self._load_stops()
 
@@ -312,7 +322,7 @@ class BinanceVenue:
             return False
         old = self.stops.get(symbol) or {}
         if old.get("id"):                                     # nunca dos stops de cierre en el mismo contrato
-            await self._cancel_stop_id(old["id"], symbol)
+            await self._drop_stop(symbol)                     # (a los 5 s de puesto, como toda cancelación)
         sid = _oid(f"es{symbol}{int(self.clock.time() * 1000)}")
         self.stops[symbol] = {"id": None, "side": side, "trigger": str(trigger)}
         try:
@@ -325,14 +335,16 @@ class BinanceVenue:
             await self._save_stops()
             return False
         self.stops[symbol]["id"] = sid
+        self._placed[sid] = time.monotonic()
         self.stats["stops_puestos"] += 1
         await self._save_stops()
         return True
 
-    async def _cancel_stop_id(self, sid: str, symbol: str) -> bool:
+    async def _cancel_stop_id(self, sid: str, symbol: str, *, fallback: bool = True) -> bool:
         """Cancela un stop y confirma que Binance lo muestra cancelado (lo muestra con demora). Al cerrarse la
         posición, Binance ya lo vence solo (EXPIRED, visto en la demo el 4-nov): entonces el pedido de cancelación
-        contesta -2011 "Unknown order" y no hay nada que hacer."""
+        contesta -2011 "Unknown order" y no hay nada que hacer. `fallback`: si no se confirma, cancelar todos los del
+        contrato (no cuando ya hay otro stop nuevo en ese contrato)."""
         try:
             await self.client.cancel_stop(sid)
         except BinanceError as e:
@@ -346,6 +358,8 @@ class BinanceVenue:
             if status in CANCELED:
                 return True
             await asyncio.sleep(POLL_S)
+        if not fallback:
+            return False
         try:                                                  # último recurso: todos los stops de ese contrato
             await self.client.cancel_all_stops(symbol)
             return True
@@ -357,11 +371,32 @@ class BinanceVenue:
         st = self.stops.get(symbol)
         if st is None:
             return
-        done = await self._cancel_stop_id(st["id"], symbol) if st.get("id") else True
+        sid = st.get("id")
+        young = MIN_CANCEL_AGE_S - (time.monotonic() - self._placed.get(sid, float("-inf"))) if sid else 0.0
+        if young > 0:                                        # puesto hace menos de 5 s: se cancela después
+            self.stops.pop(symbol, None)
+            await self._save_stops()
+            task = asyncio.create_task(self._cancel_later(sid, symbol, young), name=f"stop-a-los-5s-{symbol}")
+            self._later.add(task)
+            task.add_done_callback(self._later.discard)
+            return
+        done = await self._cancel_stop_id(sid, symbol) if sid else True
         if done:
             self.stops.pop(symbol, None)
             self.stats["stops_cancelados"] += 1
         await self._save_stops()
+
+    async def _cancel_later(self, sid: str, symbol: str, wait: float) -> None:
+        """La cancelación de un stop recién puesto, a los 5,5 s (Binance). Si mientras tanto se puso otro stop en el
+        mismo contrato (una entrada nueva), se cancela solo este, nunca "todos los del contrato"."""
+        try:
+            await asyncio.sleep(wait)
+            if await self._cancel_stop_id(sid, symbol, fallback=symbol not in self.stops):
+                self.stats["stops_cancelados"] += 1
+        except Exception:                                    # la conciliación lo vuelve a mirar
+            log.exception("no pude cancelar el stop %s de %s a los 5 s", sid, symbol)
+        finally:
+            self._placed.pop(sid, None)
 
     async def _ensure_stop(self, symbol: str, amt: Decimal) -> bool:
         """Toda posición abierta en el exchange tiene su stop de emergencia; si falta, se repone."""

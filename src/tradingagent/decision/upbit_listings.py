@@ -15,8 +15,10 @@ Por eso llega por el canal oficial de Upbit en Telegram (0-2 s después del siti
 la IA (tarda ~1,8 s, y entre los 3 y los 5 s la mediana pasa de positiva a negativa). Los títulos de Upbit son
 inequívocos (las MISMAS reglas que el estudio: research/history.py). La IA lee después y, si no confirma, se cierra
 (segunda lectura, como en los deslistados). En el salto el libro se vacía y saltan todas las alarmas de B-4 (spread,
-lambda de Kyle, distancia a la marca): no se miran; protege el tope de precio de la orden (D-2). Muestra chica (31):
-arriesga 1 % del saldo al stop (0,10 veces el saldo con el stop fijo de 10 % de A-5) y sale a los 15 min.
+lambda de Kyle, distancia a la marca): no se miran; protege el tope de precio de la orden (D-2). Arriesga el 3 % del
+sobre al stop (0,30 veces el saldo con el stop fijo de 10 % de A-5; el dueño, 5-nov: "arriesga el 3%") y sale a los
+15 min. Más que eso o apalancamiento, no (estudios/upbit_tamano.py: con 5 % la mitad de las veces se toca el freno de
+8 %): lineamiento L-3 de REGLAS.
 """
 from ..intelligence import vector as vec
 from ..intelligence.classifier import Signal

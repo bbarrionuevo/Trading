@@ -261,9 +261,10 @@ EXITS = {"listado": ExitProfile(max_age_s=120, stop=0.10, hold_s=900, target=Fal
          "vigilancia_corto": ExitProfile(max_age_s=60, stop=0.10, hold_s=4 * 3600, target=False, b_kelly=1.0,
                                          max_slippage_bps=50, max_x=0.10),
          # Listados de Upbit al instante (decision/upbit_listings.py, estudios/upbit_segundos.py): largo apenas llega
-         # por Telegram, stop FIJO de 10 % y salida a los 15 min (A-5). Muestra chica: 0,10 veces = 1 % al stop.
+         # por Telegram, stop FIJO de 10 % y salida a los 15 min (A-5). 0,30 veces = el 3 % del sobre al stop (el
+         # dueño, 5-nov: "arriesga el 3%"; estudios/upbit_tamano.py: 31 listados, 100 USDT → 297, peor 5 % → 185).
          "listado_upbit": ExitProfile(max_age_s=10, stop=0.10, hold_s=900, target=False, b_kelly=1.5,
-                                      max_slippage_bps=50, max_x=0.10)}
+                                      max_slippage_bps=50, max_x=0.30)}
 
 
 def chase_blocks(move: float | None, sl_frac: float, tp_frac: float, category: str = "") -> list[str]:

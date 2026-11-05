@@ -102,6 +102,22 @@ def test_g9_un_solo_ejecutor_del_dinero_real(tmp_path):
     assert "EnvironmentFile" not in [line.split("=")[0].strip() for line in unit.splitlines()]
 
 
+def test_l_lineamientos_medidos_trabados_en_el_codigo():
+    """REGLAS L-1, L-3 y L-7: lo aprendido con datos no se cambia por error."""
+    from tradingagent.decision import policy, upbit_listings
+    assert upbit_listings.MAX_LATE_S <= 3.0                                  # L-1: al instante, por Telegram
+    live_src = (SRC / "live.py").read_text(encoding="utf-8")
+    start = live_src.index("    async def on_news(")
+    on_news = live_src[start:live_src.index("\n    async def ", start + 10)]
+    assert on_news.index("self._upbit_listing(") < on_news.index("self.llm.classify(")   # primero entra, después la IA
+    lim = limits.load()                                                         # L-3: 3 % y sin apalancamiento
+    assert float(lim["per_trade"]["max_risk_pct"]) <= 3 and int(lim["per_trade"]["max_leverage"]) == 1
+    p = policy.EXITS["listado_upbit"]
+    assert p.stop == 0.10 and p.max_x * p.stop <= 0.03 + 1e-9
+    venue = (SRC / "execution" / "live" / "binance_venue.py").read_text(encoding="utf-8")   # L-7: nunca antes de 5 s
+    assert float(re.search(r"^MIN_CANCEL_AGE_S = ([\d.]+)", venue, re.M).group(1)) >= 5
+
+
 def test_a3_ordenes_solo_en_el_modulo_real_y_nunca_retiros_ni_transferencias():
     everywhere = [r"capital/withdraw", r"\bwithdraw(al)?s?\s*\(", r"/withdraw", r"/transfer", r"X-MEXC-APIKEY",
                   r"\bccxt\b", r"/api/v3/order\b", r"\bnewOrder\b", r"\bplaceOrder\b", r"change_margin",
