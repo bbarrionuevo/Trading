@@ -16,6 +16,9 @@ Environment=PYTHONUNBUFFERED=1
 ExecStart=/home/ubuntu/trading/.venv/bin/python -m tradingagent run
 Restart=always
 RestartSec=10
+# Poca memoria (416 MB, sin swap): si falta, el kernel mata antes a otros procesos que a los de TRADING (el 5-nov
+# mató al agente mientras pip instalaba).
+OOMScoreAdjust=-500
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full

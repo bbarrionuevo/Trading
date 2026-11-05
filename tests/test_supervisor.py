@@ -535,7 +535,8 @@ def test_solo_tablero_no_corre_al_agente_y_late_a_tokio(tmp_path, gh):
     assert sup.run(max_loops=2, tick_s=0.01) == 0
     st = paths.read_json(sup.state_file, {})
     assert sup.child is None and st["modo"] == "solo_tablero_sin_rele" and st.get("arranques") == 1
-    paths.write_json_atomic(sup.home / "relay.json", {"host": "127.0.0.1", "port": 9})
+    paths.write_json_atomic(sup.home / "relay.json", {"host": "127.0.0.1", "port": 9,
+                                                    "ssh": {"llave": str(tmp_path / "no-existe.pem")}})
     (sup.home / "relay.key").write_text("ab" * 32, encoding="utf-8")
     sup2 = make(tmp_path, gh, origin)
     assert sup2.run(max_loops=2, tick_s=0.01) == 0

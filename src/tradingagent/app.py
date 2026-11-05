@@ -249,6 +249,19 @@ class Agent:
                 log.warning("falló la prueba de red", exc_info=True)
             delay = EVERY_S
 
+    async def _export_board(self, every_s: float = 30.0) -> None:
+        """Agente de Tokio: su tablero completo cada 30 s, para la PC "solo tablero" (relay/espejo.py lo trae por SSH)."""
+        from . import dashboard
+        while not self.stop_event.is_set():
+            try:
+                await asyncio.to_thread(dashboard.export_board, paths.home())
+            except Exception:                                        # el tablero nunca frena al agente
+                log.warning("no pude exportar el tablero", exc_info=True)
+            try:
+                await asyncio.wait_for(self.stop_event.wait(), timeout=every_s)
+            except TimeoutError:
+                pass
+
     def _build_streams(self, lim) -> list:
         """Fuentes empujadas: el canal oficial de anuncios de Binance (WebSocket), con una clave de SOLO LECTURA
         (`BINANCE_LECTURA_KEY` / `BINANCE_LECTURA_SECRET`). Sin esa clave queda apagado (y lo dice el latido)."""
@@ -500,6 +513,7 @@ class Agent:
                 tasks.append(asyncio.create_task(self._probe_loop(session), name="red"))
                 if self.telemetry is not None:
                     tasks.append(asyncio.create_task(self.telemetry.run(self.stop_event), name="telemetria"))
+                    tasks.append(asyncio.create_task(self._export_board(), name="tablero-exportado"))
                 commands = self._build_commands()
                 if commands is not None:                             # órdenes del dueño por Telegram
                     tasks.append(asyncio.create_task(commands.run(self.stop_event), name="ordenes"))
@@ -522,7 +536,7 @@ class Agent:
                     if self.news_tasks:                   # una noticia a medio operar se termina y se guarda
                         await asyncio.wait(set(self.news_tasks), timeout=10)
                     for t in tasks:
-                        if t.get_name() in ("lag", "consola", "aprendizaje", "red", "ordenes", "telemetria") or \
+                        if t.get_name() in ("lag", "consola", "aprendizaje", "red", "ordenes", "telemetria", "tablero-exportado") or \
                                 t.get_name().startswith("fuente-"):
                             t.cancel()
                     await asyncio.wait(tasks, timeout=15)

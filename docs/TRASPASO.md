@@ -28,11 +28,25 @@ Lo que pidió, en sus palabras:
 - "voy a necesitar que estés conectado prácticamente de forma sincrónica con mi PC para vigilar cómo está
   actuando el programa y poder realizar modificaciones rápidas de ser necesario".
 
-## 2. Estado al 4-nov-2026
+## 2. Estado al 4-nov-2026 (y lo nuevo del 5-nov arriba)
+
+**5-nov a la noche: TODO corre en el servidor de Tokio** (pedido del dueño: "queda ya todo en Tokio"):
+
+- **Tokio** corre el agente completo (`agente-tokio`) y el relé (`rele-tokio`). Es el simulacro de Binance con 100 USDT
+  de mentira, armado el 5-nov, más la práctica (120 USDT simulados). Lee todas las fuentes y estrategias, y opera los
+  listados de Upbit al instante por su canal oficial de Telegram. El bot de Telegram (alertas, /pausa, /estado) está en
+  Tokio.
+- **La PC está en "solo tablero"** (`%LOCALAPPDATA%\TRADING\SOLO-TABLERO`). El supervisor no corre al agente; sigue
+  actualizándose, sirve el tablero y publica la rama `pc`. Late al relé (la pausa de la PC frena a Tokio) y trae por SSH
+  el tablero completo de Tokio, que se ve como si el agente corriera en la PC. El simulacro de la PC quedó desarmado
+  (3 operaciones, +1,00 USDT de mentira: se ve en "Cuentas que ya no corren").
+- **Dinero real:** todo listo salvo lo que hace el dueño (sección 6, "Dinero real desde Tokio").
+- **Reglas:** v3.2 fusionada (#54). La v3.3 (#58: 3 % en los listados de Upbit, nada se cancela en Binance antes de
+  5 s, lineamientos medidos) espera al dueño.
 
 | Qué | Estado |
 |---|---|
-| PC | Al día. El supervisor la actualiza sola desde `main` con el CI en verde. Tests en Windows OK |
+| PC | Al día. El supervisor la actualiza sola desde `main` con el CI en verde. Tests en Windows OK. Desde el 5-nov a la noche, solo tablero |
 | Cuenta de práctica (paper) | **Pasa a futuros de Binance (4-nov)**, con 120 USDT simulados nuevos (`paper-vivo/binance-futuros/`): criptos y **TradFi** (acciones, ETF, oro, petróleo), con los precios públicos de Binance. La de MEXC queda guardada en `paper-vivo/mexc-futuros/` (3 operaciones el 3-nov, −0,20 USDT); se vuelve a ella con `trader.mercado: mexc-futuros` en config.yaml |
 | Simulacro del real | **Simulacro LOCAL sobre producción de Binance** (pedido del dueño, 4-nov; PR protegido): `armar-real --simulacro`. Es el operador real completo (misma noticia, decisión, riesgo y venue) con el libro y la comisión REALES de Binance, pero cada orden se ejecuta en la PC (`execution/live/binance_dryrun.py`): nivel por nivel contra el libro del momento, con su tope de precio, y el stop de emergencia simulado con el precio de marca. **Capital real 100 % aislado:** no recibe la clave de trading; la de solo lectura lee saldo y comisión y Binance la rechaza para operar (-2015, probado el 4-nov). Arranca con **100 USDT de mentira, nunca con el saldo real**: el simulacro se publica en la rama pública `pc` (el 4-nov se armó con el saldo real y quedó publicado unos minutos: se rearmó con 100). Registro: `simulacro/binance-futuros/ordenes-simuladas.jsonl`; informe: `informe-simulacro`. Probado contra producción el 4-nov (SOL y Tesla). `--demo` lo hace contra la demo de Binance. El de MEXC del 3-nov ya no corre |
 | **Dinero real** | **No arranca hasta que el dueño lo confirme** (4-nov: "debemos estar seguros de que todo funciona"). Va por fases: primero la prueba sin riesgo y el simulacro en Binance; después poca plata con vigilancia constante y actuar de inmediato ante cualquier falla; la última fase, cuando esté comprobado que todo funciona y gana. El armado lo hace siempre el dueño (`armar-real` con la frase). Historia: el 4-nov la prueba de MEXC falló primero por la dirección vieja (403) y después por la restricción de la cuenta (fila siguiente) |
@@ -69,6 +83,39 @@ aparte (sección 7).
 
 **Nunca toques nexus:** `%USERPROFILE%\nexus`, `%LOCALAPPDATA%\nexus` y las tareas `nexus-*` son otro proyecto
 del dueño.
+
+### Servidor de Tokio: cómo conectarse y qué hay (desde el 5-nov, `docs/RELE-TOKIO.md`)
+
+- **Conectarse:** `ssh -i C:\Users\Brian\.ssh\lightsail-tokio.pem -o BatchMode=yes ubuntu@<IP>`. La IP está en
+  `host` de `%LOCALAPPDATA%\TRADING\relay.json`; nunca se escribe en el repo, que es público. La llave la dio el
+  dueño, y la PC ya conoce al servidor (`known_hosts`). Desde Git Bash anda igual. Ubuntu 22.04, 2 vCPU, **416 MB de
+  memoria sin swap**, 20 GB de disco.
+- **Servicios** (systemd, se reinician solos):
+  - `rele-tokio`: el canal oficial de Upbit en Telegram y la lista de Binance; reparte por UDP 50005.
+  - `agente-tokio`: `python -m tradingagent run` con `TRADING_HOME=/home/ubuntu/.trading`.
+  - Ver: `systemctl is-active rele-tokio agente-tokio`.
+  - Logs: `sudo journalctl -u agente-tokio --since -1h --no-pager -p warning` (y `-u rele-tokio`).
+- **Carpetas:**
+  - `/home/ubuntu/trading`: el repo, en `main`, con `.venv` de Python 3.11.
+  - `/home/ubuntu/.trading`: TRADING_HOME del agente (estado, diario, simulacro, `config.yaml`, `relay.json` local,
+    `relay.key`).
+  - `/home/ubuntu/relay.key` y `/home/ubuntu/telegram/` (sesión de Telegram y canal fijado).
+- **Claves** (nunca se muestran; todas con permisos 600):
+  - `/home/ubuntu/.env` es del dueño: `TG_API_ID`, `TG_API_HASH`, `API_Key_Binance`, `SECRET_Key_Binance` (la de
+    trading: IP restringida, sin retiros) y `API_IA`. El relé lee de ahí solo las de Telegram.
+  - `/home/ubuntu/.trading/.env` es la del agente, armada con `deploy/tokio/preparar_env.py`: la IA, la de solo lectura
+    de Binance, `SEC_USER_AGENT` y el bot de Telegram. **Sin la clave de trading** hasta que el dueño lo pida.
+  - Mandar las de la PC: `python deploy/tokio/enviar_claves_pc.py --telegram`, desde el worktree.
+- **Actualizar los dos servicios**, con el CI de `main` en verde:
+  `ssh -i C:\Users\Brian\.ssh\lightsail-tokio.pem ubuntu@<IP> "bash ~/trading/deploy/tokio/instalar-agente.sh"`.
+  Corre pip solo si cambiaron las dependencias, y con los servicios parados.
+- **Memoria:** el 5-nov a las 22:48 el kernel mató al agente por falta de memoria, mientras pip corría y el agente
+  arrancaba (pico de 148 MB). Hoy el agente usa ~80 MB y el relé ~60; quedan ~100 MB libres. Los servicios tienen
+  `OOMScoreAdjust=-500`, y el diario quedó íntegro (`journal-verify`). **Recomendado antes del dinero real:** el plan de
+  1 GB o un swap de 1 GB. Es un cambio del sistema y lo hace el dueño.
+- **Telegram de Upbit:** la sesión es de un número secundario del dueño. Si se cae (`STATUS` del relé: desconectado),
+  el inicio de sesión lo hace el dueño (pide el código que le llega al teléfono):
+  `cd ~/trading && .venv/bin/python -m tradingagent.relay.telegram_upbit --login`.
 
 ### Relé de Tokio (desde el 5-nov, `docs/RELE-TOKIO.md`)
 
@@ -194,6 +241,28 @@ Siempre así: `cd $env:USERPROFILE\TRADING; .\.venv\Scripts\python -m tradingage
 Pausa sin comandos: crear `%LOCALAPPDATA%\TRADING\KILL`.
 
 ## 6. Vigilar con dinero real
+
+### Dinero real desde Tokio: lo que falta, y lo hace el dueño
+
+Todo lo demás ya está: el agente en Tokio, la PC sin agente, un solo ejecutor (G-9), la pausa de la PC llega a Tokio y
+el bot está en Tokio.
+
+1. Fusionar el #58 (REGLAS v3.3).
+2. Confirmar la clave de trading de Tokio. Ya verificado (solo lectura de permisos): IP restringida sí, retiros no,
+   transferencia interna no. Falta confirmar que sea de una subcuenta con solo el capital a operar (A-3).
+3. Recomendado: el plan de 1 GB o un swap en el servidor (la memoria de arriba).
+4. En el servidor, por SSH:
+   - `cd ~/trading && .venv/bin/python deploy/tokio/preparar_env.py --trading < /dev/null`: pasa la clave de trading
+     al agente.
+   - `TRADING_HOME=/home/ubuntu/.trading .venv/bin/python -m tradingagent binance-real-check`: la prueba sin riesgo
+     con órdenes. La corre el dueño.
+   - `TRADING_HOME=/home/ubuntu/.trading .venv/bin/python -m tradingagent armar-real`: su frase.
+   - `sudo systemctl restart agente-tokio`.
+5. Frenar: /pausa por Telegram, el KILL de la PC (se copia a Tokio en ~1 s), o por SSH `touch ~/.trading/KILL`,
+   `armar-real --desarmar` o `cerrar-todo` en el servidor.
+6. La telemetría al tablero no lleva montos reales. El tablero completo los trae por SSH (cifrado) y se ven solo en
+   la PC. Lo publicado nunca los lleva.
+
 
 Qué mirar, en orden:
 

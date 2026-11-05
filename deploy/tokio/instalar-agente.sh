@@ -8,9 +8,15 @@ REPO=/home/ubuntu/trading
 HOME_T=/home/ubuntu/.trading
 cd "$REPO"
 git fetch -q origin
+OLD=$(git rev-parse HEAD 2>/dev/null || echo ninguno)
 git checkout -q -B "$BRANCH" "origin/$BRANCH"
 echo "código: $(git log --oneline -1)"
-.venv/bin/pip install -q -e "$REPO[relay]"
+# Poca memoria (416 MB): pip solo si cambiaron las dependencias, y con los servicios parados (el 5-nov, pip con el
+# agente arrancando hizo que el kernel lo matara por falta de memoria).
+if [ "$OLD" = ninguno ] || ! git diff --quiet "$OLD" HEAD -- pyproject.toml; then
+  sudo systemctl stop agente-tokio rele-tokio 2>/dev/null || true
+  .venv/bin/pip install -q -e "$REPO[relay]"
+fi
 install -d -m 700 "$HOME_T"
 if [ ! -f "$HOME_T/.env" ]; then
   echo "falta $HOME_T/.env: correr deploy/tokio/enviar_claves_pc.py desde la PC" >&2
