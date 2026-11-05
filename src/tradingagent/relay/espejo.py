@@ -1,6 +1,6 @@
 """El tablero completo de Tokio en la PC "solo tablero" (pedido del dueño, 5-nov: "en el dashboard no es necesaria esa
-distinción de PC y Tokio"): el agente de Tokio escribe su tablero cada 30 s (`state/tablero-exportado.json`, con la
-versión local y la pública: dashboard.export_board) y el supervisor de la PC lo trae por SSH, comprimido, cada 30 s
+distinción de PC y Tokio"): el agente de Tokio escribe su tablero cada 2 min (`state/tablero-exportado.json`, con la
+versión local y la pública: dashboard.export_board) y el supervisor de la PC lo trae por SSH, comprimido, cada minuto
 (`state/tablero-tokio.json`). El tablero de la PC lo muestra tal cual, como si el agente corriera acá.
 
 Por SSH (cifrado y con la llave del dueño): la versión local puede llevar montos reales (fase 3); la pública nunca
@@ -19,7 +19,7 @@ from pathlib import Path
 from .. import paths
 
 log = logging.getLogger("tradingagent.relay")
-EVERY_S = 30.0
+EVERY_S = 60.0                                  # el agente de Tokio lo arma cada 2 min
 REMOTE_FILE = "/home/ubuntu/.trading/state/tablero-exportado.json"
 LOCAL_FILE = "tablero-tokio.json"
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)

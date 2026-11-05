@@ -249,8 +249,9 @@ class Agent:
                 log.warning("falló la prueba de red", exc_info=True)
             delay = EVERY_S
 
-    async def _export_board(self, every_s: float = 30.0) -> None:
-        """Agente de Tokio: su tablero completo cada 30 s, para la PC "solo tablero" (relay/espejo.py lo trae por SSH)."""
+    async def _export_board(self, every_s: float = 120.0) -> None:
+        """Agente de Tokio: su tablero completo cada 2 min (armarlo cuesta ~3 s de CPU: el servidor es chico), para la PC
+        "solo tablero" (relay/espejo.py lo trae por SSH). El estado rápido llega cada 15 s por la telemetría."""
         from . import dashboard
         while not self.stop_event.is_set():
             try:
