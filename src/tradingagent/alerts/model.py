@@ -291,7 +291,7 @@ def startup_alert(mode: str, sources_active: int, sources_total: int, version: s
 
 # Nombres de las estrategias para el dueño (las categorías del sistema).
 STRATEGY_ES = {"resultados_impulso": "resultados", "lanzamiento_corto": "contratos nuevos",
-               "deslistado_corto": "deslistados", "listado": "listados"}
+               "deslistado_corto": "deslistados", "vigilancia_corto": "etiqueta de vigilancia", "listado": "listados"}
 
 
 def daily_alert(day: str, *, mode: str, closed: int, won: int, pnl, equity, initial, total_closed: int,

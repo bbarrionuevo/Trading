@@ -1,52 +1,85 @@
-"""Deslistados de Binance: corto en el perpetuo apenas llega el aviso, si el precio todavía no cayó (estudio del
-4-nov-2026, docs/ESTUDIO-DESLISTADOS.md; excepción a REGLAS C-4 y A-5, aprobada por el dueño al fusionar su PR).
+"""Avisos negativos de Binance sobre monedas: corto en el perpetuo apenas llega el aviso, si el precio todavía no cayó
+(estudios del 4 y 5-nov-2026, docs/ESTUDIO-DESLISTADOS.md; excepción a REGLAS C-4 y A-5, aprobada por el dueño al
+fusionar sus PR). Dos avisos, cada uno con su estudio:
 
-Evidencia: los avisos "Binance Will Delist ..." desde 2025 con perpetuo en USDT (34 monedas de 17 avisos), segundo a
-segundo con el archivo público de Binance. El precio cae entre los 2 y los 5 segundos del aviso (mediana −8 % a los
-5 s). Corto a los 2 s con stop de 20 % y salida a las 4 h: mediana +18 %, media +13 %, 79 % positivas; a los 5 s sin
-filtro, media +2,6 % (y en 2025, −3 %): llegar tarde no sirve. Entrando solo si el precio todavía no cayó más de 4 %,
-la media queda en +7 a +12 % aunque se llegue a los 3-10 s. Por eso la regla mira el precio, no el reloj.
+- **Deslistado** ("Binance Will Delist ABC, DEF on 2026-11-20"), 34 monedas de 17 avisos desde 2025, segundo a segundo
+  con el archivo público de Binance: el precio cae entre los 2 y los 5 s (mediana −8 % a los 5 s). Corto a los 2 s con
+  stop de 20 % y salida a las 4 h: mediana +18 %, media +13 %, 79 % positivas; a los 5 s sin filtro, media +2,6 % (y en
+  2025, −3 %). Entrando solo si todavía no cayó más de 4 %, +7 a +12 % aunque se llegue a los 3-10 s.
+- **Etiqueta de vigilancia** ("Binance Will Extend the Monitoring Tag to Include ABC, DEF on ..."), 31 monedas de 14
+  avisos desde 2025: cae menos y más rápido (mediana −0,7 % a los 2 s y −4 % a los 5 s). Corto a los 2 s si todavía no
+  cayó más de 2 %, stop de 10 % y salida a las 4 h: mediana +3,6 %, media +3,6 %, 85 % positivas (2026: 18 de 18;
+  2025: media −1,2 %). A los 3 s casi todo ya cayó: si llegamos tarde, el filtro no deja entrar.
 
-El título de Binance es inequívoco ("Binance Will Delist ABC, DEF on 2026-11-20"): no hace falta la IA, que tarda ~2 s
-y en esos 2 s pasa todo. La probabilidad es el acierto medido. Muestra chica: arriesga 2 % del saldo (no 3 %).
+Los títulos de Binance son inequívocos: no hace falta la IA, que tarda ~2 s y en esos 2 s pasa todo. La probabilidad es
+el acierto medido. Muestras chicas: los deslistados arriesgan 2 % del saldo y la etiqueta de vigilancia 1 % (no 3 %).
 """
 import re
+from dataclasses import dataclass
 
 from ..intelligence import vector as vec
 from ..intelligence.classifier import Signal
 from .policy import Assessment
 
 SOURCES = {"binance.ws", "binance.listados"}        # los avisos oficiales de Binance
-CATEGORY = "deslistado_corto"
-VERSION = "deslistado-1"
-TITLE = re.compile(r"^Binance Will Delist (?P<coins>.+?)(?: on \d{4}-\d{2}-\d{2}.*)?$")
 COIN = re.compile(r"^\(?([A-Z0-9]{2,15})\)?$")
-MAX_LATE_S = 60.0              # el estudio llega hasta los 30 s; más tarde, nada
-MAX_DROP = 0.04                # si ya cayó más que esto desde el aviso, llegamos tarde: no se entra
-HIT_RATE = 0.74
-HOLD_H = 4
-STOP = 0.20
+MAX_LATE_S = 60.0              # los estudios llegan hasta los 30 s; más tarde, nada
+
+
+@dataclass(frozen=True)
+class Notice:
+    category: str
+    title: re.Pattern
+    max_drop: float            # si ya cayó más que esto desde el aviso, llegamos tarde: no se entra
+    hit_rate: float
+    hold_h: float
+    version: str
+    rule: str
+
+
+NOTICES = (
+    Notice("deslistado_corto", re.compile(r"^Binance Will Delist (?P<coins>.+?)(?: on \d{4}-\d{2}-\d{2}.*)?$"),
+           max_drop=0.04, hit_rate=0.74, hold_h=4, version="deslistado-1", rule="deslistado_binance"),
+    Notice("vigilancia_corto",
+           re.compile(r"^Binance Will Extend the Monitoring Tag to (?:Include )?(?P<coins>.+?)(?: on \d{4}-\d{2}-\d{2}.*)?$"),
+           max_drop=0.02, hit_rate=0.85, hold_h=4, version="vigilancia-1", rule="etiqueta_vigilancia_binance"),
+)
+BY_CATEGORY = {n.category: n for n in NOTICES}
+CATEGORY = "deslistado_corto"                      # compatibilidad: el aviso de deslistado
+VERSION = "deslistado-1"
+MAX_DROP = BY_CATEGORY[CATEGORY].max_drop
+
+
+def notice(source: str, title: str) -> tuple[Notice | None, tuple[str, ...]]:
+    """(el tipo de aviso, sus monedas) si es un aviso de deslistado o de etiqueta de vigilancia de Binance; si no,
+    (None, ()). Los de margen, futuros, pares o votaciones no cuentan."""
+    if source not in SOURCES:
+        return None, ()
+    for n in NOTICES:
+        m = n.title.match((title or "").strip())
+        if m:
+            out = []
+            for part in re.split(r",|\band\b|&", m.group("coins")):
+                c = COIN.match(part.strip())
+                if c and c.group(1) not in out:
+                    out.append(c.group(1))
+            return n, tuple(out)
+    return None, ()
 
 
 def coins(source: str, title: str) -> tuple[str, ...]:
-    """Las monedas de un aviso de deslistado de Binance ("Binance Will Delist ABC, DEF and GHI on 2026-11-20");
-    nada si es otro aviso (margen, futuros, pares, votaciones)."""
-    m = TITLE.match((title or "").strip()) if source in SOURCES else None
-    if not m:
-        return ()
-    out = []
-    for part in re.split(r",|\band\b|&", m.group("coins")):
-        c = COIN.match(part.strip())
-        if c and c.group(1) not in out:
-            out.append(c.group(1))
-    return tuple(out)
+    """Las monedas de un aviso de deslistado de Binance (nada si es otro aviso)."""
+    n, out = notice(source, title)
+    return out if n is not None and n.category == CATEGORY else ()
 
 
-def signal(asset: str) -> Signal:
-    return Signal(CATEGORY, -0.9, HIT_RATE, (asset,), HOLD_H * 60, ("deslistado_binance",), version=VERSION,
+def signal(asset: str, category: str = CATEGORY) -> Signal:
+    n = BY_CATEGORY[category]
+    return Signal(n.category, -0.9, n.hit_rate, (asset,), int(n.hold_h * 60), (n.rule,), version=n.version,
                   certainty=1.0, relevance=10, importance=8, impact=8)
 
 
-def assessment(asset: str, dt_s: float) -> Assessment:
-    v = vec.EventVector(C=10.0, P=-1.0, I=8.0, M=8.0, D=vec.duration(HOLD_H * 60))
-    return Assessment(asset, -1, v, dt_s, "publicada", v.alpha, HIT_RATE, ())
+def assessment(asset: str, dt_s: float, category: str = CATEGORY) -> Assessment:
+    n = BY_CATEGORY[category]
+    v = vec.EventVector(C=10.0, P=-1.0, I=8.0, M=8.0, D=vec.duration(n.hold_h * 60))
+    return Assessment(asset, -1, v, dt_s, "publicada", v.alpha, n.hit_rate, ())

@@ -251,10 +251,10 @@ class LiveTrader:
             task = asyncio.create_task(self._earnings(ing, cik), name=f"resultados-{cik}")
             self.pending.add(task)
             task.add_done_callback(self.pending.discard)
-        delisted = (delistings.coins(ing.item.source, ing.item.title)
-                    if getattr(self.market, "name", "") == "binance-futuros" else ())
-        for coin in delisted:                                          # deslistado de Binance: ya, sin la IA
-            task = asyncio.create_task(self._delisting(ing, coin), name=f"deslistado-{coin}")
+        kind, delisted = (delistings.notice(ing.item.source, ing.item.title)
+                          if getattr(self.market, "name", "") == "binance-futuros" else (None, ()))
+        for coin in delisted:                          # deslistado o etiqueta de vigilancia de Binance: ya, sin la IA
+            task = asyncio.create_task(self._delisting(ing, coin, kind.category), name=f"{kind.category}-{coin}")
             self.pending.add(task)
             task.add_done_callback(self.pending.discard)
         ev = self._event(ing)
@@ -373,9 +373,10 @@ class LiveTrader:
         except MarketDataError:
             return None
 
-    async def _delisting(self, ing, coin: str) -> None:
-        """Corto apenas llega el aviso de deslistado de Binance, si el precio todavía no cayó (decision/delistings.py):
-        si ya cayó más de 4 % desde el aviso, llegamos tarde y no se entra."""
+    async def _delisting(self, ing, coin: str, category: str = delistings.CATEGORY) -> None:
+        """Corto apenas llega un aviso negativo de Binance (deslistado o etiqueta de vigilancia), si el precio todavía
+        no cayó (decision/delistings.py): si ya cayó más que lo medido desde el aviso, llegamos tarde y no se entra."""
+        rule = delistings.BY_CATEGORY[category]
         try:
             if self.market.universe.kind(coin) != CRYPTO:              # sin perpetuo de cripto en Binance: nada
                 return
@@ -383,7 +384,7 @@ class LiveTrader:
             async with self.lock:
                 run = self.run()
                 now, sym = run.now, self.market.symbol(coin)
-                ev, sig = self._event(ing), delistings.signal(coin)
+                ev, sig = self._event(ing), delistings.signal(coin, category)
                 late = now - t0
                 if late > delistings.MAX_LATE_S:
                     run.record(ev, sig, sym, "no_entrar", [f"deslistado_tarde:{late:.0f}s"])
@@ -400,11 +401,11 @@ class LiveTrader:
                 bar = (run.store.candles.get(sym) or {}).get(minute(t0))       # el minuto del aviso: (o, h, l, c)
                 if not bar or book is None or book.mid is None or tick is None:
                     run.record(ev, sig, sym, "no_entrar", ["sin_datos:precio_del_aviso_o_libro"])
-                elif (drop := float(book.mid) / float(bar[0]) - 1) < -delistings.MAX_DROP:
+                elif (drop := float(book.mid) / float(bar[0]) - 1) < -rule.max_drop:
                     run.record(ev, sig, sym, "no_entrar", [f"ya_cayo:{drop * 100:+.2f}%"])
                 else:
                     await run.enter(ev, sig, coin, self.risk_blocks(run),
-                                    assessment=delistings.assessment(coin, late), prefetched=(book, tick))
+                                    assessment=delistings.assessment(coin, late, category), prefetched=(book, tick))
                 await self.save(run)
         except Exception:                                              # una falla no tira al operador
             log.exception("falló la entrada por deslistado (%s)", coin)

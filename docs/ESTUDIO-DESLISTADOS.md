@@ -30,6 +30,20 @@ Por año (a los 2 s): 2025 media +1,4 % (n 13), 2026 +19,9 % (n 21, 95 % positiv
 −3,0 %: **llegar tarde no sirve**. Con velas de 1 minuto y todos los años (109 monedas), el minuto del aviso cae
 −4,4 % (mediana) y después la media sigue a favor del corto (+1 a +7 %), con la mediana cerca de 0.
 
+## Etiqueta de vigilancia (5-nov-2026)
+
+Binance avisa que una moneda queda "bajo vigilancia" (un paso antes de un posible deslistado): "Binance Will Extend
+the Monitoring Tag to Include ABC, DEF on …" (en "Latest Binance News"; 14 avisos desde marzo de 2025, ~4 monedas
+cada uno). Mismo método, segundo a segundo: 31 monedas con perpetuo.
+
+- Cae menos y más rápido que un deslistado: mediana −0,7 % a los 2 s, −4,0 % a los 5 s, −6,2 % al minuto.
+- Corto a los 2 s, stop 10 %, 4 h: mediana +4,2 %, media +4,2 %, 87 % positivas. **A los 3 s casi todo ya cayó** (de
+  31, solo 7 seguían a menos de 2 %); a los 5 s sin filtro, media +0,2 %.
+- Corto a los 2 s solo si todavía no cayó más de 2 %: n 27, mediana +3,6 %, media +3,6 %, 85 % positivas. Por año:
+  2025 media −1,2 % (n 9), 2026 +6,0 % (n 18, todas positivas).
+- Con la demora medida del canal (1,2 a 1,8 s) se llega justo: el filtro de precio deja afuera las veces que se llegue
+  tarde. **Arriesga 1 % del saldo** (stop 10 %, 0,10 veces el saldo de nominal).
+
 ## La regla (`decision/delistings.py`)
 
 - Apenas llega por el canal oficial un aviso "Binance Will Delist ..." (no los de margen, futuros o pares), para
