@@ -638,7 +638,7 @@ class LiveTrader:
             from .research.calibracion import report
             rep = await asyncio.to_thread(report, self.base, self.home / "journal")
             calib = {"acierto": rep["acierto"], "cerradas": rep["cerradas"],
-                     "reaccion_s": (rep["reaccion_s"] or {}).get("mediana")}
+                     "reaccion_s": (rep["reaccion_s"] or {}).get("mediana"), "por_categoria": rep["por_categoria"]}
         except Exception:                                              # el resumen sale igual
             log.warning("no pude calcular la calibración del resumen", exc_info=True)
         await self.send_alert(daily_alert(

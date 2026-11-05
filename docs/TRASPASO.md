@@ -247,6 +247,7 @@ dueño qué hiciste y por qué.
   Binance): el precio cae entre los 2 y 5 s del aviso (mediana −8 % a los 5 s). Corto a los 2 s, stop 20 %, 4 h:
   mediana +18 %, media +13 %, 79 % positivas (34 monedas de 17 avisos desde 2025); a los 5 s sin filtro +2,6 % (2025:
   −3 %). Si todavía no cayó más de 4 %, +7 a +12 % de media aunque se llegue a los 3-5 s.
+- **Resultados y el control de liquidez** (5-nov, las 60 operaciones del estudio): el freno de Kyle (> 4 veces el impacto de precio de la hora previa) deja afuera 14 (23 %). Esas dieron mediana +0,34 % y 8 de 14 positivas; las que entran, mediana +1,41 % y 31 de 46. El freno se queda: saca las más flojas.
 - **Otros 8-K de la SEC** (5-nov, `estudios/eventos_sec.py`, 1.136 8-K sin resultados de 141 empresas con perpetuo desde febrero): mueven el precio (impulso ≥ 0,5 % a los 2 min en 9 % de los casos, contra 1,5 % en horas al azar), pero seguirlo no rinde (n = 44, media +0,6 %, 52 % positivas; por ítem, muestras de 8 a 23). No se opera.
 - **Funding extremo** (4-nov, `estudios/funding.py`, 114 perpetuos 2020-2026): sin ventaja estable (se da vuelta según
   el período y unos pocos saltos enormes mandan en el promedio). No se opera.
@@ -347,7 +348,7 @@ dueño qué hiciste y por qué.
 ## 11. Detalles que muerden (Windows y MEXC)
 
 - **SEC lenta, no caída (5-nov):** la página de 8-K tarda de 0,4 a 8 s y a veces más de 10 s (64 veces en 14 h). Con la espera que se duplica tras cada falla, 4 fallas seguidas dejaban ~10 min sin la SEC. Ahora: hasta 25 s de espera, reintento como mucho al minuto y el corte de 10 min recién después de 20 fallas.
-- **El sitio de anuncios de Binance (www.binance.com) cuenta los pedidos por IP:** el agente lo lee cada 3 s. Un estudio que lo consulte desde la PC tiene que ir a ≥ 5 s entre pedidos: el 4-nov, uno a 2 s provocó tres 429 seguidos en el agente (se recuperó en 20 s). Los datos de mercado de fapi.binance.com tienen su propio límite (2.400 de peso por minuto, también compartido con el agente: los estudios frenan a 900).
+- **El sitio de anuncios de Binance (www.binance.com) cuenta los pedidos por IP:** el agente lo lee cada 3 s. Un estudio que lo consulte desde la PC provoca 429 en el agente: el 4-nov a 2 s entre pedidos y el 5-nov **también a 6 s** (tres 429 seguidos cada vez; se recuperó en ~20 s). Desde la PC: un pedido cada 30 s como mínimo y cortar al primer 429 (`estudios/vigilancia_binance.py` lo hace). Los datos de mercado de fapi.binance.com tienen su propio límite (2.400 de peso por minuto, también compartido con el agente: los estudios frenan a 900).
 
 - **Windows:**
   - `os.replace` falla si otro proceso tiene el archivo abierto (`paths.write_json_atomic` reintenta);
