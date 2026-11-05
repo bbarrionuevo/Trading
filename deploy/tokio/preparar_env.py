@@ -2,7 +2,7 @@
 
 - De ~/.env del servidor (lo maneja el dueño): API_IA -> ANTHROPIC_API_KEY.
 - Por la entrada estándar (desde la PC, por SSH: enviar_claves_pc.py): BINANCE_LECTURA_KEY / BINANCE_LECTURA_SECRET /
-  SEC_USER_AGENT.
+  SEC_USER_AGENT y, con `--telegram` allá, TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID (el bot pasa a Tokio).
 - La clave de TRADING de Binance (API_Key_Binance / SECRET_Key_Binance -> BINANCE_API_KEY / BINANCE_API_SECRET) pasa
   SOLO con `--trading`, cuando el dueño lo pide para operar dinero real desde Tokio (REGLAS A-3 y G-9). Sin `--trading`
   se saca del agente si estaba: el simulacro no la usa.
@@ -18,7 +18,7 @@ HOME = Path.home()
 DEST = HOME / ".trading" / ".env"
 MAP = {"API_IA": "ANTHROPIC_API_KEY"}
 TRADING = {"API_Key_Binance": "BINANCE_API_KEY", "SECRET_Key_Binance": "BINANCE_API_SECRET"}
-FROM_PC = ("BINANCE_LECTURA_KEY", "BINANCE_LECTURA_SECRET", "SEC_USER_AGENT")
+FROM_PC = ("BINANCE_LECTURA_KEY", "BINANCE_LECTURA_SECRET", "SEC_USER_AGENT", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID")
 
 
 def parse(text):

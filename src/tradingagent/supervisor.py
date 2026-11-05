@@ -17,6 +17,11 @@ lo actualiza solo, sirve el tablero y publica el estado para que Claude lo vea.
   claves y en una carpeta aparte: el resultado (pruebas reales en Windows) queda en `logs/tests.txt`.
 - **Tablero:** http://127.0.0.1:18765 o el siguiente puerto libre (dashboard.py; nunca comparte un puerto
   con otro programa), solo lectura y solo desde esta PC. El acceso directo abre `tablero.html`.
+- **Solo tablero** (desde el 5-nov, pedido del dueño: "queda ya todo en Tokio"): con el archivo
+  `TRADING_HOME/SOLO-TABLERO`, el supervisor no corre al agente (si estaba corriendo, lo para con calma): el agente
+  corre en el servidor de Tokio. Sigue actualizándose, sirviendo el tablero y publicando, y late al relé de Tokio
+  (relay/monitor.py): recibe su telemetría para el tablero y le pasa la pausa de la PC (el KILL). Borrando el
+  archivo, vuelve a correr al agente.
 - **Claude puede ver cómo va (REGLAS G-8):** cada 15 minutos publica en la rama `pc` del repo un único
   commit (la rama no crece) con el tablero en JSON, el latido, la cuenta paper, operaciones, decisiones
   recientes, el supervisor, los tests y los últimos avisos del log. Nunca el `.env`, secretos ni saldos
@@ -58,6 +63,7 @@ STABLE_S = 600                     # un agente que anduvo 10 min se relanza sin 
 OUT_MAX_BYTES = 5_000_000
 PUBLISH_DECISIONS = 1500
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+BOARD_ONLY_FILE = "SOLO-TABLERO"   # la PC solo muestra el tablero: el agente corre en Tokio
 LOW_PRIORITY = getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)
 GIT = shutil.which("git") or (r"C:\Program Files\Git\cmd\git.exe" if os.name == "nt" else "git")
 GIT_ENV = {"GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "never"}
@@ -211,6 +217,7 @@ class Supervisor:
         self.started_at = 0.0
         self.crashes: list[float] = []
         self.board = None
+        self.monitor = None                 # solo tablero: la telemetría de Tokio (relay/monitor.py)
         self.job = _kill_on_close_job()
         self.version = self.head()
 
@@ -247,6 +254,38 @@ class Supervisor:
         actualiza (salvo el máximo de espera), así un reinicio nunca cae en el medio de una operación."""
         return sum(len((dashboard.read_json(f, None) or {}).get("positions") or {})
                    for d in ("paper-vivo", "simulacro", "real") for f in (self.home / d).glob("*/estado.json"))
+
+    # -- solo tablero -----------------------------------------------------------------------------------
+    def board_only(self) -> bool:
+        return (self.home / BOARD_ONLY_FILE).exists()
+
+    def ensure_monitor(self) -> None:
+        """Solo tablero: el agente no corre acá, así que el supervisor late al relé de Tokio y guarda su telemetría."""
+        if self.monitor is not None and self.monitor.alive():
+            return
+        from .relay.monitor import TokioMonitor
+        try:
+            self.monitor = TokioMonitor.from_home(self.home)
+        except (OSError, ValueError) as e:
+            log.warning("solo tablero: no pude leer la clave del relé: %s", e)
+            self.monitor = None
+        mode = "solo_tablero" if self.monitor is not None else "solo_tablero_sin_rele"
+        if self.monitor is not None:
+            self.monitor.start()
+            log.info("solo tablero: el agente corre en Tokio; la PC muestra el tablero y le pasa la pausa")
+        elif self.state.get("modo") != mode:
+            log.warning("solo tablero sin TRADING_HOME/relay.json o relay.key: no llega nada de Tokio")
+        if self.state.get("modo") != mode:
+            self.state["modo"] = mode
+            self.save()
+
+    def stop_monitor(self) -> None:
+        if self.monitor is not None:
+            self.monitor.stop()
+            self.monitor = None
+        if self.state.get("modo", "agente") != "agente":
+            self.state["modo"] = "agente"
+            self.save()
 
     # -- el agente --------------------------------------------------------------------------------------
     def adopt_orphan(self, timeout_s: float = 40) -> str:
@@ -566,16 +605,24 @@ class Supervisor:
         orphan = self.adopt_orphan()
         if orphan != "ninguno":
             log.warning("había un agente sin supervisor: %s", orphan)
-        self.start_child()
+        if not self.board_only():
+            self.start_child()
         next_update, next_publish = time.monotonic() + FIRST_CHECK_S, time.monotonic() + FIRST_PUBLISH_S
         loops = 0
         try:
             while max_loops is None or loops < max_loops:
                 loops += 1
-                wait = self.watch_child()
-                if self.child is None:
-                    time.sleep(wait)
-                    self.start_child()
+                if self.board_only():                  # el agente corre en Tokio: acá, solo el tablero
+                    if self.child is not None:
+                        log.info("solo tablero: paro al agente de la PC (corre en Tokio)")
+                        self.stop_child()
+                    self.ensure_monitor()
+                else:
+                    self.stop_monitor()
+                    wait = self.watch_child()
+                    if self.child is None:
+                        time.sleep(wait)
+                        self.start_child()
                 self.tests_done()
                 if self.tests is None and self.state.get("tests_version") != self.version[:7]:
                     self.run_tests()
@@ -592,7 +639,7 @@ class Supervisor:
                         log.warning("cambió el supervisor, pero sin la tarea de cada minuto no salgo: el agente ya "
                                     "corre la versión nueva y el supervisor se renueva al reiniciar la PC")
                         self.state["supervisor_pendiente"] = self.version[:7]
-                    if self.child is None:
+                    if self.child is None and not self.board_only():
                         self.start_child()
                 if now >= next_publish:
                     next_publish = now + (PUBLISH_FAST_S if self.busy() else PUBLISH_EVERY_S)
@@ -602,6 +649,8 @@ class Supervisor:
             return 0
         finally:
             self.stop_child()                          # también con Ctrl+C: el agente cierra en orden
+            if self.monitor is not None:
+                self.monitor.stop()
             if self.board is not None:
                 self.board.shutdown()
                 self.board.server_close()

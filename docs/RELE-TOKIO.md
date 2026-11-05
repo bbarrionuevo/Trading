@@ -1,6 +1,6 @@
 # Relé de Tokio (Tier-0): arquitectura y decisiones (5-nov-2026)
 
-Pedido del dueño: un servidor de AWS Lightsail en Tokio (176.32.87.26, ap-northeast-1, UDP 50005) como micro-relé
+Pedido del dueño: un servidor de AWS Lightsail en Tokio (su IP está en "host" de TRADING_HOME/relay.json en la PC, nunca en el repo público; ap-northeast-1, UDP 50005) como micro-relé
 para quitar la desventaja geográfica y el cuello de botella de la IA. La PC en Argentina sigue siendo la que opera.
 
 ## Lo que se midió antes de decidir (desde la PC, 5-nov)
@@ -156,8 +156,20 @@ Telegram, sin esperar a la IA, y la IA lee después.
 `~/.trading/KILL` en Tokio (marcado como suyo) y lo borra cuando la PC sale de la pausa; uno puesto a mano en el
 servidor queda. Llega en ~1 s.
 
+**Todo en Tokio y la PC solo tablero** (5-nov, pedido del dueño: "apaga el simulacro de la PC y queda ya todo en
+Tokio"):
+
+- En la PC, el archivo `TRADING_HOME/SOLO-TABLERO` pone al supervisor en "solo tablero". No corre al agente (si
+  corría, lo para con calma) y sigue actualizándose, sirviendo el tablero y publicando. Late al relé
+  (`relay/monitor.py`, solo biblioteca estándar): recibe la telemetría de Tokio y le pasa el KILL de la PC.
+- El bot de Telegram (alertas, /pausa, /estado, el resumen del día) pasa a Tokio con
+  `deploy/tokio/enviar_claves_pc.py --telegram`. El bot lo usa uno solo: dos lectores se pisan.
+- El simulacro de la PC queda desarmado; su historia se ve en el tablero, en "Cuentas que ya no corren".
+- **Volver atrás:** borrar `SOLO-TABLERO` (el supervisor vuelve a correr al agente de la PC). Sacar el bot de Tokio:
+  borrar las dos líneas `TELEGRAM_*` de `/home/ubuntu/.trading/.env` y reiniciar `agente-tokio`.
+
 **Actualizar o reinstalar:** con el CI de `main` en verde,
-`ssh -i C:\Users\Brian\.ssh\lightsail-tokio.pem ubuntu@176.32.87.26 "bash ~/trading/deploy/tokio/instalar-agente.sh"`
+`ssh -i C:\Users\Brian\.ssh\lightsail-tokio.pem ubuntu@<IP> "bash ~/trading/deploy/tokio/instalar-agente.sh"`
 (trae `main`, instala, copia los servicios y reinicia los dos). Ver cómo anda: el tablero de la PC, o
 `sudo journalctl -u agente-tokio -n 50` en el servidor.
 
