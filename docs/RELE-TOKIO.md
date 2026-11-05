@@ -68,3 +68,43 @@ dueño. Mientras tanto, el relé no tiene ninguna clave.
   servidor: `C:\Users\Brian\.ssh\lightsail-tokio.pem` (autorizada el 5-nov).
 - Medido desde Tokio (pedido completo con conexión nueva): Binance Futures 48 ms, Upbit 57 ms, lista de anuncios de
   Binance 51 ms, Anthropic 220 ms (está en EE. UU.).
+
+## Canal oficial de Upbit en Telegram (5-nov)
+
+- **@upbit_news es el canal oficial** (lo abrió Dunamu, la dueña de Upbit, el 22-ago-2025). Hay otros que copian los
+  avisos (@bot_fomo, @upbitlaas): no son de Upbit y no se usan.
+- **Medido con 15 avisos de 4 días:** cada uno sale por Telegram 0 a 2 s después del sitio (mediana 1 s). El listado
+  de CARDS: sitio 06:03:03 UTC, Telegram 06:03:04; la PC, que sondea cada 8 s, lo recibió a los 7,8 s.
+- `relay/telegram_upbit.py` en el servidor de Tokio (Telethon 1.45, extra `relay` del pyproject). Cuenta de un número
+  SECUNDARIO del dueño; `TG_API_ID` y `TG_API_HASH` en `/home/ubuntu/.env`; sesión en `~/telegram/upbit.session` (600).
+  El canal se fija por su **ID interno** en el primer inicio de sesión; solo entran mensajes de ese ID, con la etiqueta
+  **"[거래]"** (trading) y con enlace al sitio de Upbit. El título queda igual al del sitio: si el aviso llega también
+  por el lector de la PC, se procesa una sola vez.
+- Primer inicio de sesión (interactivo, lo hace el dueño): `cd ~/trading && .venv/bin/python -m
+  tradingagent.relay.telegram_upbit --login`. Prueba sin mandar nada: `--escuchar`. Después el servicio `rele-tokio`
+  lo arranca solo.
+
+### Por qué reglas exactas y no "palabra + ticker" (Tier-1)
+
+De los 15 avisos del canal, **1 era un listado**; la mayoría traen ticker (ENJ, AKT, ZK, DGB...) y son suspensiones de
+depósitos o mantenimientos. Comprar con cualquier ticker y que la IA cierre 1-2 s después no cuesta solo comisiones: en
+una suspensión o un deslistado el precio cae en esos segundos (medido en los deslistados de Binance: −8 % a los 5 s).
+Las reglas exactas de los títulos de Upbit ("신규 거래지원", "KRW 마켓 디지털 자산 추가", "거래지원 종료", "유의 종목")
+son igual de rápidas (microsegundos) y no se equivocan de tipo de aviso. La IA queda como segunda lectura que puede
+cerrar (ya existe para deslistados y etiquetas), y todo cierre va con IOC y tope de precio (nunca a mercado sin tope).
+
+### Lo que falta medir antes de entrar a los ~2 s en los listados de Upbit
+
+El estudio de Upbit midió entradas a los 5-30 s (el salto pasa en los primeros 5 s y el primer pico se devuelve en
+parte). Entrar a los ~2 s no está medido: se mide segundo a segundo con el archivo público de Binance (como los
+deslistados) antes de usarlo con plata real.
+
+### Todo en Tokio (pedido del dueño): por fases
+
+1. Ahora: Telegram y la lista de Binance en Tokio → la PC decide (simulacro, plata de mentira).
+2. El simulacro corre en Tokio (el agente usa ~48 MB, pico 81: entra en el servidor de 416 MB), con la clave de SOLO
+   LECTURA allá, y telemetría por UDP firmado al tablero de la PC. Se mide cuánto gana entrar desde Tokio.
+3. Dinero real desde Tokio: clave de una subcuenta solo de futuros, sin retiros, restringida a la IP del servidor y
+   con solo el capital armado. Cambia REGLAS A-3 y G-7 (la clave hoy vive solo en la PC): PR protegido, lo aprueba y
+   lo arma el dueño.
+

@@ -2,10 +2,9 @@
 firmado, cada aviso oficial NUEVO que lee desde Asia. No tiene ninguna clave de trading ni de la IA: solo lee avisos
 públicos y avisa. La decisión y la orden siguen en la PC (un solo lugar con las reglas y el riesgo).
 
-Por qué sirve (medido el 5-nov, docs/RELE-TOKIO.md): los avisos que se SONDEAN (Upbit, cada 8 s por su límite por IP;
-la lista de anuncios de Binance) se leen también desde otra IP, cerca de Corea y de Binance, así que el aviso llega
-antes en promedio (dos lectores desfasados). Los que Binance EMPUJA por WebSocket no se aceleran (cruzan el océano una
-vez igual): para esos el relé es un segundo oído.
+Fuentes (medido el 5-nov, docs/RELE-TOKIO.md): el canal OFICIAL de Upbit en Telegram (relay/telegram_upbit.py:
+cada aviso sale 0 a 2 s después del sitio, contra ~8 s del sondeo de la PC; el sitio de Upbit bloquea las IP de AWS)
+y la lista de anuncios de Binance (respaldo del canal de la PC: lo que Binance EMPUJA no se acelera).
 
 Uso en el servidor:  python -m tradingagent.relay.server --clave ~/relay.key --puerto 50005
 """
@@ -91,6 +90,28 @@ class RelayServer(asyncio.DatagramProtocol):
             log.info("aviso %s (%s, %.1f s de publicado): %s", "mandado" if sent else "SIN PC", spec.id, age,
                      it.title[:100])
 
+    async def on_telegram(self, item) -> None:
+        """Un aviso de trading del canal oficial de Upbit en Telegram (relay/telegram_upbit.py)."""
+        sent = self.forward(item)
+        self.counts["telegram"] += 1
+        log.info("aviso de Telegram %s (%.2f s de publicado): %s", "mandado" if sent else "SIN PC",
+                 self.clock.time() - (item.published_at or item.received_at), item.title[:100])
+
+
+async def _telegram(relay: RelayServer, stop: asyncio.Event) -> None:
+    """El canal de Upbit en Telegram, si hay sesión iniciada; una falla no tira al relé."""
+    from . import telegram_upbit
+    if not telegram_upbit.ready():
+        log.info("Telegram de Upbit apagado: falta el inicio de sesión (python -m tradingagent.relay.telegram_upbit "
+                 "--login) o telethon")
+        return
+    try:
+        await telegram_upbit.listen(relay.on_telegram, stop)
+    except BaseException as e:                       # SystemExit incluido: el relé sigue con lo demás
+        if isinstance(e, asyncio.CancelledError):
+            raise
+        log.error("Telegram de Upbit detenido: %s", e)
+
 
 async def main(key_file: Path, port: int) -> None:
     key = protocol.load_key(key_file)
@@ -108,6 +129,7 @@ async def main(key_file: Path, port: int) -> None:
         specs = [s for s in DEFAULT_SOURCES if s.id in SOURCES]
         pollers = [PollingSource(s, session, clock, relay.on_items) for s in specs]
         tasks = [asyncio.create_task(p.run(stop), name=f"fuente-{p.spec.id}") for p in pollers]
+        tasks.append(asyncio.create_task(_telegram(relay, stop), name="telegram-upbit"))
         while not stop.is_set():
             try:
                 await asyncio.wait_for(stop.wait(), timeout=300)
