@@ -367,6 +367,12 @@ class LiveTrader:
         except MarketDataError:
             return None
 
+    async def _ticker_or_none(self, sym: str):
+        try:
+            return await self.market.ticker(self.session, sym)
+        except MarketDataError:
+            return None
+
     async def _delisting(self, ing, coin: str) -> None:
         """Corto apenas llega el aviso de deslistado de Binance, si el precio todavía no cayó (decision/delistings.py):
         si ya cayó más de 4 % desde el aviso, llegamos tarde y no se entra."""
@@ -386,17 +392,19 @@ class LiveTrader:
                 self.registry = await self.market.instruments(self.session, [sym], self.st["instruments"], now)
                 run.reg = self.registry
                 self.venue.registry = self.registry
-                # Velas y libro a la vez (un viaje a Binance menos: ~0,3 s, y el precio cae entre los 2 y 5 s)
-                _, book = await asyncio.gather(run.store.load({sym: [(minute(t0) - 130 * MIN, minute(now))]}),
-                                               self._book_or_none(sym))
+                # Velas, libro y precio en un solo viaje a Binance (~0,3 s cada viaje, y el precio cae entre los 2 y
+                # 5 s del aviso; el canal trae el aviso en ~1,5 s): la entrada usa el mismo libro.
+                _, book, tick = await asyncio.gather(
+                    run.store.load({sym: [(minute(t0) - 130 * MIN, minute(now))]}), self._book_or_none(sym),
+                    self._ticker_or_none(sym))
                 bar = (run.store.candles.get(sym) or {}).get(minute(t0))       # el minuto del aviso: (o, h, l, c)
-                if not bar or book is None or book.mid is None:
+                if not bar or book is None or book.mid is None or tick is None:
                     run.record(ev, sig, sym, "no_entrar", ["sin_datos:precio_del_aviso_o_libro"])
                 elif (drop := float(book.mid) / float(bar[0]) - 1) < -delistings.MAX_DROP:
                     run.record(ev, sig, sym, "no_entrar", [f"ya_cayo:{drop * 100:+.2f}%"])
                 else:
                     await run.enter(ev, sig, coin, self.risk_blocks(run),
-                                    assessment=delistings.assessment(coin, late))
+                                    assessment=delistings.assessment(coin, late), prefetched=(book, tick))
                 await self.save(run)
         except Exception:                                              # una falla no tira al operador
             log.exception("falló la entrada por deslistado (%s)", coin)

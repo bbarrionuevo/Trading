@@ -376,7 +376,7 @@ class _Run:
 
     discarded: frozenset = frozenset()          # estrategias (categorías) descartadas por sus resultados
 
-    async def enter(self, ev: dict, sig, asset: str, blocks: list, assessment=None) -> None:
+    async def enter(self, ev: dict, sig, asset: str, blocks: list, assessment=None, prefetched=None) -> None:
         """Entrada con el núcleo de riesgo de siempre. `assessment`: una evaluación ya hecha (resultados con impulso,
         decision/earnings.py: la dirección la da el precio y la probabilidad es el acierto medido)."""
         sym = self.market.symbol(asset)
@@ -399,7 +399,10 @@ class _Run:
         if sigma is None and prof is not None and prof.stop:       # stop fijo medido (un contrato nuevo tiene pocas
             sigma = bar.sigma_1m(candles, minute(self.now), min_returns=10)   # velas): σ solo para costos y tramos
         try:                                          # libro y precio a la vez: cada pedido a MEXC tarda
-            book, tick = await asyncio.gather(self.books.book(sym), self.market.ticker(self.session, sym))
+            if prefetched is not None:                # ya pedidos junto con las velas (deslistados: cada 0,3 s cuenta)
+                book, tick = prefetched
+            else:
+                book, tick = await asyncio.gather(self.books.book(sym), self.market.ticker(self.session, sym))
         except MarketDataError as e:
             self.record(ev, sig, sym, "no_entrar", [f"sin_datos:{str(e)[:80]}"], analisis=a.as_dict())
             return

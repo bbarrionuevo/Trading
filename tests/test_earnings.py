@@ -124,3 +124,12 @@ async def test_la_lista_de_tickers_de_la_sec_se_guarda_y_pide_el_user_agent(tmp_
     assert m == again == {1652044: ("GOOGL", "GOOG"), 1318605: ("TSLA",)}
     assert seen == ["TRADING contacto@example.com"]
     assert earnings.MAX_LATE_S < 300 and 1 * MIN == 60_000
+
+
+def test_la_sec_lenta_se_reintenta_rapido():
+    """La SEC a veces tarda más de 10 s sin estar caída: se espera hasta 25 s y nunca se deja de leer más de 1 min
+    (con la espera que se duplicaba, 4 fallas seguidas dejaban ~10 min sin la SEC)."""
+    from tradingagent.ingestion import catalog
+
+    spec = next(s for s in catalog.DEFAULT_SOURCES if s.id == "sec.edgar.8k")
+    assert spec.timeout_s >= 25 and spec.max_backoff_s <= 60 and spec.open_after >= 20 and spec.cooldown_s <= 120

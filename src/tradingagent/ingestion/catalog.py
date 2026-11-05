@@ -44,8 +44,11 @@ DEFAULT_SOURCES = (
                interval_s=30, max_age_s=600, category="macro", assets=("BTC", "ETH")),
     SourceSpec("sec.press", "https://www.sec.gov/news/pressreleases.rss", tier=TIER_OFFICIAL,
                interval_s=60, max_age_s=600, category="regulatorio", requires_env=("SEC_USER_AGENT",)),
+    # La SEC a veces tarda (medido el 5-nov: 0,4 a 8 s con la misma página, y 64 respuestas de más de 10 s en 14 h).
+    # Una demora no es una caída: se espera hasta 25 s y se reintenta como mucho al minuto (con la espera que se
+    # duplica, 4 fallas seguidas dejaban ~10 min sin la SEC, y los resultados se operan a los 2 min del 8-K).
     SourceSpec("sec.edgar.8k", EDGAR_8K, tier=TIER_OFFICIAL, interval_s=20, max_age_s=600, category="filings",
-               requires_env=("SEC_USER_AGENT",)),
+               requires_env=("SEC_USER_AGENT",), timeout_s=25, max_backoff_s=60, open_after=20, cooldown_s=120),
     SourceSpec("prn.resultados", PRN_EARNINGS, tier=TIER_OFFICIAL, interval_s=30, max_age_s=600, category="bolsa"),
     SourceSpec("coindesk", "https://www.coindesk.com/arc/outboundfeeds/rss/", tier=TIER_MEDIA,
                interval_s=45, max_age_s=300, category="cripto"),

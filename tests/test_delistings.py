@@ -69,8 +69,11 @@ async def test_si_todavia_no_cayo_va_corto_con_stop_de_20_y_salida_a_las_4_horas
     home = tmp_path / "home"
     async with serve(fake.app()) as url, aiohttp.ClientSession() as s:
         t = await trader(s, url, clock, home)
+        before = len(fake.calls)
         await t.on_news(notice("d1"))
         await asyncio.gather(*t.pending)
+        books = [c for c in fake.calls[before:] if c[1] in ("/fapi/v1/depth", "/fapi/v1/ticker/bookTicker")]
+        assert len(books) == 1                                              # un solo viaje por el libro: ~0,3 s menos
         pos = t.st["positions"]["SOLUSDT"]
         assert pos["side"] == "corto" and pos["category"] == "deslistado_corto"
         entry = float(pos["avg_price"])

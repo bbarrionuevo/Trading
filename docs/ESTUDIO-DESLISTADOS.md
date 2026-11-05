@@ -43,8 +43,9 @@ Por año (a los 2 s): 2025 media +1,4 % (n 13), 2026 +19,9 % (n 21, 95 % positiv
 
 ## Cuidado
 
-- Todavía no se midió la demora real del canal de anuncios hasta la PC (desde que se prendió, Binance no publicó
-  avisos). Con el primero, revisar en el simulacro la hora de llegada y el precio de entrada.
+- **Demora del canal medida (5-nov, 5 avisos de Binance):** de publicado a recibido en la PC, 1,2 a 1,8 s (uno, 12,8
+  s). Las velas, el libro y el precio se piden en un solo viaje a Binance y la entrada usa ese mismo libro: la orden
+  sale ~2 a 2,5 s después del aviso, entre las filas "a los 2 s" y "a los 3 s" de la tabla.
 - La orden lleva tope de precio (50 bps): si el precio cae más rápido que la orden, no se llena (mejor que vender
   después de la caída).
 - Estudio repetible: `estudios/deslistados_binance.py`, `estudios/deslistados.py` y
