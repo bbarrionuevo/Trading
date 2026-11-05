@@ -523,3 +523,35 @@ def test_con_algo_armado_o_posiciones_abiertas_se_vigila_casi_en_vivo(tmp_path, 
     (sup.home / "ARMADO.json").unlink()
     paths.write_json_atomic(sup.home / "paper-vivo" / "mexc-futuros" / "estado.json", {"positions": {"BTC_USDT": {}}})
     assert sup.busy()
+
+
+def test_solo_tablero_no_corre_al_agente_y_late_a_tokio(tmp_path, gh):
+    """Con TRADING_HOME/SOLO-TABLERO el agente corre en Tokio: el supervisor no lo lanza (y para el que corría),
+    sigue con el tablero y las revisiones, y late al relé de Tokio si hay relay.json y relay.key."""
+    origin = Origin(tmp_path)
+    sup = make(tmp_path, gh, origin)
+    sup.start_child()                                                   # el agente de la PC estaba corriendo
+    (sup.home / "SOLO-TABLERO").write_text("", encoding="utf-8")
+    assert sup.run(max_loops=2, tick_s=0.01) == 0
+    st = paths.read_json(sup.state_file, {})
+    assert sup.child is None and st["modo"] == "solo_tablero_sin_rele" and st.get("arranques") == 1
+    paths.write_json_atomic(sup.home / "relay.json", {"host": "127.0.0.1", "port": 9})
+    (sup.home / "relay.key").write_text("ab" * 32, encoding="utf-8")
+    sup2 = make(tmp_path, gh, origin)
+    assert sup2.run(max_loops=2, tick_s=0.01) == 0
+    assert paths.read_json(sup2.state_file, {})["modo"] == "solo_tablero" and sup2.child is None
+    (sup2.home / "SOLO-TABLERO").unlink()                               # sin el archivo, vuelve el agente
+    seen = {}
+    real_check = sup2.check_update
+
+    def check():
+        seen["agente"] = sup2.child is not None
+        return real_check()
+
+    sup2.check_update = check
+    supervisor.FIRST_CHECK_S, old = 0.0, supervisor.FIRST_CHECK_S
+    try:
+        assert sup2.run(max_loops=2, tick_s=0.01) == 0
+    finally:
+        supervisor.FIRST_CHECK_S = old
+    assert seen == {"agente": True} and paths.read_json(sup2.state_file, {})["modo"] == "agente"

@@ -240,7 +240,21 @@ def gather(home: Path, now: float | None = None, repo: Path = REPO, include_real
     age = None if not isinstance(hb, dict) else round(now - float(hb.get("ts", 0)))
     kill = (home / "KILL").exists()
     halted = [a["mercado"] for a in accounts if a["halt"]]
-    if age is None:
+    board_only = (home / "SOLO-TABLERO").exists()          # la PC solo muestra el tablero: el agente corre en Tokio
+    tk = tokio(home, now, include_real)
+    if board_only:
+        inactive = [{**a, "inactiva": True} for a in accounts] + inactive
+        accounts, halted = [], []
+        t_age = (tk or {}).get("agente_hace_s")
+        if t_age is None:
+            status = ("sin_datos", "Solo tablero: el agente corre en Tokio y todavía no llegó su resumen")
+        elif t_age > TOKIO_STALE_S:
+            status = ("caido", f"Solo tablero: sin noticias del agente de Tokio hace {fmt_age(t_age)}")
+        elif kill or ((tk or {}).get("agente") or {}).get("kill"):
+            status = ("pausado", "Pausado por KILL: Tokio no abre posiciones nuevas (las salidas siguen)")
+        else:
+            status = ("ok", "Solo tablero: el agente corre en Tokio y está funcionando")
+    elif age is None:
         status = ("sin_datos", "Sin datos todavía: el agente no escribió su primer latido")
     elif age > HB_STALE_S:
         status = ("caido", f"Sin latido hace {fmt_age(age)}: el agente no está corriendo")
@@ -254,7 +268,7 @@ def gather(home: Path, now: float | None = None, repo: Path = REPO, include_real
     trader = (hb or {}).get("trader") or {}
     return {"generado": round(now), "version": __version__, "estado": status[0], "estado_texto": status[1],
             "latido_hace_s": age, "kill": kill, "agente": hb, "cuentas": accounts, "inactivas": inactive,
-            "supervisor": sup, "tokio": tokio(home, now, include_real),
+            "supervisor": sup, "tokio": tk, "solo_tablero": board_only,
             "tests": tests_summary(home / "logs" / "tests.txt"), "errores": log_errors(home),
             "aprendizaje": {"apagadas": learned.get("apagadas", []), "meta": learned.get("meta") or {},
                             "calculado": learned.get("calculado")},
@@ -350,9 +364,11 @@ TIPO_ES = {"real": "dinero real", "simulacro": "simulacro", "demo": "simulacro e
 
 def fragment(s: dict) -> str:
     """El contenido del tablero (se recarga cada 5 s sin perder el scroll)."""
+    beat = ("La PC solo muestra el tablero" if s.get("solo_tablero") else
+             f"Último latido hace {fmt_age(s['latido_hace_s'])}")
     parts = [f'<section class="status {e(s["estado"])}"><span class="icon">{STATUS_ICON.get(s["estado"], "?")}'
-             f'</span><div><strong>{e(s["estado_texto"])}</strong><div class="muted">Último latido hace '
-             f'{fmt_age(s["latido_hace_s"])} · versión {e(str((s["supervisor"] or {}).get("version", "?"))[:7])} · '
+             f'</span><div><strong>{e(s["estado_texto"])}</strong><div class="muted">{beat} · '
+             f'versión {e(str((s["supervisor"] or {}).get("version", "?"))[:7])} · '
              f'actualizado {e(fmt_ts(s["generado"]))}</div></div></section>']
     if s.get("tokio"):
         parts.append(tokio_fragment(s["tokio"]))
@@ -430,7 +446,8 @@ def fragment(s: dict) -> str:
         ["Encendido hace", e(fmt_age((hb.get("uptime_min") or 0) * 60))],
         ["KILL", "ACTIVO: no abre posiciones nuevas" if s["kill"] else "no (para pausar: crear el archivo KILL)"],
     ]
-    parts.append('<h2>Salud del agente</h2>' + _table(["", ""], [[e(k), v] for k, v in health], ""))
+    if not s.get("solo_tablero"):                          # el agente de la PC no corre: su salud es la de Tokio
+        parts.append('<h2>Salud del agente</h2>' + _table(["", ""], [[e(k), v] for k, v in health], ""))
     sup = s["supervisor"] or {}
     last = sup.get("ultima_revision") or {}
     pub = sup.get("publicacion") or {}

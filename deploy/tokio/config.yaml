@@ -1,9 +1,7 @@
-# Agente de Tokio (fase 2: simulacro). Pisa los valores por defecto (src/tradingagent/config.py); lo demás, igual que
-# en la PC. instalar-agente.sh lo copia a ~/.trading/config.yaml solo si no existe.
-alerts:
-  # El bot de Telegram lo usa la PC (dos lectores del mismo bot se pisan y la PC perdería /pausa): las alertas de
-  # Tokio van al tablero de la PC por la telemetría (telemetry/remota.py).
-  telegram: false
+# Agente de Tokio. Pisa los valores por defecto (src/tradingagent/config.py); lo demás, igual que en la PC.
+# instalar-agente.sh lo copia a ~/.trading/config.yaml solo si no existe.
+# Desde el 5-nov todo el agente corre en Tokio (la PC en "solo tablero"): el bot de Telegram (alertas, /pausa,
+# /estado) también, así que las alertas van por Telegram como siempre (y además al tablero de la PC).
 ingestion:
   sources:
     upbit.avisos:

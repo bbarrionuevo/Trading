@@ -4,9 +4,13 @@
   el canal de Telegram cada 30 s), con la hora en que llegó a la PC.
 - `state/tokio-eventos.jsonl`: cada alerta del agente de Tokio (entradas, salidas, frenos, errores): lo que en la PC
   iría a Telegram. Se recorta solo (las últimas ~2000).
+
+Lo escriben el agente de la PC (relay/client.py, async) o, con la PC en "solo tablero", el supervisor
+(relay/monitor.py, en un hilo). Solo biblioteca estándar.
 """
 import asyncio
 import json
+import threading
 import time
 from pathlib import Path
 
@@ -24,21 +28,24 @@ class TokioSink:
         self.events_path = Path(home) / "state" / EVENTS_FILE
         self.clock = clock
         self.latest: dict = paths.read_json(self.state_path, None) or {}
-        self._lock = asyncio.Lock()
+        self._lock = threading.Lock()
 
     def _now(self) -> float:
         return self.clock.time() if self.clock is not None else time.time()
 
-    async def __call__(self, msg: dict) -> None:
+    def write(self, msg: dict) -> None:
         part = str(msg.get("k") or "")
         data = {k: v for k, v in msg.items() if k not in SKIP and k != "k"}
         now = round(self._now(), 3)
-        async with self._lock:
+        with self._lock:
             if part in ("agente", "rele"):
                 self.latest[part] = {**data, "recibido": now}
-                await asyncio.to_thread(paths.write_json_atomic, self.state_path, self.latest)
+                paths.write_json_atomic(self.state_path, self.latest)
             elif part == "alerta":
-                await asyncio.to_thread(self._append, {**data, "recibido": now})
+                self._append({**data, "recibido": now})
+
+    async def __call__(self, msg: dict) -> None:
+        await asyncio.to_thread(self.write, msg)
 
     def _append(self, row: dict) -> None:
         self.events_path.parent.mkdir(parents=True, exist_ok=True)

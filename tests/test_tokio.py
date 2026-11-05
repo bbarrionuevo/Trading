@@ -299,3 +299,57 @@ async def test_de_punta_a_punta_el_agente_de_tokio_llega_al_tablero_de_la_pc(tmp
         stop.set()
         await pc_task
         srv_t.close()
+
+
+async def test_solo_tablero_el_supervisor_recibe_a_tokio_y_le_pasa_la_pausa(tmp_path, monkeypatch):
+    """Con la PC en "solo tablero", el monitor del supervisor (un hilo, solo biblioteca estándar) late al relé de
+    verdad: recibe la telemetría de Tokio para el tablero y le pasa el KILL de la PC."""
+    import socket as sk
+
+    from tradingagent.relay.monitor import TokioMonitor
+    loop = asyncio.get_running_loop()
+    agent = sk.socket(sk.AF_INET, sk.SOCK_DGRAM)                    # el "agente de Tokio" (local para el relé)
+    agent.bind(("127.0.0.1", 0))
+    agent_port = agent.getsockname()[1]
+    monkeypatch.setattr(server, "is_local", lambda addr: addr[1] == agent_port)
+    tokio_kill = tmp_path / "tokio-KILL"
+    srv_t, srv = await loop.create_datagram_endpoint(lambda: server.RelayServer(KEY, SystemClock(), tokio_kill),
+                                                     local_addr=("127.0.0.1", 0))
+    home = paths.home()
+    mon = TokioMonitor(home, "127.0.0.1", srv_t.get_extra_info("sockname")[1], KEY, heartbeat_s=0.2, tick_s=0.05)
+    mon.start()
+    try:
+        for _ in range(100):
+            if srv.live(local=False) and mon.counts["acks"]:
+                break
+            await asyncio.sleep(0.02)
+        assert mon.counts["acks"] and srv.pc_kill is False
+        t = remota.RemoteTelemetry(FakeAgent(FakeTrader(True, True, n_pos=1)))
+        agent.sendto(protocol.encode(t.summary(), KEY), srv_t.get_extra_info("sockname"))
+        for _ in range(100):
+            if (home / "state" / "tokio.json").exists():
+                break
+            await asyncio.sleep(0.02)
+        assert paths.read_json(home / "state" / "tokio.json", {})["agente"]["cuentas"][0]["tipo"] == "simulacro"
+        (home / "KILL").write_text("pausa pedida a mano en la PC", encoding="utf-8")
+        for _ in range(100):
+            if tokio_kill.exists():
+                break
+            await asyncio.sleep(0.02)
+        assert tokio_kill.exists() and srv.pc_kill is True
+    finally:
+        mon.stop()
+        agent.close()
+        srv_t.close()
+    assert not mon.alive()
+
+
+async def test_el_tablero_en_solo_tablero_muestra_a_tokio_arriba(tmp_path):
+    home = paths.home()
+    await TokioSink(home)(remota.RemoteTelemetry(FakeAgent(FakeTrader(True, True))).summary())
+    (home / "SOLO-TABLERO").write_text("", encoding="utf-8")
+    s = dashboard.gather(home)
+    assert s["solo_tablero"] and s["estado"] == "ok" and "corre en Tokio" in s["estado_texto"]
+    html = dashboard.page(s)
+    assert "La PC solo muestra el tablero" in html and "Salud del agente" not in html
+    assert dashboard.gather(home, time.time() + 600)["estado"] == "caido"      # Tokio sin noticias
