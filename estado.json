@@ -1,455 +1,215 @@
 {
  "pending": [
   {
-   "id": "93e8a44752bdf1ee77c3",
-   "received_at": 1793920415.5303912,
-   "published_at": 1793909763.0,
+   "id": "c67f0df2916de1d9da58",
+   "received_at": 1793935701.4887557,
+   "published_at": 1793926248.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "fb0b2f36b63da4efa0b3",
-   "received_at": 1793920415.8861694,
-   "published_at": 1793909836.0,
+   "id": "8cfedd4f853014b33e94",
+   "received_at": 1793935701.473016,
+   "published_at": 1793926800.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "32da865ad43eacab9b10",
-   "received_at": 1793920415.8861694,
-   "published_at": 1793911042.0,
+   "id": "f8c1e5ce46adb7255561",
+   "received_at": 1793935701.473016,
+   "published_at": 1793926800.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "2a79731578ec747124fa",
-   "received_at": 1793920415.5303912,
-   "published_at": 1793911562.0,
+   "id": "1f4f81308076423b86fa",
+   "received_at": 1793935701.473314,
+   "published_at": 1793928600.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "fd5b1d5f12a39fdc0e05",
-   "received_at": 1793920415.8861694,
-   "published_at": 1793911917.0,
+   "id": "fdc22477ab82417ccaa7",
+   "received_at": 1793935701.473314,
+   "published_at": 1793931863.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "2729e6144e8de7c385a8",
-   "received_at": 1793920415.584452,
-   "published_at": 1793913120.0,
+   "id": "21019eec7a392389dd22",
+   "received_at": 1793935701.4887557,
+   "published_at": 1793932815.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "0abc99970b841dfbb85b",
-   "received_at": 1793920415.584452,
-   "published_at": 1793913300.0,
+   "id": "3184d1f90d23bab77e8d",
+   "received_at": 1793935701.473016,
+   "published_at": 1793932860.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "3d830f7fd832b41d4b70",
-   "received_at": 1793920415.584452,
-   "published_at": 1793913300.0,
+   "id": "5f25e63f35cb2d8fd1ba",
+   "received_at": 1793935701.4302785,
+   "published_at": 1793932942.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "7f88707118dab7104dda",
-   "received_at": 1793920415.584452,
-   "published_at": 1793913300.0,
+   "id": "90133f84c4ff8054f40a",
+   "received_at": 1793935701.4302785,
+   "published_at": 1793933154.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "87d17fed707d9f3f3ca5",
-   "received_at": 1793920415.584452,
-   "published_at": 1793913300.0,
+   "id": "02017cf89bf520649f96",
+   "received_at": 1793935701.4302785,
+   "published_at": 1793933156.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "9df052ca01bcbb5be714",
-   "received_at": 1793920415.584452,
-   "published_at": 1793913300.0,
+   "id": "7128fbd4ea8d480a7a2b",
+   "received_at": 1793935701.4302785,
+   "published_at": 1793933220.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "b2cc6806410691b6ea6f",
-   "received_at": 1793920415.584452,
-   "published_at": 1793913300.0,
+   "id": "d0815f3af5ba5c38aa67",
+   "received_at": 1793935701.473016,
+   "published_at": 1793933460.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "d0e45fbb9de6ad0a038a",
-   "received_at": 1793920415.584452,
-   "published_at": 1793913300.0,
+   "id": "e2c4fa34db04dcdff4d0",
+   "received_at": 1793935701.4302785,
+   "published_at": 1793933679.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "d808ddf4ba307f07e21e",
-   "received_at": 1793920415.584452,
-   "published_at": 1793913300.0,
+   "id": "3d3493009125dd8763af",
+   "received_at": 1793935701.4887557,
+   "published_at": 1793933882.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "98d9efb4722866978970",
-   "received_at": 1793920415.584452,
-   "published_at": 1793913600.0,
+   "id": "dede42c64c62a0935958",
+   "received_at": 1793935701.4302785,
+   "published_at": 1793934068.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "0ff73b32ed0335fd7639",
-   "received_at": 1793920415.584452,
-   "published_at": 1793914200.0,
+   "id": "a255b44199bbdde78dc4",
+   "received_at": 1793935701.4302785,
+   "published_at": 1793934072.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "3e33ecfc4d1b1aed2ac8",
-   "received_at": 1793920415.584452,
-   "published_at": 1793914200.0,
+   "id": "e8d57ffd14a1c82756ec",
+   "received_at": 1793935701.4302785,
+   "published_at": 1793934076.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "825215338d6650a1dbc3",
-   "received_at": 1793920415.584452,
-   "published_at": 1793914200.0,
+   "id": "d889066d6550938f41d7",
+   "received_at": 1793935701.4302785,
+   "published_at": 1793934384.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "9732dae8d3294657cb97",
-   "received_at": 1793920415.584452,
-   "published_at": 1793914200.0,
+   "id": "82f60b55f7d3b7a37dee",
+   "received_at": 1793935701.4302785,
+   "published_at": 1793934770.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "82eedc154c26c3fd2d59",
-   "received_at": 1793920415.8861694,
-   "published_at": 1793914372.0,
+   "id": "1f308f326e47ae205052",
+   "received_at": 1793935701.395569,
+   "published_at": 1793935416.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "4b57c3d91c12e7727c57",
-   "received_at": 1793920415.584452,
-   "published_at": 1793914380.0,
+   "id": "3e6c4ba0d6414d1bf11a",
+   "received_at": 1793935701.395569,
+   "published_at": 1793935428.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "3fe1b6ae77f82510ee0a",
-   "received_at": 1793920415.5303912,
-   "published_at": 1793914563.0,
+   "id": "d1e0138e058081fcd64b",
+   "received_at": 1793935701.395569,
+   "published_at": 1793935441.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "a513bec65426f04247af",
-   "received_at": 1793920415.5718436,
-   "published_at": 1793914759.0,
+   "id": "9fbc5b99688126cdc0a4",
+   "received_at": 1793935701.395569,
+   "published_at": 1793935453.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "c49dd7f4c539b3a03453",
-   "received_at": 1793920415.8861694,
-   "published_at": 1793915183.0,
+   "id": "fbbdc0b1bb83b464875f",
+   "received_at": 1793935701.395569,
+   "published_at": 1793935473.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "2d7390bb0711f6e7f186",
-   "received_at": 1793920415.584452,
-   "published_at": 1793916000.0,
+   "id": "7e302a6475f425a3a1b2",
+   "received_at": 1793935701.395569,
+   "published_at": 1793935487.0,
    "symbols": [
     "BTCUSDT"
    ]
   },
   {
-   "id": "01c067e8cace0b940b73",
-   "received_at": 1793920415.584452,
-   "published_at": 1793916300.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "f2877147e25c2d036e78",
-   "received_at": 1793920415.584452,
-   "published_at": 1793916300.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "e602d2a4d26fbac80140",
-   "received_at": 1793920415.5387738,
-   "published_at": 1793916554.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "2fcb444a814a463663ab",
-   "received_at": 1793920415.5303912,
-   "published_at": 1793916963.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "c47b19667f899c8a3832",
-   "received_at": 1793920415.5718436,
-   "published_at": 1793917122.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "27a29acec5628027c585",
-   "received_at": 1793920415.8861694,
-   "published_at": 1793917289.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "f47be09d9ab52f1c4cbb",
-   "received_at": 1793920415.9020607,
-   "published_at": 1793917787.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "d28a64f857a541dca36b",
-   "received_at": 1793920415.8861694,
-   "published_at": 1793917843.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "cc96b446c7ec5b05ffad",
-   "received_at": 1793920415.9020607,
-   "published_at": 1793917863.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "f4215a0bb6655ab9baa4",
-   "received_at": 1793920415.8861694,
-   "published_at": 1793917873.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "b8bf770629be6272febd",
-   "received_at": 1793920415.8861694,
-   "published_at": 1793917888.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "585fbfc1ec8f29d7a2fe",
-   "received_at": 1793920415.6141708,
-   "published_at": 1793918140.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "c9e0952c1b48dd25b1ff",
-   "received_at": 1793920415.6141708,
-   "published_at": 1793918140.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "dfa17436ff5914b4cf2d",
-   "received_at": 1793920415.6141708,
-   "published_at": 1793918142.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "fc296229f93f07032274",
-   "received_at": 1793920415.6141708,
-   "published_at": 1793918180.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "e886f8b29c2eedbff73c",
-   "received_at": 1793920415.6141708,
-   "published_at": 1793918191.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "0917cbe93ff246b2be0e",
-   "received_at": 1793920415.6141708,
-   "published_at": 1793918194.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "73d01cb9b93c0e257936",
-   "received_at": 1793920415.6141708,
-   "published_at": 1793918224.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "b0cf5614dca0d5830df4",
-   "received_at": 1793920415.6141708,
-   "published_at": 1793918432.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "379a8fb5a32ea6f38830",
-   "received_at": 1793920415.6141708,
-   "published_at": 1793918436.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "c3dcd02d009f9277f69d",
-   "received_at": 1793920415.6141708,
-   "published_at": 1793918496.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "6782c8c073d574946cd3",
-   "received_at": 1793920415.5718436,
-   "published_at": 1793918598.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "267a12d16fffaaf74cd9",
-   "received_at": 1793920415.58726,
-   "published_at": 1793919800.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "fc9f9b6a24e0bb5bebd2",
-   "received_at": 1793920415.58726,
-   "published_at": 1793919824.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "f7edcf361a5689145bd7",
-   "received_at": 1793920415.58726,
-   "published_at": 1793919872.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "32a4932b73bc80dba5c1",
-   "received_at": 1793920415.58726,
-   "published_at": 1793919907.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "afead340de28ea779a53",
-   "received_at": 1793920415.58726,
-   "published_at": 1793919940.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "f018a3e9e1adc7628505",
-   "received_at": 1793920415.8861694,
-   "published_at": 1793919947.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "a8c3e9b86b6aa446a9ff",
-   "received_at": 1793920415.58726,
-   "published_at": 1793919949.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "e98a08d45b769daa8ee4",
-   "received_at": 1793920415.5303912,
-   "published_at": 1793919962.0,
-   "symbols": [
-    "BTCUSDT"
-   ]
-  },
-  {
-   "id": "cdab52650c735da31d5d",
-   "received_at": 1793920415.58726,
-   "published_at": 1793920031.0,
+   "id": "f505706ae9c9b02fdddd",
+   "received_at": 1793935701.395569,
+   "published_at": 1793935499.0,
    "symbols": [
     "BTCUSDT"
    ]
   }
  ],
- "digest_day": "2026-11-05",
+ "digest_day": "2026-11-06",
  "sources": {
   "fed.press": {
    "etag": "W/\"367e89be3e6ddd1:0\"",
@@ -581,6 +341,10 @@
     "ddc78df926591e12",
     "76cb21de5679a554",
     "8ba9020af37c9337",
+    "d02b7e93991f4a56",
+    "1a769319a2c1df14",
+    "8d7b91bc6b9a2329",
+    "ddda45cb01b2aa23",
     "6fe0d6a37199562e",
     "787b90dfb2d144c3",
     "174db97d3b483cbf",
@@ -603,15 +367,13 @@
     "dfab01746e0c0a40",
     "0aabed18189194e1",
     "bcf94089ff9e4590",
-    "cd452f2cc619845d",
-    "d02b7e93991f4a56",
-    "1a769319a2c1df14"
+    "cd452f2cc619845d"
    ],
    "first_done": true
   },
   "cointelegraph": {
    "etag": null,
-   "last_modified": "Thu, 05 Nov 2026 23:11:55 GMT",
+   "last_modified": "Fri, 06 Nov 2026 03:27:11 GMT",
    "seen": [
     "0f51768fe66a6a58",
     "967cf016c49850c7",
@@ -683,6 +445,8 @@
     "837dd5d9ca8087a1",
     "8642056a013a2073",
     "5cc6ce7399b0f713",
+    "e3fab2b8c570b470",
+    "66c499dd7a861c1f",
     "458fdcffb7b7b6a2",
     "45d999d4739705f6",
     "2b48de6267a9d0bf",
@@ -711,14 +475,13 @@
     "ee0a522bf648ffd1",
     "8fdc16231969cf98",
     "0e6946c1c4219b7c",
-    "2ba60490ed989ea1",
-    "e3fab2b8c570b470"
+    "2ba60490ed989ea1"
    ],
    "first_done": true
   },
   "decrypt": {
    "etag": null,
-   "last_modified": "Thu, 05 Nov 2026 23:13:30 GMT",
+   "last_modified": "Fri, 06 Nov 2026 03:28:17 GMT",
    "seen": [
     "42336da52963f891",
     "9a334bafcb613a57",
@@ -844,8 +607,8 @@
    "first_done": true
   },
   "theblock": {
-   "etag": "W/\"8f225294bf7c00a6be3edfc13f69ea49\"",
-   "last_modified": "Thu, 05 Nov 2026 22:09:14 GMT",
+   "etag": "W/\"8ca6e56d470252091755e7d3aab07e0f\"",
+   "last_modified": "Fri, 06 Nov 2026 00:18:45 GMT",
    "seen": [
     "26223633be604dbf",
     "c94ea8363ae429f4",
@@ -990,19 +753,15 @@
     "fc0be1f6e6dec358",
     "b063640a20cc8749",
     "d8c43d53887a5a03",
-    "4edcf967a2553de1",
     "f534abc3f50f99b1",
-    "99cd6cc1d6cff5c7",
     "9b5caa3ae47e1b6d",
     "c93969b21f60f754",
     "75a0b3641cf2da91",
     "8f6416ccee5d56e1",
-    "ab0e4bd30696c820",
     "6aae735b3f3e82a4",
     "fee623f27201dfc1",
     "6d52732dd10d4587",
     "944375ae8f6adda3",
-    "476c4c66dbe5e23d",
     "1a3a2def9474b291",
     "3f26a9e4123e2556",
     "ceb4ae6903a37f74",
@@ -1026,36 +785,45 @@
     "53a6087fcfa69577",
     "0c31a679467b8d79",
     "cf7f05d985fa8bc8",
-    "cb3a77bfaea0481e",
-    "4faa43387e3de74c",
-    "914d09a154a09645",
     "24a98b2152eb79c7",
-    "9e66821be5b02a41",
-    "76a4d4b399376d90",
-    "354c1b354cce9bc6",
-    "5b0f0f960a025109",
-    "125b6481d53ddd8a",
-    "057b2ab97685d57f",
-    "31b711c0551d41bb",
-    "66ea5479164ef01b",
-    "639346235e94f133",
-    "ac496d421eb2fde1",
-    "e4aa417c5c4105e4",
-    "13493cb9e752f82d",
     "bfa72a59b1ff9f9b",
-    "797ee02bab07e673",
-    "267ea0cf13f75f82",
-    "43754e0fbad82060",
     "13025cd6891fea22",
-    "6ec49adf26536e51",
-    "63febb3b9929436f",
-    "c2f9834b9562b671",
     "0ba3ff84508d0bf1",
     "b8854ce50e6ee297",
     "c463308d1e084db9",
     "b40cd159c33e824a",
     "10c6643b7fe779c2",
-    "14977e864b2c2d4b"
+    "14977e864b2c2d4b",
+    "cb3a77bfaea0481e",
+    "1f9580b728bdc1b0",
+    "4faa43387e3de74c",
+    "057b2ab97685d57f",
+    "914d09a154a09645",
+    "76a4d4b399376d90",
+    "354c1b354cce9bc6",
+    "0dff1c954862b4cd",
+    "9e66821be5b02a41",
+    "5b0f0f960a025109",
+    "31b711c0551d41bb",
+    "66ea5479164ef01b",
+    "4edcf967a2553de1",
+    "f76bef65d5b47469",
+    "e4aa417c5c4105e4",
+    "30c016b87f2dd4f4",
+    "125b6481d53ddd8a",
+    "99cd6cc1d6cff5c7",
+    "ab0e4bd30696c820",
+    "476c4c66dbe5e23d",
+    "815088efbc78f4f7",
+    "6ec49adf26536e51",
+    "639346235e94f133",
+    "ac496d421eb2fde1",
+    "13493cb9e752f82d",
+    "797ee02bab07e673",
+    "267ea0cf13f75f82",
+    "43754e0fbad82060",
+    "63febb3b9929436f",
+    "c2f9834b9562b671"
    ],
    "first_done": true
   },
@@ -1116,7 +884,7 @@
    "first_done": true
   },
   "seekingalpha": {
-   "etag": "W/\"021ec2383a48867b59f362eff5a0f3a6\"",
+   "etag": "W/\"c31218ec9b3331c088b6e9a1c585438d\"",
    "last_modified": null,
    "seen": [
     "785b44316bddb506",
@@ -1181,13 +949,20 @@
     "f4214025e648fe37",
     "1a0bbb84f9cc4081",
     "3c17d7d928448eaa",
-    "754ec0441d62d76e"
+    "754ec0441d62d76e",
+    "e730f2f89e91275a",
+    "6c6ae5923f29ddd3",
+    "760d553a2574e563",
+    "f434f6bfe5285c24",
+    "e8be278955d63027",
+    "b190a4c0a0f6f5c1",
+    "26f23576ac44cce5"
    ],
    "first_done": true
   },
   "investing": {
-   "etag": "W/\"1203-65f8f42d6fc12\"",
-   "last_modified": "Thu, 05 Nov 2026 22:46:06 GMT",
+   "etag": "W/\"12c5-65f9305b487b9\"",
+   "last_modified": "Fri, 06 Nov 2026 03:15:20 GMT",
    "seen": [
     "5dcc8f562dd2b00e",
     "6a89dc38ebe2926a",
@@ -1276,12 +1051,22 @@
     "2c8e06f96aee0946",
     "8679a835102aed9b",
     "26b52e4e70accec0",
-    "13bc1bf690bf25d4"
+    "13bc1bf690bf25d4",
+    "381e023530318d40",
+    "c5ac1a89db2a98e6",
+    "406015d2914cce17",
+    "f549ad5c7b871c34",
+    "c504ba49dafba76a",
+    "d866458f5f4d9e27",
+    "662a41332f21f071",
+    "67357f7a96940303",
+    "24e01abd67125018",
+    "aac098db452bc015"
    ],
    "first_done": true
   },
   "binance.listados": {
-   "etag": "W/\"0eb74c0e41337b328babd06798cff1abe\"",
+   "etag": "W/\"0cb8c5d038680279933ce739fe1b0e609\"",
    "last_modified": null,
    "seen": [
     "430184bedbd368b7",
@@ -1289,11 +1074,6 @@
     "2037682619bf75cb",
     "4f52afd2efd2cb56",
     "e9fb191c49a29848",
-    "b1f1333bb6ca85a6",
-    "d3eafb81b0eded7b",
-    "1603be0a501079bc",
-    "3edf58b0a442423b",
-    "52ef83fad61e4e84",
     "2d760281ba4d546f",
     "41cbb73165890a79",
     "b53d9772e6246278",
@@ -1303,7 +1083,12 @@
     "ea032ef94fe2b4fd",
     "9692ce9b22d199a3",
     "39754f33a04ddf02",
-    "981417fe3acba253"
+    "981417fe3acba253",
+    "b1f1333bb6ca85a6",
+    "d3eafb81b0eded7b",
+    "1603be0a501079bc",
+    "3edf58b0a442423b",
+    "52ef83fad61e4e84"
    ],
    "first_done": true
   },
@@ -1315,7 +1100,7 @@
   },
   "prn.resultados": {
    "etag": null,
-   "last_modified": "Thu, 05 Nov 2026 23:12:32 GMT",
+   "last_modified": "Fri, 06 Nov 2026 03:27:11 GMT",
    "seen": [
     "22c1fe1de6cb48e4",
     "fd3776b41c9eafaf",
@@ -1365,26 +1150,30 @@
     "edb201a048fb2dae",
     "8a40619a1278620b",
     "1654c431f5703b0e",
-    "8bf8f2fcc2c260bb",
-    "ca25a16d137ebf47",
-    "195500bb01119241",
-    "eae2a6a726981b73",
-    "ebc46ae0a561ab67",
-    "579653a4b52c0c71",
-    "61e69cfa38e14de8",
-    "cb7949a910f5202b",
-    "f7aa5e7c13147ca3",
-    "6c7aa57f28133625",
-    "569228817a417157",
-    "07566d2ebbcee874",
-    "50820163403e6a2c",
     "4f3d117cb20a39b8",
     "d6a69eacc32d3525",
     "e8997d591cab3f32",
-    "3d3a598922bd763e",
+    "63ada0f0126ac83a",
+    "2ceea06d0b450e69",
+    "cd1924f1fea937b3",
+    "6bcba7b7b264fabb",
+    "34666639c7d98568",
+    "ca25a16d137ebf47",
+    "8bf8f2fcc2c260bb",
+    "195500bb01119241",
+    "eae2a6a726981b73",
+    "cb7949a910f5202b",
+    "579653a4b52c0c71",
+    "61e69cfa38e14de8",
+    "ebc46ae0a561ab67",
+    "f7aa5e7c13147ca3",
+    "6c7aa57f28133625",
+    "569228817a417157",
+    "50820163403e6a2c",
+    "07566d2ebbcee874",
     "01b490c9ae48a838",
     "462b3fdc1407a0df",
-    "63ada0f0126ac83a"
+    "3d3a598922bd763e"
    ],
    "first_done": true
   }
@@ -1393,79 +1182,79 @@
   "fed.press": {
    "ok": true,
    "items": 0,
-   "ts": 1793920415,
-   "latency_ms": 89.7
+   "ts": 1793935701,
+   "latency_ms": 124.8
   },
   "fed.monetary": {
    "ok": true,
    "items": 0,
-   "ts": 1793920415,
-   "latency_ms": 84.2
+   "ts": 1793935701,
+   "latency_ms": 125.5
   },
   "prn.resultados": {
    "ok": true,
-   "items": 20,
-   "ts": 1793920415,
-   "latency_ms": 114.0
+   "items": 4,
+   "ts": 1793935701,
+   "latency_ms": 160.0
   },
   "coindesk": {
    "ok": true,
    "items": 2,
-   "ts": 1793920415,
-   "latency_ms": 163.9
+   "ts": 1793935701,
+   "latency_ms": 159.6
   },
   "cointelegraph": {
    "ok": true,
-   "items": 6,
-   "ts": 1793920415,
-   "latency_ms": 99.2
+   "items": 1,
+   "ts": 1793935701,
+   "latency_ms": 106.2
   },
   "decrypt": {
    "ok": true,
-   "items": 9,
-   "ts": 1793920415,
-   "latency_ms": 54.9
+   "items": 0,
+   "ts": 1793935701,
+   "latency_ms": 92.1
   },
   "theblock": {
    "ok": true,
-   "items": 3,
-   "ts": 1793920415,
-   "latency_ms": 65.0
+   "items": 0,
+   "ts": 1793935701,
+   "latency_ms": 103.3
   },
   "cnbc.top": {
    "ok": true,
-   "items": 16,
-   "ts": 1793920415,
-   "latency_ms": 412.6
+   "items": 5,
+   "ts": 1793935701,
+   "latency_ms": 175.0
   },
   "cnbc.earnings": {
    "ok": true,
-   "items": 2,
-   "ts": 1793920415,
-   "latency_ms": 428.1
+   "items": 0,
+   "ts": 1793935701,
+   "latency_ms": 249.4
   },
   "seekingalpha": {
    "ok": true,
    "items": 7,
-   "ts": 1793920415,
-   "latency_ms": 114.8
+   "ts": 1793935701,
+   "latency_ms": 79.1
   },
   "investing": {
    "ok": true,
    "items": 10,
-   "ts": 1793920415,
-   "latency_ms": 140.8
+   "ts": 1793935701,
+   "latency_ms": 116.7
   },
   "binance.listados": {
    "ok": true,
    "items": 0,
-   "ts": 1793920415,
-   "latency_ms": 239.4
+   "ts": 1793935701,
+   "latency_ms": 383.4
   },
   "upbit.avisos": {
    "ok": false,
    "error": "HTTP 403",
-   "ts": 1793920415
+   "ts": 1793935701
   }
  },
  "counts": {
@@ -1518,9 +1307,16 @@
    "ruido": 1,
    "nlp_resultados": 5,
    "nlp_quiebra": 2
+  },
+  "2026-11-06": {
+   "fuente_con_error": 1,
+   "stale": 3,
+   "nuevas": 26,
+   "nlp_otro": 26,
+   "etiquetadas": 56
   }
  },
- "updated_at": 1793920415,
+ "updated_at": 1793935701,
  "version": "0.1.0",
  "schema": 1,
  "aviso_inicio": 1793642808,
