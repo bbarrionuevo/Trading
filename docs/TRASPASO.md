@@ -50,7 +50,9 @@ Lo que pidió, en sus palabras:
   o afecten en nada a los módulos que trabajen con dinero real"): en Tokio corren el dinero real (solo Upbit) y un
   simulacro aparte (`SIMULACRO.json`, 100 USDT de mentira) de los demás módulos, en el mismo agente. El simulacro
   nunca opera lo que opera la plata; el dinero real tiene sus propias conexiones con Binance y no lee las noticias
-  que no puede operar; la práctica está apagada (`trader.practica: false`). Antes, el 6-nov:
+  que no puede operar; la práctica está apagada (`trader.practica: false`). **Instalado el 6-nov a las 16:28 UTC**
+  (#73): `SIMULACRO.json` armado por 30 días, el armado real intacto (solo `listado_upbit`), sin errores. Antes, el
+  6-nov:
   Armado por estrategia (REGLAS v3.4, #67, fusionado por el dueño). El 6-nov a las 12:28 UTC se instaló en Tokio con
   #66 (el bucle y la memoria), #68 (la prueba en la PC) y #69 (conexiones tibias con Binance). La prueba de punta a
   punta en Tokio dio: listados de Upbit con la orden a los 50-57 ms la primera y 21-29 ms las demás, el deslistado a
@@ -171,7 +173,11 @@ a Tokio como motor. Lee este archivo primero, y lo que manda es esta lista:
    - `sudo journalctl -u agente-tokio -u rele-tokio --since -3h --no-pager -p warning` y `sudo journalctl -t vigia-red`.
      "poca memoria en el servidor" en el registro: mirar si coincide con `unattended-upgrades`
      (`sudo tail /var/log/unattended-upgrades/unattended-upgrades.log`) y anotarlo (sección 11).
-   - `[ -f /var/run/reboot-required ]`: el sistema pide reinicio (lo hace el dueño, a hora tranquila).
+   - `[ -f /var/run/reboot-required ]`: el sistema pide reinicio (lo hace el dueño, a hora tranquila y sin posiciones
+     reales abiertas). **No hay ningún reinicio programado** (revisado el 6-nov: crontab, `cron.d`, temporizadores y
+     `Automatic-Reboot`): el comando del 6-nov movió las actualizaciones automáticas a las 15:00 UTC (medianoche en
+     Tokio y Corea) y no reinician nada. Que siga así: cada reinicio deja ~1 min sin escuchar Upbit ni vigilar
+     posiciones, y la memoria del agente ya no crece.
    - **Memoria del agente y freno del bucle:** `bash ~/trading/deploy/tokio/memoria.sh` (solo lee). Dice cuánto lleva
      encendido, la memoria del servicio, dónde está (arena principal, arenas de hilos, resto de Python) y el retraso
      del bucle en el último minuto. Anotarlo en §12 con las horas de encendido.
@@ -735,5 +741,6 @@ sección 11). Un estudio nuevo va con su línea acá.
 | 6-nov | **Tokio con #66 a #69 (instalado 12:28 UTC), antes de armar dinero real** | prueba de punta a punta en Tokio, 2 corridas: la primera entrada (SOL) a los 50-57 ms (antes 68), ETH 21-29 ms, el corto de DOGE 24 ms; la IA confirma en 1,1-1,7 s; sin errores. En la 1.ª corrida el simulacro no entró en DOGE (la práctica sí) y no quedó el motivo: desde ahora la prueba imprime por qué no entró cada aviso. Memoria: 118-121 MB en los primeros 5 min, con 1 arena de hilos (8 MB; antes 9 arenas, 68-92 MB) | listo para que el dueño arme (sección 6); comparar la memoria a las mismas horas (1,7 h: antes 186 MB; 2,5 h: antes 200-216 MB) | sección 6 |
 | 6-nov | **Dinero real armado en Tokio, solo listados de Upbit** (13:11 UTC, el dueño) | `binance-real-check` primero falló (-2013: el stop de prueba no se veía a los ~3 ms) y pasó con #71 (el stop apareció a los 1,08 s); armado `--estrategias listado_upbit`, todo el saldo, 30 días. Verificado: el ejecutor puede abrir, solo `listado_upbit`, saldo leído y suficiente, sin pausa ni errores | operando con dinero real; lo demás en práctica | sección 6 |
 | 6-nov | **Práctica o simulacro para los demás módulos** (pregunta del dueño) | la práctica toma las mismas decisiones con un llenado genérico (80 ms supuestos); el simulacro es el código del dinero real con el libro real nivel por nivel. Tokio no está cargado (agente 1,4 % de CPU, carga 0,00-0,02, 366 MB libres + 1 GB de swap). En la PC cada pedido a Binance tarda ~320 ms (Tokio 2-5 ms): mediría peor los deslistados | en Tokio, sin práctica: simulacro junto al real que nunca compite (opción 1 del dueño, REGLAS v3.5) | sección 2 |
+| 6-nov | **Simulacro junto al dinero real, instalado (16:28 UTC, #73)** | antes (práctica + real, a las 3,1 h): 157 MB, 1,1 % de CPU, carga 0,00; después (real + simulacro, sin práctica, al minuto): 121 MB (igual que al arrancar antes), 1 arena de hilos, carga 0,08, sin errores. La memoria del #66: 157 MB a las 3,1 h contra 200-218 MB antes, a las mismas horas | comparar a las mismas horas; revisar que el simulacro no tome ningún listado de Upbit (`la_opera_el_dinero_real`) | sección 2 |
 | 5-nov | **Agente completo en Tokio (simulacro)** | Claude 1,8 s; Binance 2-5 ms (PC ~320 ms); fuentes OK salvo el sitio de Upbit (403); memoria: agente 77 MB y relé 63 MB de 416 | andando (`agente-tokio`); telemetría al tablero de la PC; la pausa de la PC frena a Tokio | RELE-TOKIO |
 | 5-nov | **1.ª operación del simulacro** | Wendy's, resultados: entró a los 120 s, salió a los 30 min, −0,27 USDT (−0,5 %); su comunicado salió minutos antes del 8-K | normal (pierden ~35 %) | simulacro |
