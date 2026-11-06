@@ -156,8 +156,20 @@ USDT no pide apalancamiento. Lo único que daría ~0,3 s en todo es operar desde
   Binance a 2-5 ms, Claude responde en 1,8 s, telemetría al tablero de la PC y la pausa de la PC lo frena (PR #53).
 - ✅ Medido: los listados de Upbit rinden solo si se entra en los primeros ~3 s (`estudios/upbit_segundos.py`: a los
   2 s, 5 min mediana +1,45 %, media +4,85 %; a los 9 s de la PC, −2,12 %).
-- **Espera al dueño (PR #54, protegido):** REGLAS v3.2 (dinero real desde Tokio con un solo ejecutor, G-9) y los
-  listados de Upbit al instante (por Telegram, sin esperar a la IA, 1 % al stop). Después, la fase 3 la arma él.
+- ✅ REGLAS v3.2 (#54: dinero real desde Tokio con un solo ejecutor, G-9; listados de Upbit al instante) y v3.3
+  (#58: 3 % al stop, nada se cancela en Binance antes de 5 s, lineamientos medidos L).
+- ✅ Todo en Tokio y la PC solo tablero (#57, #59): el bot de Telegram está en Tokio y el tablero de la PC muestra el
+  de Tokio tal cual.
+- ✅ Prueba A/B al instante contra esperar a la IA (#56): al instante gana por lejos (mediana +9,2 % contra +1,5 %).
+  Queda medido en vivo en `variante-ia.jsonl`.
+- ✅ Servidor nuevo de ~900 MB (6-nov) con memoria acotada, aviso por Telegram si se calla y vigía de la red (#60):
+  el viejo se quedó sin red por falta de memoria.
+- **Lo que sigue (con evidencia en vivo):**
+  1. Medir de punta a punta el primer listado de Upbit al instante y el primer deslistado de Binance desde Tokio.
+  2. La prueba A/B en vivo.
+  3. El canal de Binance en Tokio: un aviso llegó en 41 s (en la PC, 1,2-1,8 s).
+  4. Los candidatos L-9 (fin del soporte y advertencias de Upbit, con ~30 casos).
+- **Dinero real desde Tokio:** lo arma el dueño, con los pasos de `docs/TRASPASO.md` §6.
 - ✅ **Canales oficiales de Telegram para noticias generales** (5-nov, `estudios/telegram_canales.py`): el de Upbit
   es el único que adelanta (0-2 s después del sitio, ya en uso). El de Binance llega 160 s (mediana) después del
   sitio: el WebSocket (1,2-1,8 s) le gana por lejos. Cointelegraph, 25 min después de su RSS; CoinDesk, The Block y
