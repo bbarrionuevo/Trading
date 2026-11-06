@@ -94,7 +94,8 @@ del dueño.
   dueño, y la PC ya conoce al servidor (`known_hosts`; huella ED25519 desde el 6-nov:
   `SHA256:enk3HfrP3BHU2xGLZZHFExFRCxXAgEVsIfbBFYPrp1g`). **Usar el ssh de Git**
   (`C:\Program Files\Git\usr\bin\ssh.exe`, o Git Bash): el de Windows rechaza la llave por sus permisos ("bad
-  permissions"). Ubuntu 22.04, 2 vCPU, **~900 MB de memoria** (desde el 6-nov), sin swap, 20 GB de disco.
+  permissions"). Ubuntu 22.04, 2 vCPU, **~900 MB de memoria** (desde el 6-nov) **y 1 GB de swap** (`/swapfile`, desde el 6-nov), 20 GB
+  de disco. Las actualizaciones automáticas de Ubuntu corren a las 15:00 UTC (±10 min).
 - **Servicios** (systemd, se reinician solos):
   - `rele-tokio`: el canal oficial de Upbit en Telegram y la lista de Binance; reparte por UDP 50005.
   - `agente-tokio`: `python -m tradingagent run` con `TRADING_HOME=/home/ubuntu/.trading`.
@@ -532,7 +533,16 @@ Ver qué pasó en un arranque anterior: `sudo journalctl --list-boots` y `sudo j
 - Desde el #64, el latido trae la memoria libre del servidor (el tablero la muestra en rojo con menos de 150 MB), y
   con menos de 120 MB queda el aviso "poca memoria en el servidor" en el registro del agente.
 
-**Recomendado (cambios del sistema: los hace el dueño, en la consola SSH de Lightsail):**
+**Aplicado por el dueño el 6-nov a las ~09:54 UTC** (los tres cambios de abajo):
+
+- swap de 1 GB activo y en `/etc/fstab`;
+- `apt-daily-upgrade.timer` a las 15:00 UTC (`/etc/systemd/system/apt-daily-upgrade.timer.d/hora.conf`);
+- servidor reiniciado con el núcleo nuevo (6.8.0-1066-aws).
+
+Todo volvió solo en 10 s: relé, canal de Upbit, bot, anuncios de Binance y la PC. No saltó el aviso de "Tokio
+callado" (menos de 3 min). Después, la prueba de punta a punta con `main` dio órdenes a los 25-68 ms y sin errores.
+
+Los comandos, por si hay que rehacerlo en otro servidor:
 
 1. Un swap de 1 GB, para que estos picos no aprieten:
    `sudo fallocate -l 1G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile && echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab`
@@ -641,6 +651,7 @@ sección 11). Un estudio nuevo va con su línea acá.
 | 5-nov | **Otros avisos de Upbit al instante** | fin del soporte corto (9): mediana +4,75 %; advertencia corto (18): +1,73 %, 78 %; extendida y levantada, no | candidatos (L-9): se deciden con ~30 casos | ESTUDIO-LISTADOS, `estudios/upbit_primero.py` |
 | 5-nov | **Binance: nada se cancela antes de 5 s** | el stop que sobra se cancela en segundo plano a los 5,5 s (pedido del dueño) | hecho (D-6, L-7) | `execution/live/binance_venue.py` |
 | 6-nov | **Prueba de punta a punta en Tokio** (`deploy/tokio/prueba_listado.py`, agente aparte, avisos armados a mano) | Al principio: el primer aviso esperó 1,1 s (cargar el SDK de la IA frenaba el bucle) y el segundo listado del día se perdía (la deduplicación juntaba dos avisos de Upbit con la misma plantilla: 0,62 > 0,6). Arreglado: cada aviso entra a los 23-60 ms de recibido (~1,07 s desde la hora del mensaje) | hecho (precarga de la IA, deduplicación por tickers, tiempos por etapa en el registro) | `live.py`, `ingestion/dedup.py`, `intelligence/llm.py` |
+| 6-nov | **Reinicio con swap y actualizaciones a las 15:00 UTC** (el dueño) | todo volvió en 10 s; prueba de punta a punta con `main`: órdenes a los 25-68 ms (SOL 68, ETH 27, deslistado de DOGE 25), sin errores; 387-457 MB libres + 1 GB de swap | hecho | sección 11 |
 | 6-nov | **Canal de anuncios de Binance en Tokio** | 3 avisos: TradFi programado a hora redonda (01:00:00), 41 s; "Recovery Update #9" (03:06:23 UTC, hora no redonda), 1,2 s de publicado a recibido y decisión en 4 ms; "Limited-Time Spot Taker Program" (7-nov 00:00:00 UTC, **hora redonda**), 2,6 s. La hora redonda no siempre llega tarde | medir con más avisos (sobre todo deslistados) | sección "Vigilancia" |
 | 5-nov | **Agente completo en Tokio (simulacro)** | Claude 1,8 s; Binance 2-5 ms (PC ~320 ms); fuentes OK salvo el sitio de Upbit (403); memoria: agente 77 MB y relé 63 MB de 416 | andando (`agente-tokio`); telemetría al tablero de la PC; la pausa de la PC frena a Tokio | RELE-TOKIO |
 | 5-nov | **1.ª operación del simulacro** | Wendy's, resultados: entró a los 120 s, salió a los 30 min, −0,27 USDT (−0,5 %); su comunicado salió minutos antes del 8-K | normal (pierden ~35 %) | simulacro |
