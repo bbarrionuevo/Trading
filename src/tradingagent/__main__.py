@@ -332,6 +332,22 @@ def cmd_binance_real_check(args) -> int:
     return 1
 
 
+def _strategies(text: str) -> tuple | None:
+    """`--estrategias`: None = todas; si no, los nombres (las categorías de policy.EXITS o de la IA). Un nombre que no
+    existe es un error: un error de tipeo no puede armar algo distinto de lo pedido."""
+    if text.strip().lower() in ("", "todas"):
+        return None
+    from .decision.policy import EXITS
+    from .intelligence.llm import CATEGORIES
+    names = tuple(dict.fromkeys(s.strip() for s in text.split(",") if s.strip()))
+    known = set(EXITS) | set(CATEGORIES)
+    unknown = [s for s in names if s not in known]
+    if unknown or not names:
+        bad = ", ".join(unknown) or repr(text)
+        raise ValueError(f"estrategia desconocida: {bad}. Las que hay: {', '.join(sorted(known))}")
+    return names
+
+
 def _restart_agent(home, why: str) -> None:
     """Pide al agente que se cierre prolijo: el supervisor lo relanza en segundos con el armado nuevo."""
     (home / "state").mkdir(parents=True, exist_ok=True)
@@ -354,6 +370,14 @@ def cmd_armar_real(args) -> int:
     binance = args.exchange == "binance"
     venue, where = ("binance-futuros", "Binance") if binance else ("mexc-futuros", "MEXC")
     assets = tuple(a.strip().upper() for a in args.activos.split(",") if a.strip())
+    try:
+        strategies = _strategies(args.estrategias)
+    except ValueError as e:
+        print(f"No se armó nada: {e}")
+        return 1
+    from .alerts.model import STRATEGY_ES
+    only = (f"solo {', '.join(STRATEGY_ES.get(s, s) for s in strategies)} (las demás estrategias siguen en la "
+            "práctica)" if strategies else "todas las estrategias")
     current = paths.read_json(home / arming.ARM_FILE, None)
     real_armed = isinstance(current, dict) and not current.get("simulacro")
     if args.simulacro:                                # sin plata en juego: sin frase
@@ -371,7 +395,7 @@ def cmd_armar_real(args) -> int:
         capital = 100.0 if args.capital is None else args.capital
         try:
             data = arming.arm(home, args.dias, "", "", assets=assets, simulacro=True, capital=capital, venue=venue,
-                              mode=("demo" if demo else "local") if binance else None)
+                              mode=("demo" if demo else "local") if binance else None, strategies=strategies)
         except ValueError as e:
             print(f"No se armó el simulacro: {e}")
             return 1
@@ -380,8 +404,8 @@ def cmd_armar_real(args) -> int:
                    else "con el libro real de Binance y órdenes simuladas en la PC (ninguna orden sale)" if binance
                    else "contra un exchange simulado con el libro real de MEXC (no manda ninguna orden)")
         print(f"Simulacro armado: {data['capital_usdt']:g} USDT de mentira, activos {', '.join(data['activos'])}, "
-              f"por {args.dias} días. Es el mismo programa que el dinero real, con los precios reales de {where}, "
-              f"{against}. El agente se reinicia solo en segundos y te avisa por Telegram.")
+              f"{only}, por {args.dias} días. Es el mismo programa que el dinero real, con los precios reales de "
+              f"{where}, {against}. El agente se reinicia solo en segundos y te avisa por Telegram.")
         return 0
     if args.capital is not None:
         print(f"Con dinero real no hay tope: opera con TODO el saldo de la cuenta de futuros de {where}. "
@@ -394,19 +418,19 @@ def cmd_armar_real(args) -> int:
         return 2
     want = arming.phrase(args.dias)
     print(f"Vas a armar DINERO REAL con TODO el saldo de tu cuenta de futuros de {where} (y lo que se gane), activos "
-          f"{', '.join(assets)}, por {args.dias} días. Cada operación arriesga como mucho "
+          f"{', '.join(assets)}, {only}, por {args.dias} días. Cada operación arriesga como mucho "
           f"{limits_mod.load()['per_trade']['max_risk_pct']:g} % del saldo.\n"
           f"Para confirmar, escribí exactamente:  {want}")
     typed = input("> ")
     try:
-        arming.arm(home, args.dias, access, typed, assets=assets, venue=venue)
+        arming.arm(home, args.dias, access, typed, assets=assets, venue=venue, strategies=strategies)
     except ValueError as e:
         print(f"No se armó: {e}")
         return 1
     ok, why, _ = arming.status(home, access, venue=venue)
     _restart_agent(home, "armado real")
     check = "binance-real-check" if binance else "mexc-real-check"
-    print("Armado con todo el saldo.", "El agente se reinicia solo en segundos y empieza." if ok
+    print(f"Armado con todo el saldo, {only}.", "El agente se reinicia solo en segundos y empieza." if ok
           else f"Todavía no opera: {why} (corré python -m tradingagent {check}).")
     return 0
 
@@ -677,6 +701,8 @@ def main(argv=None) -> int:
     ar.add_argument("--dias", type=int, default=30, help="vencimiento del armado (hasta 30 días)")
     ar.add_argument("--activos", default="todos", help="todos (lo que mueva la noticia: criptos, acciones, índices, "
                     "oro, petróleo) o una lista, por ejemplo BTC,ETH,TSLA")
+    ar.add_argument("--estrategias", default="todas", help="todas, o solo algunas: por ejemplo listado_upbit (los "
+                    "listados de Upbit al instante); las demás siguen en la práctica")
     ar.add_argument("--desarmar", action="store_true")
     ar.add_argument("--simulacro", action="store_true", help="probar el modo real SIN plata: mismo programa y "
                     "mismos precios; en Binance contra la DEMO (plata ficticia), en MEXC sin mandar órdenes")

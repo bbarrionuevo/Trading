@@ -157,6 +157,8 @@ class BinanceVenue:
                 return self._reject(order, f"real_no_armado:{why}")
             if not arming.asset_allowed(arm, intent.symbol):
                 return self._reject(order, "activo_no_armado")
+            if not arming.strategy_allowed(arm, (intent.tags or {}).get("category")):
+                return self._reject(order, "estrategia_no_armada")         # armado solo para otras estrategias
             if self.blocked:
                 return self._reject(order, f"conciliacion:{self.blocked}")
         inst = self.registry.get(intent.symbol)

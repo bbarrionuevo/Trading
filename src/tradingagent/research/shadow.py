@@ -375,6 +375,7 @@ class _Run:
         return z
 
     discarded: frozenset = frozenset()          # estrategias (categorías) descartadas por sus resultados
+    only: frozenset | None = None               # armado solo para estas estrategias (`armar-real --estrategias`)
 
     async def enter(self, ev: dict, sig, asset: str, blocks: list, assessment=None, prefetched=None,
                     relaxed: bool = False) -> None:
@@ -387,6 +388,8 @@ class _Run:
         reasons = list(a.reasons) + [why for _, why in blocks]           # primero lo del evento, después el resto
         if sig.category in self.discarded:                               # sus propias operaciones dieron mal (F-3)
             reasons.append(f"categoria_descartada_por_resultados:{sig.category}")
+        if self.only is not None and sig.category not in self.only:      # esta cuenta se armó solo para otras
+            reasons.append(f"estrategia_no_armada:{sig.category}")
         if sym in self.st["positions"]:
             reasons.append("ya_en_cartera")
         inst = self.reg.get(sym)
@@ -445,7 +448,7 @@ class _Run:
         order, block = await self.service.execute(OrderIntent(
             client_id=f"pp-{ev['id']}-{sym}", symbol=sym, side=entry_side, type=OrderType.MARKET, notional=p.notional,
             max_slippage_bps=D(str(entry_slippage(self.cfg, sig.category, self.limits))), ref_price=ref_px,
-            tags={"decision_id": ev["id"], "role": "entry", "strategy_tag": STRATEGY_TAG,
+            tags={"decision_id": ev["id"], "role": "entry", "strategy_tag": STRATEGY_TAG, "category": sig.category,
                   "emergency_stop": str(emergency)}))
         if order is None or not order.filled_qty:
             self.counts["entrada_fallida"] += 1

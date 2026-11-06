@@ -96,6 +96,23 @@ def binance_keys(env, *, demo: bool) -> tuple[str | None, str | None]:
     return env.get("BINANCE_API_KEY"), env.get("BINANCE_API_SECRET")
 
 
+def armed_summary(home) -> tuple[bool, str]:
+    """(¿hay DINERO REAL armado?, una línea para el aviso de arranque y /estado). El modo del config es siempre "paper"
+    (el operador real corre aparte): sin esto, con dinero real armado el aviso de arranque decía "sin plata real"."""
+    from .alerts.model import STRATEGY_ES
+    from .execution.live import arming
+    data = paths.read_json(home / arming.ARM_FILE, None)
+    if not isinstance(data, dict):
+        return False, ""
+    where = VENUE_ES.get(arming.venue_of(data), arming.venue_of(data))
+    only = data.get("estrategias")
+    what = (f"solo {', '.join(STRATEGY_ES.get(s, s) for s in only)}; lo demás, en práctica" if only
+            else "todas las estrategias")
+    if data.get("simulacro"):
+        return False, f"🧪 Simulacro armado en {where} (plata de mentira): {what}."
+    return True, f"💵 DINERO REAL armado en {where}, con todo el saldo de la cuenta de futuros: {what}."
+
+
 def arm_key(env, data: dict) -> str | None:
     """La clave con la que se armó: la huella del armado tiene que coincidir con ella."""
     from .execution.live import arming
@@ -125,6 +142,10 @@ class OwnerActions:
             lines.append(f"Armado en {VENUE_ES.get(arming.venue_of(data), arming.venue_of(data))} "
                          f"({'simulacro' if data.get('simulacro') else 'dinero real'}): "
                          + (f"opera, vence en {left:.0f} días" if ok else f"no abre nada nuevo ({why})"))
+            if data.get("estrategias"):
+                from .alerts.model import STRATEGY_ES
+                lines.append("  solo " + ", ".join(STRATEGY_ES.get(s, s) for s in data["estrategias"])
+                             + "; lo demás, en práctica")
         else:
             lines.append("Dinero real: no armado")
         if (home / "KILL").exists():
@@ -441,7 +462,9 @@ class Agent:
         enabled, self.sources_off = build_sources(cfg, env, lim)
         if self._sources_override is not None:
             enabled = self._sources_override
-        boot = startup_alert(cfg["mode"].upper(), len(enabled), len(enabled) + len(self.sources_off), __version__)
+        real, armed = armed_summary(home)
+        boot = startup_alert("REAL" if real else cfg["mode"].upper(), len(enabled), len(enabled) + len(self.sources_off),
+                             __version__, extra=armed)
         a = cfg["alerts"]
         self.alerts = AlertDispatcher(alert_transport_factory(cfg, env, self.telegram_base_url),
                                       max_queue=a["max_queue"], rate_per_s=a["rate_per_s"], burst=a["burst"],

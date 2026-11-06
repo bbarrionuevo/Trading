@@ -17,6 +17,10 @@
   "demo"). En MEXC, contra un exchange simulado sobre el libro real (dryrun.py).
 - Vencido, revocado (`armar-real --desarmar`) o con KILL: no se abre nada nuevo. Las posiciones abiertas
   salen normal: salir siempre se puede.
+- **Por estrategia** (`armar-real --estrategias listado_upbit`, pedido del dueño del 6-nov: "el módulo de inversión
+  automática de upbit ... ya quede funcionando con dinero real ... mientras seguimos haciendo pruebas ... con los demás
+  módulos"): el armado guarda la lista y solo esas estrategias abren con dinero real; las demás siguen en la práctica.
+  Sin lista, todas (lo de antes). Lo controla el operador (`live.py`) y, de nuevo, el venue antes de cada orden.
 - Un solo ejecutor por cuenta (REGLAS G-9): si el agente del servidor de Tokio informó en la última hora (su
   telemetría, `state/tokio.json`) que opera DINERO REAL, esta máquina no abre con dinero real. En Tokio ese archivo
   no existe: allá no frena nada.
@@ -58,15 +62,19 @@ def venue_of(data: dict) -> str:
 
 def arm(home: Path, days: int, access_key: str, typed: str, *, assets: tuple = DEFAULT_ASSETS,
         simulacro: bool = False, capital: float | None = None, now: float | None = None,
-        venue: str = "mexc-futuros", mode: str | None = None) -> dict:
+        venue: str = "mexc-futuros", mode: str | None = None, strategies: tuple | None = None) -> dict:
     """Arma el dinero real (todo el saldo de la cuenta) o, con `simulacro=True`, el simulacro con `capital` USDT
-    de mentira: el operador real corre completo pero NUNCA manda órdenes (no pide frase ni prueba con órdenes)."""
+    de mentira: el operador real corre completo pero NUNCA manda órdenes (no pide frase ni prueba con órdenes).
+    `strategies`: solo esas estrategias abren (None: todas)."""
     if not 1 <= int(days) <= MAX_DAYS:
         raise ValueError(f"el armado vence en 1 a {MAX_DAYS} días")
     if venue not in VENUES:
         raise ValueError(f"exchange desconocido: {venue}")
     if mode not in (None, "local", "demo") or (mode and not simulacro):
         raise ValueError("el modo es solo del simulacro: local o demo")
+    only = None if strategies is None else sorted({str(s).strip() for s in strategies if str(s).strip()})
+    if only is not None and not only:
+        raise ValueError("la lista de estrategias está vacía: no se armó nada")
     if simulacro:
         if capital is None or not float(capital) > 0:
             raise ValueError("el simulacro necesita un saldo de mentira mayor que 0 (--capital)")
@@ -75,7 +83,8 @@ def arm(home: Path, days: int, access_key: str, typed: str, *, assets: tuple = D
     now = now if now is not None else time.time()
     data = {"capital_usdt": float(capital) if simulacro else ALL, "activos": sorted(a.upper() for a in assets),
             "venues": [venue], "simulacro": bool(simulacro), "clave": fingerprint(access_key),
-            "armado_en": round(now), "vence": round(now + int(days) * 86400), **({"modo": mode} if mode else {})}
+            "armado_en": round(now), "vence": round(now + int(days) * 86400), **({"modo": mode} if mode else {}),
+            **({"estrategias": only} if only is not None else {})}
     paths.write_json_atomic(Path(home) / ARM_FILE, data)
     return data
 
@@ -142,6 +151,15 @@ def other_executor(home: Path, now: float) -> bool:
     except (TypeError, ValueError):
         return False
     return fresh and any(isinstance(a, dict) and a.get("tipo") == "real" for a in ag.get("cuentas") or [])
+
+
+def strategy_allowed(data: dict, category: str | None) -> bool:
+    """¿El armado deja ABRIR esta estrategia (la categoría de la entrada)? Sin lista, todas. Con lista, solo esas, y
+    una entrada que no dice su estrategia no pasa."""
+    only = (data or {}).get("estrategias")
+    if only is None:
+        return True
+    return category is not None and str(category) in {str(s) for s in only}
 
 
 def asset_allowed(data: dict, symbol: str, key: str | None = None) -> bool:
