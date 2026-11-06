@@ -11,6 +11,9 @@ User=ubuntu
 WorkingDirectory=/home/ubuntu/trading
 Environment=TRADING_HOME=/home/ubuntu/.trading
 Environment=PYTHONUNBUFFERED=1
+# Dos arenas de memoria para todos los hilos (glibc crea una por hilo, hasta 8 por núcleo). Medido el 6-nov a los 83 min
+# de arrancar: 9 arenas de hilos con 68 MB de los ~180 MB del agente, fragmentadas. Es lo habitual en Python con hilos.
+Environment=MALLOC_ARENA_MAX=2
 # Sin EnvironmentFile: el agente lee SOLO TRADING_HOME/.env, armado con deploy/tokio/preparar_env.py (la IA, la clave
 # de SOLO LECTURA de Binance y el SEC_USER_AGENT; nunca la clave de trading). El .env del dueño no se carga.
 ExecStart=/home/ubuntu/trading/.venv/bin/python -m tradingagent run
@@ -20,8 +23,9 @@ RestartSec=10
 # mató al agente mientras pip instalaba).
 OOMScoreAdjust=-500
 # Y nunca más que esto (el servidor tiene ~900 MB desde el 6-nov): pasando MemoryHigh se le recupera memoria; pasando
-# MemoryMax, el kernel mata solo al agente y systemd lo relanza a los 10 s. Usa ~130 MB. El 5-nov la falta de memoria
-# del sistema hizo que systemd-networkd diera la red por caída (docs/TRASPASO.md §11).
+# MemoryMax, el kernel mata solo al agente y systemd lo relanza a los 10 s. Usa ~180-220 MB (6-nov; el SDK de la IA
+# solo, ~45). El 5-nov la falta de memoria del sistema hizo que systemd-networkd diera la red por caída
+# (docs/TRASPASO.md §11).
 MemoryHigh=400M
 MemoryMax=500M
 NoNewPrivileges=true

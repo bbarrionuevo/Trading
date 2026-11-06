@@ -224,6 +224,18 @@ def test_redaccion_de_tokens(caplog, monkeypatch):
     assert TOKEN not in rec.getMessage()
 
 
+def test_el_redactor_de_muchos_textos_oculta_lo_mismo(monkeypatch):
+    """`redactor` lee los secretos del entorno una vez (el tablero redacta cientos de líneas): mismo resultado."""
+    from tradingagent.core.redact import redactor
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", TOKEN)
+    monkeypatch.setenv("UNA_API_KEY", "clave-secreta-de-prueba-123")
+    clean = redactor(secrets=("otro-secreto-xyz",))
+    for text in (f"url=https://api.telegram.org/bot{TOKEN}/x", "la clave-secreta-de-prueba-123 y otro-secreto-xyz",
+                 "nada que ocultar", 12345):
+        assert clean(text) == redact(text, secrets=("otro-secreto-xyz",))
+    assert "clave-secreta" not in clean("ups: clave-secreta-de-prueba-123") and TOKEN not in clean(TOKEN)
+
+
 def test_los_avisos_se_entienden_sin_saber_de_trading():
     from tradingagent.alerts.model import daily_alert, entry_alert, exit_alert
     e = entry_alert("BTC_USDT", 1, "0.0002", "100000", "20", stop="98500", tp="103000", p=0.63, category="hack",

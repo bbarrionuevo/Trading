@@ -25,7 +25,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from . import __version__, paths
-from .core.redact import redact
+from .core.redact import redact, redactor
 from .research import evaluation
 
 PORT = 18765                        # lejos de los puertos comunes: el 8765 ya lo usa otro programa del dueño
@@ -159,7 +159,7 @@ def account(base: Path, now: float) -> dict | None:
 
 
 def log_errors(home: Path, n: int = 12) -> list[dict]:
-    out = []
+    out, clean = [], redactor()                       # los secretos del entorno, una vez por tablero (no por línea)
     for line in _tail(home / "logs" / "agent.log", 2_000_000):
         if '"WARNING"' not in line and '"ERROR"' not in line:
             continue
@@ -169,7 +169,7 @@ def log_errors(home: Path, n: int = 12) -> list[dict]:
             continue
         if d.get("level") in ("WARNING", "ERROR"):
             out.append({"ts": d.get("ts"), "nivel": d["level"], "origen": d.get("logger", ""),
-                        "mensaje": redact(d.get("msg", ""))[:400], "error": redact(d.get("exc", ""))[-600:]})
+                        "mensaje": clean(d.get("msg", ""))[:400], "error": clean(d.get("exc", ""))[-600:]})
     return out[-n:][::-1]
 
 
