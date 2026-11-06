@@ -42,6 +42,7 @@ from .telemetry.remota import rss_mb, system_free_mb
 
 log = logging.getLogger("tradingagent")
 STOP_FILE, STOP_POLL_S = "parar", 1.0
+KEEP_WARM_S, KEEP_WARM_N = 10.0, 4                     # conexiones tibias con Binance: cada 10 s, 4 a la vez
 
 
 def build_sources(cfg: dict, env, limits: dict | None = None) -> tuple[list[SourceSpec], dict[str, str]]:
@@ -275,6 +276,30 @@ class Agent:
             except Exception:                                        # la prueba nunca frena al agente
                 log.warning("falló la prueba de red", exc_info=True)
             delay = EVERY_S
+
+    async def _keep_warm(self, session, url: str, every_s: float = KEEP_WARM_S, n: int = KEEP_WARM_N) -> None:
+        """Conexiones tibias con Binance. Medido desde Tokio el 6-nov: una conexión nueva tarda ~45 ms (el saludo TLS)
+        y una abierta ~2 ms. aiohttp cierra las que no se usan en 15 s, y una entrada al instante pide velas, libro y
+        precio a la vez (y después la orden): la que llegaba en frío pagaba ~45 ms de más (la primera entrada de la
+        prueba de punta a punta, 68 ms; la segunda, 27). Cada 10 s, `n` pedidos livianos a la vez (`/fapi/v1/time`, peso
+        1) dejan abiertas `n` conexiones: ~24 de peso por minuto, de 2.400."""
+        timeout = aiohttp.ClientTimeout(total=3)
+
+        async def ping():
+            async with session.get(url, timeout=timeout) as r:
+                PESO.observe(r.headers)
+                await r.read()
+
+        while not self.stop_event.is_set():
+            got = await asyncio.gather(*(ping() for _ in range(n)), return_exceptions=True)
+            fails = [g for g in got if isinstance(g, BaseException)]
+            if fails:                                                # se reintenta en la vuelta siguiente
+                log.debug("conexiones tibias con Binance: %d de %d fallaron (%s)", len(fails), n,
+                          type(fails[0]).__name__)
+            try:
+                await asyncio.wait_for(self.stop_event.wait(), timeout=every_s)
+            except TimeoutError:
+                pass
 
     async def _export_board(self, every_s: float = 120.0) -> None:
         """Agente de Tokio: su tablero completo cada 2 min (armarlo cuesta ~3 s de CPU: el servidor es chico), para la PC
@@ -549,6 +574,10 @@ class Agent:
                           asyncio.create_task(self._print_accepted(), name="consola"),
                           asyncio.create_task(self._watch_stop_file(stop_file), name="parada")]
                 tasks.append(asyncio.create_task(self._probe_loop(session), name="red"))
+                market = getattr(self.trader, "market", None)
+                if getattr(market, "name", "") == "binance-futuros":          # las entradas al instante, sin saludo TLS
+                    tasks.append(asyncio.create_task(self._keep_warm(session, f"{market.base}/fapi/v1/time"),
+                                                     name="conexiones-tibias"))
                 if self.telemetry is not None:
                     tasks.append(asyncio.create_task(self.telemetry.run(self.stop_event), name="telemetria"))
                     tasks.append(asyncio.create_task(self._export_board(), name="tablero-exportado"))
@@ -574,7 +603,8 @@ class Agent:
                     if self.news_tasks:                   # una noticia a medio operar se termina y se guarda
                         await asyncio.wait(set(self.news_tasks), timeout=10)
                     for t in tasks:
-                        if t.get_name() in ("lag", "consola", "aprendizaje", "red", "ordenes", "telemetria", "tablero-exportado") or \
+                        if t.get_name() in ("lag", "consola", "aprendizaje", "red", "ordenes", "telemetria", "tablero-exportado",
+                                            "conexiones-tibias") or \
                                 t.get_name().startswith("fuente-"):
                             t.cancel()
                     await asyncio.wait(tasks, timeout=15)

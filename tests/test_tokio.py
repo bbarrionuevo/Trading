@@ -418,7 +418,6 @@ def test_la_memoria_del_servidor_va_en_el_latido_y_avisa_si_falta(tmp_path, capl
     assert "90 MB libres" in html and "el agente usa 160.0 MB" in html
 
 
-
 def test_la_prueba_en_la_pc_usa_el_binance_falso_y_nunca_la_cuenta_real(tmp_path, monkeypatch):
     """deploy/tokio/prueba_listado.py --pc (6-nov): el agente apunta los datos públicos a un Binance falso local con los
     tiempos de Tokio. Solo por código; la clave de lectura no se usa y, armado en real o en la demo, no arranca."""
@@ -440,3 +439,31 @@ def test_la_prueba_en_la_pc_usa_el_binance_falso_y_nunca_la_cuenta_real(tmp_path
     arming.arm(tmp_path, 3, "clave-trading-0000", arming.phrase(3), venue="binance-futuros")
     assert agent._build_real_trader(None, limits_mod.load()) is None               # dinero real: nunca en una prueba
     assert Agent(config.load(None), env)._binance_base is None                    # lo normal: el Binance de verdad
+
+
+async def test_las_conexiones_con_binance_quedan_tibias_y_se_reusan():
+    """Desde Tokio una conexión nueva con Binance tarda ~45 ms (TLS) y una abierta ~2 ms (6-nov): el agente deja `n`
+    abiertas con pedidos livianos, y cada vuelta reusa las mismas (no abre otras)."""
+    import aiohttp
+    from aiohttp import web
+
+    from conftest import serve
+    from tradingagent import config
+    from tradingagent.app import Agent
+    peers, enough = [], asyncio.Event()
+
+    async def hora(request):
+        peers.append(request.transport.get_extra_info("peername")[1])
+        if len(peers) >= 12:
+            enough.set()
+        return web.json_response({"serverTime": 0}, headers={"X-MBX-USED-WEIGHT-1M": "3"})
+
+    app = web.Application()
+    app.router.add_get("/fapi/v1/time", hora)
+    agent = Agent(config.load(None), {})
+    async with serve(app) as url, aiohttp.ClientSession() as s:
+        task = asyncio.create_task(agent._keep_warm(s, f"{url}/fapi/v1/time", every_s=0.05, n=3))
+        await asyncio.wait_for(enough.wait(), timeout=10)
+        agent.stop()
+        await task
+    assert len(set(peers)) == 3                                   # 4 vueltas de 3 pedidos, por las mismas 3
