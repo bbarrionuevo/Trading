@@ -116,7 +116,8 @@ del dueño.
 - **Actualizar los dos servicios**, con el CI de `main` en verde:
   `ssh -i C:\Users\Brian\.ssh\lightsail-tokio.pem ubuntu@<IP> "bash ~/trading/deploy/tokio/instalar-agente.sh"`.
   Corre pip solo si cambiaron las dependencias, y con los servicios parados.
-- **Memoria:** el agente usa ~75-130 MB y el relé ~50-60 MB, y quedan ~400 MB libres. Los servicios tienen tope
+- **Memoria:** el agente usa ~180-220 MB (6-nov; el SDK de la IA solo, ~45 MB) y el relé ~50-60 MB, y quedan ~330 MB
+  disponibles más 1 GB de swap. Por partes: `bash ~/trading/deploy/tokio/memoria.sh`. Los servicios tienen tope
   (`MemoryHigh` / `MemoryMax`: agente 400 / 500 MB, relé 150 / 200 MB) y `OOMScoreAdjust=-500`. No correr procesos
   pesados en el servidor. El 5-nov, con 416 MB, la falta de memoria dejó al servidor sin red (sección 11).
 - **Telegram de Upbit:** la sesión es de un número secundario del dueño. Si se cae (`STATUS` del relé: desconectado),
@@ -154,15 +155,16 @@ a Tokio como motor. Lee este archivo primero, y lo que manda es esta lista:
      "poca memoria en el servidor" en el registro: mirar si coincide con `unattended-upgrades`
      (`sudo tail /var/log/unattended-upgrades/unattended-upgrades.log`) y anotarlo (sección 11).
    - `[ -f /var/run/reboot-required ]`: el sistema pide reinicio (lo hace el dueño, a hora tranquila).
-   - **Memoria del agente:** anotar en §12 `systemctl show -p MemoryCurrent --value agente-tokio` y cuánto lleva
-     encendido. El latido también trae `mem_agente_mb`.
-     - 6-nov: 160 MB a los 57 min de arrancar y 165 MB a los 73 min (~19 MB/h). Probablemente es el pico de la pasada
-       de aprendizaje, que corre cada 15 min y queda tomado; no se vio nada que crezca sin tope.
-     - 7-nov 00:03 UTC: 218 MB a las 3,8 h (sigue ~20 MB/h). El deduplicador guarda 6 h de noticias
-       (`ingestion/dedup.py`, `ttl_s`), así que hasta las ~6 h es esperable que suba; tiene que aplanarse después.
-       Si a las 8-10 h sigue subiendo igual, investigar con `tracemalloc`.
-     - Si sigue creciendo más de ~20 MB/h varias horas: investigarlo. A los 400 MB (`MemoryHigh`) el sistema empieza
-       a frenar al agente, y a los 500 MB lo reinicia.
+   - **Memoria del agente y freno del bucle:** `bash ~/trading/deploy/tokio/memoria.sh` (solo lee). Dice cuánto lleva
+     encendido, la memoria del servicio, dónde está (arena principal, arenas de hilos, resto de Python) y el retraso
+     del bucle en el último minuto. Anotarlo en §12 con las horas de encendido.
+     - Antes del #66 (6-nov): 160 MB a los 57 min, 165 MB a los 73 min y 218 MB a las 3,8 h (6-nov 09:03 UTC). Otro
+       arranque: 186 MB a las 1,7 h, con 9 arenas de hilos de glibc que tenían 68 MB (sección 11).
+     - Desde el #66 (`MALLOC_ARENA_MAX=2`): tiene que quedar 1 arena de hilos como mucho, y menos memoria a las mismas
+       horas. Si a las 6-10 h sigue subiendo ~20 MB/h, investigar el "resto" (objetos de Python).
+     - A los 400 MB (`MemoryHigh`) el sistema empieza a frenar al agente, y a los 500 MB lo reinicia.
+     - Bucle: la mediana es ~0,2 ms y el máximo de cada minuto 10-45 ms. Un máximo de más de ~100 ms que se repite
+       (cada 2 min, cada 15 min) es trabajo pesado que frena las entradas al instante: buscarlo (sección 11).
    - Si no responde tres veces seguidas: avisar al dueño para que lo reinicie desde la consola de Lightsail, y no
      tocar nada más.
 3. **Simulacro de Tokio:**
@@ -174,11 +176,11 @@ a Tokio como motor. Lee este archivo primero, y lo que manda es esta lista:
 4. **Avisos oficiales:** medir la demora de punta a punta en Tokio (publicado, recibido, decisión y entrada).
    - En los listados de Upbit al instante, mirar `variante-ia.jsonl`: es la prueba A/B que pidió el dueño (entrar al
      instante contra esperar a la IA).
-   - Canal de Binance en Tokio: el único aviso medido hasta ahora (6-nov, TradFi, "Will Support ... IBM, Apple") llegó
-     41 s después de publicado. En la PC eran 1,2-1,8 s. Su hora de publicación era redonda (01:00:00): parece
-     programado, y Binance lo empujó tarde (la lista de la PC no lo tenía, es de otra categoría). **Lo importante:** si
-     los deslistados también se programan a hora redonda y llegan tarde, el canal no alcanza para entrar en 2-5 s. En
-     cada aviso de Binance anotar la hora de publicación, si es redonda, y la demora, hasta tener ~10.
+   - Canal de Binance en Tokio: 3 avisos medidos (§12): 41 s (TradFi, 6-nov 01:00:00 UTC, hora redonda), 1,2 s (03:06:23)
+     y 2,6 s (08:00:00, hora redonda). En la PC eran 1,2-1,8 s. **Lo importante:** si los deslistados se programan a
+     hora redonda y llegan tarde, el canal no alcanza para entrar en 2-5 s. En cada aviso de Binance anotar la hora de
+     publicación, si es redonda, y la demora, hasta tener ~10. Se ven con
+     `grep -h '"source":"binance.ws"' ~/.trading/journal/*.jsonl | grep '"kind":"news"'` (`published_at`, `age_s`).
    - En el registro del agente, cada entrada al instante deja sus tiempos por etapa: "listado de Upbit al instante
      (X): esperó N ms · candado · contrato · velas, libro y precio · orden a los M ms". Lo mismo para los deslistados
      y la etiqueta de vigilancia.
@@ -560,6 +562,23 @@ Los comandos, por si hay que rehacerlo en otro servidor:
   de parecido, umbral 0,6). En 180 días pasó dos veces (KMNO y BSB, RSR y GTC). Ahora otros tickers en el título u
   otro enlace del mismo aviso oficial nunca son "la misma noticia" (`ingestion/dedup.py`).
 
+**Memoria y freno del bucle (6-nov, medido en Tokio con `deploy/tokio/memoria.sh` y el latido):**
+
+- **La memoria del agente es casi toda de los asignadores** (~180 MB a las 1,7 h de arrancar): ~30 MB en la arena
+  principal de glibc, 68 MB en 9 arenas de hilos (glibc crea una por hilo: los de `asyncio.to_thread`, el diario y las
+  alertas) y ~80 MB de objetos de Python. La misma réplica del agente en la PC (Windows, otro asignador) usa ~105 MB.
+  El SDK de la IA solo ocupa ~45 MB (se carga al arrancar, por la precarga). Arreglo (#66): `MALLOC_ARENA_MAX=2` en
+  `agente-tokio.service`: todos los hilos comparten 2 arenas.
+- **La pasada de aprendizaje frenaba el bucle:** corre cada 15 min dentro del agente y rehacía en el bucle la ventana
+  de deduplicación del recolector (~1 ms por noticia, MinHash). En Tokio, 122 ms de una vez (6-nov 11:30:16); en la PC,
+  300-365 ms. Una entrada al instante que llegara justo ahí esperaba eso de más. Ahora va en un hilo
+  (`research/collector._window`); en la PC el máximo bajó a 37-99 ms.
+- **El tablero exportado** (cada 2 min, en un hilo) releía el entorno en cada línea del registro que redactaba (1.008
+  veces por tablero: el 85 % de su costo). Mientras tanto el bucle se demoraba 60-95 ms (el GIL de Python: un hilo con
+  CPU le saca turnos al bucle). Ahora lee los secretos una vez por tablero (`core/redact.redactor`).
+- **Regla:** todo trabajo pesado va a un hilo, y aun así compite por el GIL: cuanta menos CPU, mejor. Medirlo con el
+  retraso del bucle del latido antes y después (`memoria.sh`). Bajar el intervalo del GIL a 1 ms no mejoró nada (PC).
+
 - **SEC lenta, no caída (5-nov):** la página de 8-K tarda de 0,4 a 8 s y a veces más de 10 s (64 veces en 14 h). Con la espera que se duplica tras cada falla, 4 fallas seguidas dejaban ~10 min sin la SEC. Ahora: hasta 25 s de espera, reintento como mucho al minuto y el corte de 10 min recién después de 20 fallas.
 - **El sitio de anuncios de Binance (www.binance.com) cuenta los pedidos por IP:** el agente lo lee cada 3 s. Un estudio que lo consulte desde la PC provoca 429 en el agente: el 4-nov a 2 s entre pedidos y el 5-nov **también a 6 s** (tres 429 seguidos cada vez; se recuperó en ~20 s). Desde la PC: un pedido cada 30 s como mínimo y cortar al primer 429 (`estudios/vigilancia_binance.py` lo hace). Los datos de mercado de fapi.binance.com tienen su propio límite (2.400 de peso por minuto, también compartido con el agente: los estudios frenan a 900).
 
@@ -652,6 +671,8 @@ sección 11). Un estudio nuevo va con su línea acá.
 | 5-nov | **Binance: nada se cancela antes de 5 s** | el stop que sobra se cancela en segundo plano a los 5,5 s (pedido del dueño) | hecho (D-6, L-7) | `execution/live/binance_venue.py` |
 | 6-nov | **Prueba de punta a punta en Tokio** (`deploy/tokio/prueba_listado.py`, agente aparte, avisos armados a mano) | Al principio: el primer aviso esperó 1,1 s (cargar el SDK de la IA frenaba el bucle) y el segundo listado del día se perdía (la deduplicación juntaba dos avisos de Upbit con la misma plantilla: 0,62 > 0,6). Arreglado: cada aviso entra a los 23-60 ms de recibido (~1,07 s desde la hora del mensaje) | hecho (precarga de la IA, deduplicación por tickers, tiempos por etapa en el registro) | `live.py`, `ingestion/dedup.py`, `intelligence/llm.py` |
 | 6-nov | **Reinicio con swap y actualizaciones a las 15:00 UTC** (el dueño) | todo volvió en 10 s; prueba de punta a punta con `main`: órdenes a los 25-68 ms (SOL 68, ETH 27, deslistado de DOGE 25), sin errores; 387-457 MB libres + 1 GB de swap | hecho | sección 11 |
-| 6-nov | **Canal de anuncios de Binance en Tokio** | 3 avisos: TradFi programado a hora redonda (01:00:00), 41 s; "Recovery Update #9" (03:06:23 UTC, hora no redonda), 1,2 s de publicado a recibido y decisión en 4 ms; "Limited-Time Spot Taker Program" (7-nov 00:00:00 UTC, **hora redonda**), 2,6 s. La hora redonda no siempre llega tarde | medir con más avisos (sobre todo deslistados) | sección "Vigilancia" |
+| 6-nov | **Canal de anuncios de Binance en Tokio** | 3 avisos: TradFi programado a hora redonda (01:00:00), 41 s; "Recovery Update #9" (03:06:23 UTC, hora no redonda), 1,2 s de publicado a recibido y decisión en 4 ms; "Limited-Time Spot Taker Program" (6-nov 08:00:00 UTC, **hora redonda**), 2,6 s. La hora redonda no siempre llega tarde | medir con más avisos (sobre todo deslistados) | sección "Vigilancia" |
+| 6-nov | **Memoria del agente en Tokio, por partes** (`deploy/tokio/memoria.sh`) | a las 1,7 h: arena principal de glibc 30 MB, 9 arenas de hilos 68 MB, objetos de Python 80 MB; la misma réplica en la PC (Windows) ~105 MB; el SDK de la IA solo, ~45 MB. Plano entre 11:23 y 11:38 UTC | `MALLOC_ARENA_MAX=2` (#66); comparar a las mismas horas | sección 11 |
+| 6-nov | **Freno del bucle del agente en Tokio** (máximo de cada minuto del latido, cada 15 s) | normal 10-45 ms; 122 ms en la pasada de aprendizaje (rehacía la deduplicación en el bucle; en la PC 300-365 ms) y 60-95 ms cada 2 min con el tablero exportado (redactaba releyendo el entorno 1.008 veces) | la deduplicación en un hilo (en la PC, máximo 37-99 ms) y el entorno leído una vez (#66); medir otra vez en Tokio | sección 11 |
 | 5-nov | **Agente completo en Tokio (simulacro)** | Claude 1,8 s; Binance 2-5 ms (PC ~320 ms); fuentes OK salvo el sitio de Upbit (403); memoria: agente 77 MB y relé 63 MB de 416 | andando (`agente-tokio`); telemetría al tablero de la PC; la pausa de la PC frena a Tokio | RELE-TOKIO |
 | 5-nov | **1.ª operación del simulacro** | Wendy's, resultados: entró a los 120 s, salió a los 30 min, −0,27 USDT (−0,5 %); su comunicado salió minutos antes del 8-K | normal (pierden ~35 %) | simulacro |

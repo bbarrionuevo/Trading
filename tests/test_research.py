@@ -232,6 +232,29 @@ async def test_corridas_sucesivas_historia_eventos_304_etiquetas_y_resumen(tmp_p
         assert state["digest_day"] == "2026-11-03" and set(state["counts"]) == {"2026-11-02", "2026-11-03"}
 
 
+async def test_la_ventana_de_deduplicacion_se_rehace_fuera_del_bucle(tmp_path, cfg, monkeypatch):
+    """El agente corre esta pasada cada 15 min dentro de su bucle: rehacer la ventana (MinHash, ~1 ms por noticia) ahí
+    lo frenaba 122 ms en Tokio (6-nov), y una entrada al instante que llegara justo ahí esperaba eso de más."""
+    import threading
+
+    from tradingagent.ingestion.dedup import DedupIndex
+    from tradingagent.research import collector
+    data = tmp_path / "datos"
+    events = [{"id": f"e{i}", "source": "media", "tier": 2, "title": f"Market story number {i} about crypto today",
+               "url": f"https://example.com/{i}", "received_at": T0 - 60 * i} for i in range(5)]
+    collector._append_monthly(data, collector.EVENTS, events, "received_at")
+    where, real = [], DedupIndex.check
+
+    def spy(self, item):
+        where.append(threading.get_ident())
+        return real(self, item)
+
+    monkeypatch.setattr(DedupIndex, "check", spy)
+    out = await collect(data, cfg, {}, clock=ManualClock(T0 + 60), sources=[], telegram=None)
+    assert out["nuevas"] == 0 and len(where) == 5                 # las 5 de la ventana, ninguna en el bucle
+    assert threading.get_ident() not in where
+
+
 async def test_sin_telegram_y_fuentes_caidas_avisa_una_sola_vez(tmp_path, cfg):
     clock = ManualClock(T0)
     feeds, tg = Feeds(), FakeTelegram()

@@ -64,6 +64,19 @@ def fixture_home(home, *, beat_age=5, kill=False, halted=""):
         (home / "KILL").write_text("")
 
 
+def test_los_errores_del_tablero_ocultan_los_secretos_del_entorno(tmp_path, monkeypatch):
+    home = tmp_path / "h"
+    fixture_home(home)
+    monkeypatch.setenv("UNA_API_KEY", "clave-secreta-de-prueba-123")
+    with (home / "logs" / "agent.log").open("a", encoding="utf-8") as f:
+        for i in range(3):
+            f.write(json.dumps({"ts": NOW - 10 + i, "level": "ERROR", "logger": "x",
+                                "msg": f"falló {i} con clave-secreta-de-prueba-123"}) + "\n")
+    errs = dashboard.gather(home, NOW)["errores"]
+    assert len(errs) == 4 and all("clave-secreta" not in x["mensaje"] for x in errs)
+    assert errs[0]["mensaje"] == "falló 2 con «oculto»"
+
+
 def test_junta_todo_lo_importante(tmp_path):
     home = tmp_path / "h"
     fixture_home(home)

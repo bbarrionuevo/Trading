@@ -213,6 +213,18 @@ def _load(data: Path, now: float, ttl_s: float) -> tuple[dict, list[dict]]:
     return state, recent
 
 
+def _window(recent: list[dict], clock, ttl_s: float, threshold: float) -> DedupIndex:
+    """La ventana de deduplicación rehecha con los eventos de las últimas horas. Va en un hilo: cuesta ~1 ms por
+    noticia (MinHash), y el agente corre esta pasada cada 15 min dentro de su bucle. Medido el 6-nov: en el bucle lo
+    frenaba 122 ms de una vez en Tokio y 300-365 ms en la PC, y una entrada al instante que llegara justo ahí esperaba
+    eso de más."""
+    dedup = DedupIndex(clock, ttl_s=ttl_s, threshold=threshold)
+    for e in recent:
+        dedup.check(NewsItem(id=e["id"], source=e["source"], tier=e["tier"], kind="rss", title=e["title"],
+                             url=e.get("url", "")))
+    return dedup
+
+
 def _digest_inputs(data: Path, day: str, now: float) -> tuple[list[dict], list[dict]]:
     since = calendar.timegm(time.strptime(day, "%Y-%m-%d"))
     evs = [e for e in read_shards(data, EVENTS, since, now) if _day(e["received_at"]) == day]
@@ -253,10 +265,7 @@ async def collect(data_dir, cfg: dict, env, *, clock=None, sources=None, telegra
     ing = cfg["ingestion"]
     ttl_s = ing["dedup"]["ttl_hours"] * 3600
     state, recent = await asyncio.to_thread(_load, data, now, ttl_s)
-    dedup = DedupIndex(clock, ttl_s=ttl_s, threshold=ing["dedup"]["threshold"])
-    for e in recent:                                                  # reconstruye la ventana de deduplicación
-        dedup.check(NewsItem(id=e["id"], source=e["source"], tier=e["tier"], kind="rss", title=e["title"],
-                             url=e.get("url", "")))
+    dedup = await asyncio.to_thread(_window, recent, clock, ttl_s, ing["dedup"]["threshold"])   # fuera del bucle
     engine = IngestionEngine(EventBus(), clock, dedup, NoiseFilter(NoiseConfig(ing["noise"]["threshold"])),
                              default_max_age_s=ing["default_max_age_s"], max_future_skew_s=ing["max_future_skew_s"])
     specs = list(sources) if sources is not None else build_sources(cfg, env, limits)[0]
