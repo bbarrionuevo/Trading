@@ -4,13 +4,13 @@ la deduplicación y el simulacro), SIN tocar nada de verdad:
   fuentes y sin aprendizaje;
 - un relé de prueba en otro puerto, sin Telegram (la sesión de Upbit sigue siendo solo del relé de verdad).
 Le manda dos avisos de listado armados a mano (SOL y, 15 s después, ETH: la misma plantilla de Upbit), como si
-Telegram los trajera 1 s después del sitio. Mide cuánto tarda Tokio en entrar (orden simulada contra el libro real de
+Telegram los trajera 1 s después del sitio, y un deslistado de Binance (DOGE, por la lista de anuncios: entra corto). Mide cuánto tarda Tokio en entrar (orden simulada contra el libro real de
 Binance) e imprime la línea de tiempo y la segunda lectura de la IA (unas pocas consultas: centavos de dólar).
 Al final borra todo. Nunca imprime claves.
 
 Uso, en el servidor: `~/trading/.venv/bin/python ~/trading/deploy/tokio/prueba_listado.py`. Con el código de una rama,
 solo para el agente de prueba: `SRC_PRUEBA=/tmp/src-prueba` (una copia de src/ de esa rama).
-Medido el 6-nov: cada aviso entra a los ~60-70 ms de recibido (~1,07 s desde la hora del mensaje).
+Medido el 6-nov: cada listado entra a los 22-59 ms de recibido (~1,07 s desde la hora del mensaje) y el deslistado a los 18 ms.
 """
 import asyncio
 import json
@@ -32,6 +32,7 @@ HOME = Path("/tmp/prueba-tokio")
 PORT = 50016
 AGENT_ENV = Path("/home/ubuntu/.trading/.env")
 NOTICES = (("SOL", "솔라나"), ("ETH", "이더리움"))
+DELIST = "Binance Will Delist DOGE on 2026-12-20"                # la otra regla al instante: corto en el perpetuo
 BASE = HOME / "simulacro" / "binance-futuros"
 
 
@@ -100,7 +101,7 @@ def report(first_sent: float) -> int:
     errors = [json.loads(x) for x in (HOME / "logs" / "agent.log").read_text(encoding="utf-8").splitlines()
               if '"ERROR"' in x]
     print("errores del agente de prueba:", [e.get("msg") for e in errors][-3:] or "ninguno")
-    return 0 if len(entries) >= len(NOTICES) else 1
+    return 0 if len(entries) >= len(NOTICES) + 1 else 1
 
 
 async def main() -> int:
@@ -121,12 +122,18 @@ async def main() -> int:
             print("el agente de prueba no arrancó a tiempo")
             return 1
         await asyncio.sleep(2)
-        for i, (coin, name) in enumerate(NOTICES):
+        for coin, name in NOTICES:
             now = time.time()
             first_sent = first_sent or now
             assert relay.forward(notice(coin, name, now)), "el relé de prueba no tenía a quién mandar"
             print(f"aviso de {coin} mandado a los {(now - first_sent) * 1000:.0f} ms")
-            await asyncio.sleep(15 if i < len(NOTICES) - 1 else 8)
+            await asyncio.sleep(15)
+        now = time.time()
+        assert relay.forward(NewsItem(id="prueba-" + secrets.token_hex(4), source="binance.listados", tier=1,
+                                      kind="api", title=DELIST, url="https://www.binance.com/en/support/announcement/prueba",
+                                      published_at=now - 1.5, received_at=now))
+        print(f"deslistado de DOGE mandado a los {(now - first_sent) * 1000:.0f} ms")
+        await asyncio.sleep(8)
         return report(first_sent)
     finally:
         if agent.returncode is None:
