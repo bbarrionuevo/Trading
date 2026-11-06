@@ -435,6 +435,30 @@ dueño qué hiciste y por qué.
 
 ## 11. Detalles que muerden (Windows y MEXC)
 
+**Tokio sin red (5-nov-2026, 23:02 a 23:46 UTC).** El servidor de 416 MB, sin swap, estaba al límite de memoria: pip
+instalando mientras el agente arrancaba. A las 22:23 `systemd-networkd` no pudo poner una ruta ("ens5: Could not set
+route: Connection timed out"), dio la interfaz por caída ("ens5: Failed") y dejó de renovar la IP. A los ~40 min la
+concesión venció y el servidor quedó sin red. El agente siguió vivo (latido cada 15 s), pero sin fuentes ni Telegram,
+y sin SSH ni telemetría desde afuera. Lo resolvió el dueño: instancia nueva desde una instantánea, con ~900 MB y la
+misma IP (estática). Las claves del servidor cambiaron: la PC tuvo que aceptar la huella nueva (ED25519
+`SHA256:enk3HfrP3BHU2xGLZZHFExFRCxXAgEVsIfbBFYPrp1g`).
+
+Para que no vuelva a pasar:
+
+1. **Memoria acotada:** los dos servicios tienen `MemoryHigh` / `MemoryMax` (agente 400 / 500 MB, relé 150 / 200 MB)
+   y `OOMScoreAdjust=-500`. Si uno se pasa, el kernel mata solo a ese y systemd lo relanza, sin ahogar al sistema.
+2. **El instalador** corre pip solo si cambiaron las dependencias, y con los servicios parados.
+3. **Aviso:** el supervisor de la PC en "solo tablero" avisa por Telegram si Tokio no manda nada en 3 min (y cada
+   30 min si sigue), y cuando vuelve (`Supervisor.watch_tokio`).
+4. **Vigía de la red** (`deploy/tokio/vigia-red.*`): cada minuto, si la interfaz quedó "failed" o sin ruta, la
+   reconfigura o reinicia `systemd-networkd`. Es un cambio del sistema: lo instala el dueño, con los tres comandos
+   del encabezado de `vigia-red.sh`.
+5. **La instancia vieja tiene que quedar apagada o borrada.** Tiene la misma sesión de Telegram y el mismo bot: si
+   vuelve a tener red, se pisan las dos (dos lectores del bot, y la sesión de Telegram puede quedar revocada).
+
+Ver qué pasó en un arranque anterior: `sudo journalctl --list-boots` y `sudo journalctl -b -1 ...`. Ojo con
+`--since`: sin fecha toma la de hoy.
+
 - **SEC lenta, no caída (5-nov):** la página de 8-K tarda de 0,4 a 8 s y a veces más de 10 s (64 veces en 14 h). Con la espera que se duplica tras cada falla, 4 fallas seguidas dejaban ~10 min sin la SEC. Ahora: hasta 25 s de espera, reintento como mucho al minuto y el corte de 10 min recién después de 20 fallas.
 - **El sitio de anuncios de Binance (www.binance.com) cuenta los pedidos por IP:** el agente lo lee cada 3 s. Un estudio que lo consulte desde la PC provoca 429 en el agente: el 4-nov a 2 s entre pedidos y el 5-nov **también a 6 s** (tres 429 seguidos cada vez; se recuperó en ~20 s). Desde la PC: un pedido cada 30 s como mínimo y cortar al primer 429 (`estudios/vigilancia_binance.py` lo hace). Los datos de mercado de fapi.binance.com tienen su propio límite (2.400 de peso por minuto, también compartido con el agente: los estudios frenan a 900).
 

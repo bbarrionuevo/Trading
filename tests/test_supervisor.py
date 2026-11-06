@@ -556,3 +556,22 @@ def test_solo_tablero_no_corre_al_agente_y_late_a_tokio(tmp_path, gh):
     finally:
         supervisor.FIRST_CHECK_S = old
     assert seen == {"agente": True} and paths.read_json(sup2.state_file, {})["modo"] == "agente"
+
+
+def test_solo_tablero_avisa_por_telegram_si_tokio_se_calla_y_cuando_vuelve(tmp_path, gh, monkeypatch):
+    """El 5-nov el servidor de Tokio perdió la red 45 min y nadie se enteró: ahora el supervisor de la PC avisa a los
+    3 min (una vez, y cada 30 min si sigue) y cuando vuelve."""
+    sent = []
+    monkeypatch.setattr(supervisor, "notify", lambda text, env=None: sent.append(text) or True)
+    sup = make(tmp_path, gh, Origin(tmp_path))
+    now = time.time()
+    assert sup.watch_tokio(now) == "sin_datos" and sent == []                    # nunca habló: nada
+    paths.write_json_atomic(sup.home / "state" / "tokio.json",
+                            {"agente": {"recibido": now - 400}, "rele": {"recibido": now - 390}})
+    assert sup.watch_tokio(now) == "aviso" and "no manda nada hace 6 min" in sent[-1]
+    assert sup.watch_tokio(now + 60) == "callado" and len(sent) == 1             # no repite enseguida
+    assert sup.watch_tokio(now + supervisor.TOKIO_REMIND_S + 1) == "aviso" and len(sent) == 2
+    paths.write_json_atomic(sup.home / "state" / "tokio.json",
+                            {"agente": {"recibido": now + 1900}, "rele": {"recibido": now + 1900}})
+    assert sup.watch_tokio(now + 1905) == "volvio" and "volvió" in sent[-1]
+    assert sup.watch_tokio(now + 1910) == "ok" and len(sent) == 3

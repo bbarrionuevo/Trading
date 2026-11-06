@@ -1,0 +1,7 @@
+# Vigía de la red (deploy/tokio/vigia-red.sh): lo lanza vigia-red.timer cada minuto. Lo instala el dueño.
+[Unit]
+Description=TRADING - vigía de la red del servidor de Tokio (reconfigura la interfaz si quedó caída)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/vigia-red

@@ -19,6 +19,11 @@ RestartSec=10
 # Poca memoria (416 MB, sin swap): si falta, el kernel mata antes a otros procesos que a los de TRADING (el 5-nov
 # mató al agente mientras pip instalaba).
 OOMScoreAdjust=-500
+# Y nunca más que esto (el servidor tiene ~900 MB desde el 6-nov): pasando MemoryHigh se le recupera memoria; pasando
+# MemoryMax, el kernel mata solo al agente y systemd lo relanza a los 10 s. Usa ~130 MB. El 5-nov la falta de memoria
+# del sistema hizo que systemd-networkd diera la red por caída (docs/TRASPASO.md §11).
+MemoryHigh=400M
+MemoryMax=500M
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full

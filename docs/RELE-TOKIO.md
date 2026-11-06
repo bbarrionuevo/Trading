@@ -168,6 +168,13 @@ Tokio"):
 - **Volver atrás:** borrar `SOLO-TABLERO` (el supervisor vuelve a correr al agente de la PC). Sacar el bot de Tokio:
   borrar las dos líneas `TELEGRAM_*` de `/home/ubuntu/.trading/.env` y reiniciar `agente-tokio`.
 
+**Servidor nuevo (6-nov):** ~900 MB de memoria, misma IP (estática). El 5-nov el viejo se quedó sin red por falta de
+memoria (docs/TRASPASO.md §11). Desde entonces:
+
+- los servicios tienen memoria acotada (`MemoryHigh` / `MemoryMax`);
+- la PC avisa por Telegram si Tokio se calla 3 min;
+- hay un vigía de la red (`deploy/tokio/vigia-red.*`) para que instale el dueño.
+
 **Actualizar o reinstalar:** con el CI de `main` en verde,
 `ssh -i C:\Users\Brian\.ssh\lightsail-tokio.pem ubuntu@<IP> "bash ~/trading/deploy/tokio/instalar-agente.sh"`
 (trae `main`, instala, copia los servicios y reinicia los dos). Ver cómo anda: el tablero de la PC, o
