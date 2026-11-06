@@ -40,11 +40,13 @@ Lo que pidió, en sus palabras:
   actualizándose, sirve el tablero y publica la rama `pc`. Late al relé (la pausa de la PC frena a Tokio) y trae por SSH
   el tablero completo de Tokio, que se ve como si el agente corriera en la PC. El simulacro de la PC quedó desarmado
   (3 operaciones, +1,00 USDT de mentira: se ve en "Cuentas que ya no corren").
-- **Dinero real:** todo listo salvo lo que hace el dueño (sección 6, "Dinero real desde Tokio").
-- **Dinero real, solo listados de Upbit (6-nov, pedido del dueño):** armado por estrategia (REGLAS v3.4, PR
-  protegido); lo arma el dueño con los pasos de la sección 6. Lo demás sigue en práctica.
-- **Reglas:** v3.3 fusionada (#58): 3 % en los listados de Upbit, nada se cancela en Binance antes de 5 s,
-  lineamientos medidos (sección L de REGLAS).
+- **Dinero real, solo listados de Upbit (6-nov, pedido del dueño): listo para que lo arme el dueño** (sección 6).
+  Armado por estrategia (REGLAS v3.4, #67, fusionado por el dueño). El 6-nov a las 12:28 UTC se instaló en Tokio con
+  #66 (el bucle y la memoria), #68 (la prueba en la PC) y #69 (conexiones tibias con Binance). La prueba de punta a
+  punta en Tokio dio: listados de Upbit con la orden a los 50-57 ms la primera y 21-29 ms las demás, el deslistado a
+  los 24 ms, la IA confirmando en 1,1-1,7 s y sin errores. Lo demás sigue en práctica.
+- **Reglas:** v3.4 (#67): armado por estrategia. v3.3 (#58): 3 % en los listados de Upbit, nada se cancela en Binance
+  antes de 5 s, lineamientos medidos (sección L de REGLAS).
 - **Servidor nuevo desde el 6-nov** (el viejo se quedó sin red el 5-nov; sección 11): ~900 MB, misma IP. Tiene
   memoria acotada por servicio, aviso por Telegram si se calla y el vigía de la red, que instaló el dueño. La
   instancia vieja ya no está.
@@ -152,7 +154,10 @@ a Tokio como motor. Lee este archivo primero, y lo que manda es esta lista:
    - `systemctl is-active rele-tokio agente-tokio vigia-red.timer`.
    - `free -m`: más de 200 MB libres.
    - `cd ~/trading && git log --oneline -1` = `origin/main`. Si quedó atrás y el CI está verde:
-     `bash ~/trading/deploy/tokio/instalar-agente.sh`.
+     `bash ~/trading/deploy/tokio/instalar-agente.sh`. **Con dinero real armado** (`cat ~/.trading/ARMADO.json`:
+     `"simulacro": false`), instalar solo sin posiciones reales abiertas (`real/binance-futuros/estado.json`,
+     `positions` vacío; G-7): reinstalar reinicia al agente. Nunca armar, desarmar ni tocar el armado: es del dueño.
+     Después de instalar, la prueba de punta a punta **en la PC** (punto 5).
    - `sudo journalctl -u agente-tokio -u rele-tokio --since -3h --no-pager -p warning` y `sudo journalctl -t vigia-red`.
      "poca memoria en el servidor" en el registro: mirar si coincide con `unattended-upgrades`
      (`sudo tail /var/log/unattended-upgrades/unattended-upgrades.log`) y anotarlo (sección 11).
@@ -169,12 +174,16 @@ a Tokio como motor. Lee este archivo primero, y lo que manda es esta lista:
        (cada 2 min, cada 15 min) es trabajo pesado que frena las entradas al instante: buscarlo (sección 11).
    - Si no responde tres veces seguidas: avisar al dueño para que lo reinicie desde la consola de Lightsail, y no
      tocar nada más.
-3. **Simulacro de Tokio:**
+3. **Simulacro de Tokio** (o el dinero real, si el dueño lo armó):
    - `cd ~/trading && TRADING_HOME=/home/ubuntu/.trading .venv/bin/python -m tradingagent informe-simulacro --dias 1`
-     (y `--cuenta practica`).
-   - Las decisiones y operaciones están en `/home/ubuntu/.trading/simulacro/binance-futuros/` y en `paper-vivo/`.
-   - Armado hasta el 5-dic-2026, con 100 USDT de mentira. Si vence:
+     (y `--cuenta practica`; con dinero real, `--cuenta real`: sus montos no se publican nunca, G-8).
+   - Las decisiones y operaciones están en `/home/ubuntu/.trading/simulacro/binance-futuros/`, `real/binance-futuros/`
+     y `paper-vivo/`.
+   - El simulacro está armado hasta el 5-dic-2026, con 100 USDT de mentira. Si vence y no hay dinero real armado:
      `armar-real --simulacro --dias 30` en el servidor, con `TRADING_HOME=/home/ubuntu/.trading`.
+   - **Dinero real solo para los listados de Upbit** (sección 6): cada entrada real tiene que ser `listado_upbit`; las
+     demás estrategias dicen `estrategia_no_armada` en `real/.../decisiones`. Si aparece otra estrategia operando con
+     dinero real, frenar primero (`touch ~/.trading/KILL`) y avisar al dueño.
 4. **Avisos oficiales:** medir la demora de punta a punta en Tokio (publicado, recibido, decisión y entrada).
    - En los listados de Upbit al instante, mirar `variante-ia.jsonl`: es la prueba A/B que pidió el dueño (entrar al
      instante contra esperar a la IA).
@@ -700,5 +709,6 @@ sección 11). Un estudio nuevo va con su línea acá.
 | 6-nov | **Prueba de punta a punta en la PC con los tiempos de Tokio** (`prueba_listado.py --pc`, Binance falso a ~3 ms) | SOL, ETH y DOGE entran; orden a los 148 ms la primera (conexiones en frío; en Tokio, 68 ms) y a los 33-48 ms las demás; la IA confirma en 1,3-2,6 s; sin errores | la prueba de siempre, en la PC; en Tokio solo si cambia el servidor | sección "Vigilancia" |
 | 6-nov | **Freno del bucle del agente en Tokio** (máximo de cada minuto del latido, cada 15 s) | normal 10-45 ms; 122 ms en la pasada de aprendizaje (rehacía la deduplicación en el bucle; en la PC 300-365 ms) y 60-95 ms cada 2 min con el tablero exportado (redactaba releyendo el entorno 1.008 veces) | la deduplicación en un hilo (en la PC, máximo 37-99 ms) y el entorno leído una vez (#66); medir otra vez en Tokio | sección 11 |
 | 6-nov | **Conexión nueva contra abierta con Binance, desde Tokio** (`curl`) | nueva ~45 ms (TLS ~43), abierta ~1,8 ms; aiohttp cierra las ociosas a los 15 s | 4 conexiones tibias con un pedido liviano cada 10 s; medir la primera entrada con la prueba en Tokio | sección 11 |
+| 6-nov | **Tokio con #66 a #69 (instalado 12:28 UTC), antes de armar dinero real** | prueba de punta a punta en Tokio, 2 corridas: la primera entrada (SOL) a los 50-57 ms (antes 68), ETH 21-29 ms, el corto de DOGE 24 ms; la IA confirma en 1,1-1,7 s; sin errores. En la 1.ª corrida el simulacro no entró en DOGE (la práctica sí) y no quedó el motivo: desde ahora la prueba imprime por qué no entró cada aviso. Memoria: 118-121 MB en los primeros 5 min, con 1 arena de hilos (8 MB; antes 9 arenas, 68-92 MB) | listo para que el dueño arme (sección 6); comparar la memoria a las mismas horas (1,7 h: antes 186 MB; 2,5 h: antes 200-216 MB) | sección 6 |
 | 5-nov | **Agente completo en Tokio (simulacro)** | Claude 1,8 s; Binance 2-5 ms (PC ~320 ms); fuentes OK salvo el sitio de Upbit (403); memoria: agente 77 MB y relé 63 MB de 416 | andando (`agente-tokio`); telemetría al tablero de la PC; la pausa de la PC frena a Tokio | RELE-TOKIO |
 | 5-nov | **1.ª operación del simulacro** | Wendy's, resultados: entró a los 120 s, salió a los 30 min, −0,27 USDT (−0,5 %); su comunicado salió minutos antes del 8-K | normal (pierden ~35 %) | simulacro |
