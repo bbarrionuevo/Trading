@@ -160,4 +160,7 @@ def test_el_aviso_de_arranque_dice_si_hay_dinero_real_y_que_estrategias(tmp_path
     assert not real and text.startswith("🧪 Simulacro") and "solo listados de Upbit al instante" in text
     arming.arm(tmp_path, 3, "clave", arming.phrase(3), venue="binance-futuros", strategies=("listado_upbit",))
     real, text = armed_summary(tmp_path)
-    assert real and "DINERO REAL" in text and "solo listados de Upbit al instante; lo demás, en práctica" in text
+    assert real and "DINERO REAL" in text and "solo listados de Upbit al instante; lo demás, sin plata" in text
+    arming.arm(tmp_path, 3, "", "", simulacro=True, capital=100, venue="binance-futuros", mode="local",
+               file=arming.SIM_FILE)                                         # y el simulacro de los demás, al lado
+    assert "lo demás, en el simulacro (plata de mentira)" in armed_summary(tmp_path)[1]

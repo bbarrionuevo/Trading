@@ -67,10 +67,12 @@ def _oid(client_id: str) -> str:
 
 class BinanceVenue:
     def __init__(self, client: BinanceClient, session, registry, books, portfolio, clock, *, home, api_key: str,
-                 limits: dict, leverage: int = 1, state_path: Path | None = None, simulated: bool = False):
+                 limits: dict, leverage: int = 1, state_path: Path | None = None, simulated: bool = False,
+                 arm_file: str = arming.ARM_FILE):
         self.client, self.session, self.registry, self.books = client, session, registry, books
         self.portfolio, self.clock, self.home, self.limits = portfolio, clock, home, limits
         self._key, self.simulated = api_key, simulated
+        self.arm_file = arm_file                  # SIMULACRO.json: el simulacro junto al dinero real (nunca plata)
         self.leverage = max(1, min(int(leverage), int(limits["per_trade"]["max_leverage"])))
         self.state_path = Path(state_path) if state_path else None
         self.orders: dict[str, Order] = {}
@@ -152,7 +154,7 @@ class BinanceVenue:
         self.stats["ordenes"] += 1
         opening = not intent.reduce_only
         if opening:                                           # salir siempre se puede (A-2): solo se frenan entradas
-            armed, why, arm = arming.status(self.home, self._key, venue=VENUE)
+            armed, why, arm = arming.status(self.home, self._key, venue=VENUE, file=self.arm_file)
             if not armed:
                 return self._reject(order, f"real_no_armado:{why}")
             if not arming.asset_allowed(arm, intent.symbol):

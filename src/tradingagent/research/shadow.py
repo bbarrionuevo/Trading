@@ -376,6 +376,7 @@ class _Run:
 
     discarded: frozenset = frozenset()          # estrategias (categorías) descartadas por sus resultados
     only: frozenset | None = None               # armado solo para estas estrategias (`armar-real --estrategias`)
+    excluded: frozenset = frozenset()           # las opera el dinero real: el simulacro de al lado no ("*": todas)
 
     async def enter(self, ev: dict, sig, asset: str, blocks: list, assessment=None, prefetched=None,
                     relaxed: bool = False) -> None:
@@ -390,6 +391,8 @@ class _Run:
             reasons.append(f"categoria_descartada_por_resultados:{sig.category}")
         if self.only is not None and sig.category not in self.only:      # esta cuenta se armó solo para otras
             reasons.append(f"estrategia_no_armada:{sig.category}")
+        if "*" in self.excluded or sig.category in self.excluded:        # la opera el dinero real: no compite
+            reasons.append(f"la_opera_el_dinero_real:{sig.category}")
         if sym in self.st["positions"]:
             reasons.append("ya_en_cartera")
         inst = self.reg.get(sym)

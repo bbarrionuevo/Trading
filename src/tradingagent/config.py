@@ -42,8 +42,10 @@ DEFAULTS = {
     # llm_usd_dia: techo de seguridad del gasto en Claude (no es un límite de uso: la IA se consulta SIEMPRE
     # que su respuesta pueda cambiar una decisión y NUNCA si no; el techo solo frena un error que se dispare).
     # Por defecto, el del sobre (ai.max_llm_usd_per_day).
+    # practica: la cuenta de práctica (paper). En Tokio va apagada desde el 6-nov (el dueño: el simulacro mide mejor):
+    # los demás módulos corren en el simulacro junto al dinero real (SIMULACRO.json).
     "trader": {"enabled": True, "mercado": "binance-futuros", "capital_usdt": 120, "llm": True, "aprender": True,
-               "llm_usd_dia": None},
+               "llm_usd_dia": None, "practica": True},
     "alerts": {"telegram": True, "rate_per_s": 1.0, "burst": 3, "max_queue": 500},
 }
 

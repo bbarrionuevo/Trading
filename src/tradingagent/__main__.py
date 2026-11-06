@@ -363,6 +363,13 @@ def cmd_armar_real(args) -> int:
     from .app import binance_keys
     from .execution.live import arming
     home = paths.home()
+    if args.desarmar and args.simulacro:              # solo el simulacro de junto al dinero real; el real queda igual
+        had = arming.disarm(home, arming.SIM_FILE)
+        if had:
+            _restart_agent(home, "simulacro desarmado")
+        print("Simulacro desarmado (el dinero real sigue igual). El agente se reinicia solo en segundos." if had
+              else "No había un simulacro armado junto al dinero real.")
+        return 0
     if args.desarmar:
         print("Desarmado: el modo real no abre nada nuevo (lo abierto sale normal)." if arming.disarm(home)
               else "No estaba armado.")
@@ -376,15 +383,32 @@ def cmd_armar_real(args) -> int:
         print(f"No se armó nada: {e}")
         return 1
     from .alerts.model import STRATEGY_ES
-    only = (f"solo {', '.join(STRATEGY_ES.get(s, s) for s in strategies)} (las demás estrategias siguen en la "
-            "práctica)" if strategies else "todas las estrategias")
+    only = (f"solo {', '.join(STRATEGY_ES.get(s, s) for s in strategies)} (las demás estrategias, sin plata: en el "
+            "simulacro o la práctica)" if strategies else "todas las estrategias")
     current = paths.read_json(home / arming.ARM_FILE, None)
     real_armed = isinstance(current, dict) and not current.get("simulacro")
-    if args.simulacro:                                # sin plata en juego: sin frase
-        if real_armed:
-            print("Ya hay DINERO REAL armado. Si querés volver al simulacro, primero: "
-                  "python -m tradingagent armar-real --desarmar")
+    if args.simulacro and real_armed:                 # el simulacro JUNTO al dinero real (pedido del dueño, 6-nov)
+        if not binance or args.demo:
+            print("Junto al dinero real solo va el simulacro local de Binance (libro real, órdenes simuladas).")
             return 1
+        real_only = current.get("estrategias")
+        if not real_only:
+            print("El dinero real está armado con TODAS las estrategias: no queda ninguna para el simulacro.")
+            return 1
+        try:
+            data = arming.arm(home, args.dias, "", "", assets=assets, simulacro=True,
+                              capital=100.0 if args.capital is None else args.capital, venue=venue, mode="local",
+                              strategies=strategies, file=arming.SIM_FILE)
+        except ValueError as e:
+            print(f"No se armó el simulacro: {e}")
+            return 1
+        _restart_agent(home, "simulacro junto al dinero real")
+        print(f"Simulacro armado junto al dinero real: {data['capital_usdt']:g} USDT de mentira, {only}, por "
+              f"{args.dias} días. Nunca opera lo que opera el dinero real "
+              f"({', '.join(STRATEGY_ES.get(s, s) for s in real_only)}) y no usa sus conexiones con Binance. El "
+              "agente se reinicia solo en segundos.")
+        return 0
+    if args.simulacro:                                # sin plata en juego: sin frase
         demo = binance and args.demo
         if demo and not all(binance_keys(os.environ, demo=True)):
             print("Para el simulacro en la demo de Binance faltan BINANCE_API_KEY_TEST y BINANCE_API_SECRET_TEST en",
