@@ -152,7 +152,10 @@ a Tokio como motor. Lee este archivo primero, y lo que manda es esta lista:
    - `systemctl is-active rele-tokio agente-tokio vigia-red.timer`.
    - `free -m`: más de 200 MB libres.
    - `cd ~/trading && git log --oneline -1` = `origin/main`. Si quedó atrás y el CI está verde:
-     `bash ~/trading/deploy/tokio/instalar-agente.sh`.
+     `bash ~/trading/deploy/tokio/instalar-agente.sh`. **Con dinero real armado** (`cat ~/.trading/ARMADO.json`:
+     `"simulacro": false`), instalar solo sin posiciones reales abiertas (`real/binance-futuros/estado.json`,
+     `positions` vacío; G-7): reinstalar reinicia al agente. Nunca armar, desarmar ni tocar el armado: es del dueño.
+     Después de instalar, la prueba de punta a punta **en la PC** (punto 5).
    - `sudo journalctl -u agente-tokio -u rele-tokio --since -3h --no-pager -p warning` y `sudo journalctl -t vigia-red`.
      "poca memoria en el servidor" en el registro: mirar si coincide con `unattended-upgrades`
      (`sudo tail /var/log/unattended-upgrades/unattended-upgrades.log`) y anotarlo (sección 11).
@@ -169,12 +172,16 @@ a Tokio como motor. Lee este archivo primero, y lo que manda es esta lista:
        (cada 2 min, cada 15 min) es trabajo pesado que frena las entradas al instante: buscarlo (sección 11).
    - Si no responde tres veces seguidas: avisar al dueño para que lo reinicie desde la consola de Lightsail, y no
      tocar nada más.
-3. **Simulacro de Tokio:**
+3. **Simulacro de Tokio** (o el dinero real, si el dueño lo armó):
    - `cd ~/trading && TRADING_HOME=/home/ubuntu/.trading .venv/bin/python -m tradingagent informe-simulacro --dias 1`
-     (y `--cuenta practica`).
-   - Las decisiones y operaciones están en `/home/ubuntu/.trading/simulacro/binance-futuros/` y en `paper-vivo/`.
-   - Armado hasta el 5-dic-2026, con 100 USDT de mentira. Si vence:
+     (y `--cuenta practica`; con dinero real, `--cuenta real`: sus montos no se publican nunca, G-8).
+   - Las decisiones y operaciones están en `/home/ubuntu/.trading/simulacro/binance-futuros/`, `real/binance-futuros/`
+     y `paper-vivo/`.
+   - El simulacro está armado hasta el 5-dic-2026, con 100 USDT de mentira. Si vence y no hay dinero real armado:
      `armar-real --simulacro --dias 30` en el servidor, con `TRADING_HOME=/home/ubuntu/.trading`.
+   - **Dinero real solo para los listados de Upbit** (sección 6): cada entrada real tiene que ser `listado_upbit`; las
+     demás estrategias dicen `estrategia_no_armada` en `real/.../decisiones`. Si aparece otra estrategia operando con
+     dinero real, frenar primero (`touch ~/.trading/KILL`) y avisar al dueño.
 4. **Avisos oficiales:** medir la demora de punta a punta en Tokio (publicado, recibido, decisión y entrada).
    - En los listados de Upbit al instante, mirar `variante-ia.jsonl`: es la prueba A/B que pidió el dueño (entrar al
      instante contra esperar a la IA).
