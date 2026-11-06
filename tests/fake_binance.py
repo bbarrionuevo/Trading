@@ -60,6 +60,7 @@ class FakeBinance:
         self.margin, self.leverage = {}, {}
         self.algos: dict[str, dict] = {}         # stops del servicio Algo
         self.algo_lag = 0                         # consultas que siguen diciendo NEW tras cancelar (el real tarda)
+        self.algo_hidden = 0                      # consultas que todavía no ven el stop recién puesto (-2013, Tokio)
         self.algo_stuck = False                   # el stop no se cancela de a uno (solo con "cancelar todos")
         self.fail_cancel_all = False              # "cancelar todas las órdenes" da error
         self.positions: dict[str, dict] = {}      # contrato → {"amt": con signo, "entry": precio promedio}
@@ -152,6 +153,9 @@ class FakeBinance:
             return web.json_response(a)
         if path == "/fapi/v1/algoOrder" and m == "GET":
             a = self.algos.get(q.get("clientAlgoId"))
+            if a and self.algo_hidden > 0:                            # recién puesto: Binance todavía no lo muestra
+                self.algo_hidden -= 1
+                return web.json_response({"code": -2013, "msg": "Order does not exist."}, status=400)
             if a and a.get("lag"):
                 a["lag"] -= 1
                 return web.json_response({**a, "algoStatus": "NEW"})      # todavía no muestra la cancelación

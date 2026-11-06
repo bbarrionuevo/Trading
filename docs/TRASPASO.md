@@ -648,6 +648,11 @@ Los comandos, por si hay que rehacerlo en otro servidor:
     abierto). Hay que volver a consultar unos segundos antes de darlo por fallido: la prueba
     consulta hasta 10 s y guarda en `state/verificacion_binance.json` los estados vistos y cuánto tardó. Desde la
     PC, cada ida y vuelta a Binance tarda ~0,3 s (a veces 0,9 s);
+  - **el stop Algo recién puesto también se ve con demora:** desde Tokio (6-nov) la consulta salía ~3 ms después de
+    ponerlo y Binance contestaba -2013 "Order does not exist"; `binance-real-check` fallaba sin que nada estuviera
+    mal (desde la PC, a ~0,3 s, siempre aparecía). Ahora la prueba espera hasta 5 s a que aparezca, y si falla
+    limpia recién a los 6 s de puesto (D-6). El operador real no consulta el stop al ponerlo (lo revisa la
+    conciliación, cada 30 s);
   - `/fapi/v1/order/test` valida órdenes comunes sin mandarlas;
   - `aggTrades` históricos solo de los últimos 2 días (código -4166): para estudiar segundos, las velas de 1 s
     del spot (`/api/v3/klines?interval=1s`) tienen historia;
