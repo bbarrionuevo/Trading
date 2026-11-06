@@ -10,6 +10,7 @@ tan rápido llegan las noticias y, más importante, cuánto ganamos y cuánto ac
 Solo lee archivos locales: no sale a la red.
 """
 import json
+import math
 import statistics
 from collections import defaultdict
 from decimal import Decimal as D
@@ -35,7 +36,10 @@ def _stats(xs: list[float]) -> dict | None:
     xs = sorted(x for x in xs if x is not None)
     if not xs:
         return None
-    return {"n": len(xs), "mediana": round(statistics.median(xs), 2), "p90": round(xs[int(0.9 * (len(xs) - 1))], 2)}
+    # p90 por rango más cercano (techo): con pocos datos el índice con piso daba el mínimo y el p90 salía menor
+    # que la mediana (6-nov, binance.ws n=2: mediana 21,19 s y "p90" 1,17 s).
+    p90 = xs[max(0, math.ceil(0.9 * len(xs)) - 1)]
+    return {"n": len(xs), "mediana": round(statistics.median(xs), 2), "p90": round(p90, 2)}
 
 
 def report(base: Path, journal_dir: Path, *, since: float | None = None) -> dict:
