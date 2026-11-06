@@ -129,6 +129,11 @@ def report(first_sent: float) -> int:
     for t in entries:
         print(f"entrada simulada: {t.get('symbol')} {t.get('lado')} a {t.get('price')} · nocional {t.get('notional')} "
               f"USDT de mentira")
+    entered = {t.get("symbol") for t in entries}
+    for d in rows(BASE / "decisiones"):                         # por qué un aviso de la prueba no terminó en entrada
+        if d.get("symbol") in ("SOLUSDT", "ETHUSDT", "DOGEUSDT") and d.get("symbol") not in entered:
+            print(f"no entró {d.get('symbol')} ({(d.get('signal') or {}).get('category')}): {d.get('decision')} · "
+                  f"{', '.join(d.get('motivos') or [])[:200]}")
     for ab in rows(BASE / "variante-ia.jsonl"):
         print(f"segunda lectura de la IA ({ab.get('symbol')}): {ab.get('ia_s')} s · confirma {ab.get('confirma')} · "
               f"al instante {ab.get('entrada_al_instante')} · esperando a la IA {ab.get('precio_con_la_ia')}")
