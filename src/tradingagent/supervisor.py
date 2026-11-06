@@ -64,6 +64,9 @@ OUT_MAX_BYTES = 5_000_000
 PUBLISH_DECISIONS = 1500
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 BOARD_ONLY_FILE = "SOLO-TABLERO"   # la PC solo muestra el tablero: el agente corre en Tokio
+TOKIO_SILENT_S = 180               # solo tablero: Tokio sin mandar nada en 3 min → aviso por Telegram
+TOKIO_REMIND_S = 1800              # y otro cada 30 min mientras siga callado
+TOKIO_CHECK_S = 20.0
 LOW_PRIORITY = getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)
 GIT = shutil.which("git") or (r"C:\Program Files\Git\cmd\git.exe" if os.name == "nt" else "git")
 GIT_ENV = {"GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "never"}
@@ -284,7 +287,36 @@ class Supervisor:
             self.mirror = TokioBoardMirror.from_home(self.home)
             if self.mirror is not None:
                 self.mirror.start()
-                log.info("solo tablero: traigo el tablero completo de Tokio por SSH cada 30 s")
+                log.info("solo tablero: traigo el tablero completo de Tokio por SSH cada minuto (%s)", self.mirror.ssh)
+
+    def watch_tokio(self, now: float | None = None) -> str:
+        """Solo tablero: si Tokio deja de mandar su telemetría (el agente y el relé) más de 3 min, avisa por Telegram
+        desde la PC (una vez y cada 30 min si sigue), y avisa cuando vuelve. El 5-nov-2026 el servidor perdió la red
+        45 min (systemd-networkd dio la interfaz por caída) y nadie se enteró. Devuelve qué hizo."""
+        now = time.time() if now is None else now
+        t = paths.read_json(self.home / "state" / "tokio.json", None) or {}
+        heard = [float((t.get(p) or {}).get("recibido") or 0) for p in ("agente", "rele")]
+        if not any(heard):
+            return "sin_datos"                             # nunca habló: no hay con qué comparar
+        silent = now - max(heard)
+        st = self.state.get("tokio_callado") or {}
+        if silent > TOKIO_SILENT_S:
+            if st and now - float(st.get("avisado", 0)) < TOKIO_REMIND_S:
+                return "callado"
+            notify(f"⚠️ El servidor de Tokio no manda nada hace {silent / 60:.0f} min: el agente puede estar sin red y "
+                   "no opera. Si sigue así, reinicialo desde la consola de Lightsail (Reboot). Detalle en docs/TRASPASO.md.",
+                   self.env)
+            self.state["tokio_callado"] = {"desde": st.get("desde") or round(max(heard)), "avisado": round(now)}
+            self.save()
+            log.warning("Tokio callado hace %.0f s: avisé por Telegram", silent)
+            return "aviso"
+        if st:
+            notify(f"✅ El servidor de Tokio volvió (estuvo callado {(now - float(st['desde'])) / 60:.0f} min).",
+                   self.env)
+            self.state.pop("tokio_callado", None)
+            self.save()
+            return "volvio"
+        return "ok"
 
     def stop_monitor(self) -> None:
         if self.mirror is not None:
@@ -472,6 +504,7 @@ class Supervisor:
                    "anda bien. No hace falta que hagas nada; quedó anotado para revisarlo.", self.env)
             return "rechazada"
         self.version = remote
+        self.state["version"] = remote[:12]            # en solo tablero no se relanza al agente: se anota acá
         self.state.pop("pendiente", None)
         self.event("actualizaciones", de=head[:7], a=remote[:7], resultado="ok", titulo=subject[:120])
         notify(f"🔄 Actualicé TRADING (versión {remote[:7]}): {change_title(subject, body)[:150]}. Sigue "
@@ -618,6 +651,7 @@ class Supervisor:
         if not self.board_only():
             self.start_child()
         next_update, next_publish = time.monotonic() + FIRST_CHECK_S, time.monotonic() + FIRST_PUBLISH_S
+        next_tokio = time.monotonic() + TOKIO_SILENT_S         # al arrancar, se le da tiempo a que llegue algo
         loops = 0
         try:
             while max_loops is None or loops < max_loops:
@@ -627,6 +661,9 @@ class Supervisor:
                         log.info("solo tablero: paro al agente de la PC (corre en Tokio)")
                         self.stop_child()
                     self.ensure_monitor()
+                    if time.monotonic() >= next_tokio:
+                        next_tokio = time.monotonic() + TOKIO_CHECK_S
+                        self.watch_tokio()
                 else:
                     self.stop_monitor()
                     wait = self.watch_child()

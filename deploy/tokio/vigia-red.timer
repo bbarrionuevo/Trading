@@ -1,0 +1,10 @@
+# Cada minuto, el vigía de la red (vigia-red.service). Lo instala el dueño.
+[Unit]
+Description=TRADING - vigía de la red cada minuto
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+
+[Install]
+WantedBy=timers.target
