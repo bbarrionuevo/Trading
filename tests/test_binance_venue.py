@@ -350,3 +350,30 @@ async def test_avisos_de_la_conciliacion_dicen_lo_que_pasa(tmp_path):
     texts = alerts.texts()
     assert len(texts) == 4 and "Binance no responde" in texts[0] and "volvieron a coincidir" in texts[1]
     assert "sin su stop de emergencia en el exchange (SOLUSDT)" in texts[2] and "no coinciden" in texts[3]
+
+
+async def test_nada_se_cancela_a_menos_de_5_s_de_puesto(tmp_path, monkeypatch):
+    """REGLAS D-6 (Binance, pedido del dueño): el stop de emergencia que sobra porque la posición se cerró enseguida
+    (la segunda lectura de la IA a los ~2 s) se cancela recién a los 5 s, en segundo plano: la salida no espera."""
+    import asyncio
+
+    from tradingagent.execution.live import binance_venue
+    monkeypatch.setattr(binance_venue, "MIN_CANCEL_AGE_S", 0.4)           # en la PC son 5,5 s
+    clock = ManualClock(T0)
+    fake = FakeBinance(clock=clock)
+    fake.balance = D("100")
+    home, pf = tmp_path / "home", Portfolio(D("100"))
+    async with serve(fake.app()) as url, aiohttp.ClientSession() as s:
+        v = venue(s, url, clock, home, pf)
+        armed(home)
+        o = await v.submit(intent("e1", Side.BUY, notional=D("16"), emergency_stop="127.50"))
+        assert o.status is OrderStatus.FILLED and v.stops
+        placed = max(v._placed.values())                                    # cuándo se puso el stop
+        out = await v.submit(intent("x1", Side.SELL, qty=D("0.1"), reduce=True))     # se cierra enseguida
+        assert out.status is OrderStatus.FILLED                                       # la salida no espera al stop:
+        cancels = [c for c in fake.calls if c == ("DELETE", "/fapi/v1/algoOrder")]
+        assert cancels == [] and v.stops == {} and v._later                          # todavía no se canceló
+        await asyncio.gather(*list(v._later))
+        assert time.monotonic() - placed >= 0.4 - 0.03                            # (reloj de Windows: ~16 ms)
+        assert [c for c in fake.calls if c == ("DELETE", "/fapi/v1/algoOrder")]       # a los "5 s", sí
+        assert v.stats["stops_cancelados"] == 1

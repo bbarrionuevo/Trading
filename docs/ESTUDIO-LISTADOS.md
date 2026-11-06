@@ -154,6 +154,44 @@ del sitio, mediana 1 s; del aviso a la orden ~0,05 s; la IA 1,3-2,5 s). Las dos 
   prueba A/B en vivo queda en `variante-ia.jsonl`: en cada entrada al instante, cuánto tardó la IA y el precio al que
   se habría entrado esperándola.
 
+### ¿Cuánto poner? 3 %, más o apalancamiento (5-nov, pedido del dueño)
+
+`estudios/upbit_tamano.py`: los 31 retornos de entrar al instante (stop fijo de 10 %, 15 min, con costos), una cuenta
+de 100 USDT con los 31 en su orden real y 10.000 órdenes al azar:
+
+| Tamaño (riesgo al stop) | Orden real | Mediana | Peor 5 % | Toca el freno de 8 % |
+|---|---|---|---|---|
+| 0,10 veces (1 %) | 145,8 | 145,2 | 123,8 | 0 % |
+| **0,30 veces (3 %, el sobre)** | **296,6** | **293,2** | **185,1** | **10 %** (30 % si Telegram llega a 2 s) |
+| 0,50 veces (5 %) | 573,1 | 563,1 | 268,8 | 50 % (75 %) |
+| 1 vez (10 %) | 2.482 | 2.412 | 614 | 97 % |
+| 2 veces (apalancado) | 26.443 | 25.576 | 2.188 | casi 100 % |
+
+- El Kelly entero da 7 veces el saldo, y ¼ de Kelly 1,8 veces. La cuenta lo pide porque la media (+12 %) es grande y
+  la pérdida está acotada por el stop. Pero son 31 casos de un estudio. La ventaja se parte al medio si el aviso llega
+  a 2 s en vez de 1 s. Y pasando el 3 %, el freno de 8 % salta la mitad de las veces o más (pide rearme del dueño).
+- **Decisión (REGLAS L-3):** 3 % al stop desde el 5-nov. Más del 3 % o apalancamiento, recién con ~30 operaciones
+  reales desde Tokio y el OK del dueño.
+- Con 3 %, un stop completo pasa el freno del día (2 %): ese día se cierra todo y no se abre más hasta las 00:00 UTC
+  (ya era así desde el 4-nov).
+
+### Otros avisos de Upbit: ¿también conviene entrar primero? (5-nov)
+
+`estudios/upbit_primero.py`, con la misma salida (stop de 10 %) y entrando al instante (1,05 s) o esperando a la IA
+(2,85 s):
+
+| Aviso | Perpetuos | Al instante, 15 min | Esperando a la IA, 15 min | 4 h, al instante |
+|---|---|---|---|---|
+| Fin del soporte (corto) | 9 | mediana +4,75 %, media +5,43 % (67 %) | +2,75 %, +4,15 % (78 %) | +1,31 %, +5,07 % |
+| Advertencia (corto) | 18 | +1,73 %, +2,10 % (78 %) | +1,50 %, +1,90 % (72 %) | +2,12 %, +3,54 % |
+| Advertencia extendida (corto) | 6 | −1,22 %, −1,08 % (17 %) | igual | −0,62 % |
+| Advertencia levantada (largo) | 4 | +6,00 %, +5,02 % (75 %) | −2,16 %, −0,24 % | −2,48 % |
+
+- **Fin del soporte y advertencia prometen, con pocos casos** (9 y 18, contra los 31-34 de las otras excepciones).
+  Quedan como candidatos (REGLAS L-9) y se deciden con ~30. En la advertencia, la IA casi no cambia el resultado:
+  el precio se mueve más lento. La extendida y la levantada no sirven, o tienen muy pocos casos.
+- Las noticias generales (medios, macro, empresas) siguen con la IA primero (L-4).
+
 ### Binance: la copia del CDN demoraba ~60 s
 
 Medido en la PC el 4-nov: la lista de anuncios de Binance la sirve CloudFront con una copia que dura ~120 s (la

@@ -95,7 +95,7 @@ async def test_llega_a_tiempo_y_entra_largo_aunque_el_libro_dispare_las_alarmas(
         entry = float(pos["avg_price"])
         assert 0.89 < float(pos["stop"]) / entry < 0.91                     # stop fijo de 10 %
         assert abs(pos["until"] - clock.time() - 15 * 60) < 5                # sale a los 15 min
-        assert entry * float(pos["qty"]) <= 0.10 * 120 + 0.5                # 1 % del saldo al stop
+        assert 0.20 * 120 < entry * float(pos["qty"]) <= 0.30 * 120 + 0.5   # 3 % del saldo al stop
         assert len(t.st["positions"]) == 1                                   # FOO no tiene perpetuo
     got = rows(home)
     assert next(r for r in got if r["decision"] == "entrar")["signal"]["version"] == "listado-upbit-1"

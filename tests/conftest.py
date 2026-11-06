@@ -22,6 +22,14 @@ def _home(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _binance_cancel_age(monkeypatch):
+    """La espera de 5 s antes de cancelar en Binance (binance_venue.MIN_CANCEL_AGE_S) va en 0 en los tests; su
+    propio test la prueba con una espera corta."""
+    from tradingagent.execution.live import binance_venue
+    monkeypatch.setattr(binance_venue, "MIN_CANCEL_AGE_S", 0.0)
+
+
+@pytest.fixture(autouse=True)
 def _universe():
     """El universo de MEXC que un test registra (acciones, índices...) no se filtra a los demás tests."""
     from tradingagent.research import assets
