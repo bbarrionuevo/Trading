@@ -134,9 +134,9 @@ del dueño.
 
 ### Vigilancia (qué revisar en cada pasada, también la vigilancia programada de cada 3 h)
 
-La tarea programada "Vigilancia del simulacro de TRADING" lee este archivo primero. Su texto todavía describe a la PC
-como motor: cambiarlo necesita el permiso del dueño para editar tareas programadas. Mientras tanto, lo que manda es
-esta lista:
+La tarea programada "Vigilancia del simulacro de TRADING" corre **cada 2 h, las 24 h** (desde el 6-nov, pedido del
+dueño: "vigila constantemente todo sin q yo te lo diga. mantene traspaso y promt actualizado"). Su texto ya describe
+a Tokio como motor. Lee este archivo primero, y lo que manda es esta lista:
 
 1. **PC** (`%LOCALAPPDATA%\TRADING`):
    - `state\supervisor.json`: modo `solo_tablero`, versión = `origin/main`, publicación `ok`.
