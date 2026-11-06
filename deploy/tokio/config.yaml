@@ -2,6 +2,8 @@
 # instalar-agente.sh lo copia a ~/.trading/config.yaml solo si no existe.
 # Desde el 5-nov todo el agente corre en Tokio (la PC en "solo tablero"): el bot de Telegram (alertas, /pausa,
 # /estado) también, así que las alertas van por Telegram como siempre (y además al tablero de la PC).
+trader:
+  practica: false    # 6-nov (el dueño): sin práctica; los demás módulos, en el simulacro junto al dinero real
 ingestion:
   sources:
     upbit.avisos:

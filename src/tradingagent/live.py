@@ -41,6 +41,9 @@ from .research import evaluation, learn, shadow
 from .research.labeler import MIN, minute
 
 log = logging.getLogger("tradingagent.live")
+# Las estrategias con camino propio (no pasan por la lectura general de la noticia): si el armado es solo de estas y no
+# hay nada abierto, el operador no lee las demás noticias (el de dinero real solo para Upbit no gasta IA ni candado).
+OWN_PATH = frozenset({upbit_listings.CATEGORY, earnings.CATEGORY, launches.CATEGORY, *delistings.BY_CATEGORY})
 WATCH_S, HOUSEKEEP_S, LEARN_EVERY_S = 1.0, 30.0, 900.0
 LAUNCH_POLL_S = 60.0                      # catálogo de Binance: contratos nuevos (peso 1 por pedido)
 # La caché del universo dura 6 h. Releerla en cada vuelta (30 s, por cuenta) costaba ~17 ms del bucle (leer 140 KB
@@ -76,8 +79,12 @@ class LiveTrader:
     def __init__(self, market, session, clock, limits: dict, *, alerts=None, journal=None, home: Path | None = None,
                  capital: float = 120.0, llm: "llm_mod.LlmClassifier | None" = None, cfg: PolicyConfig | None = None,
                  paper_config: PaperConfig | None = None, learned_path: Path | None = None, venue_factory=None,
-                 base_dir: Path | None = None, real: bool = False, simulated: bool = False):
+                 base_dir: Path | None = None, real: bool = False, simulated: bool = False,
+                 arm_file: str = arming.ARM_FILE, exclude_real: bool = False, owns_llm_budget: bool | None = None):
         self.market, self.session, self.clock, self.limits = market, session, clock, limits
+        self.arm_file = arm_file                                     # SIMULACRO.json: el simulacro junto al real
+        self.exclude_real = exclude_real                             # nunca opera lo que opera el dinero real
+        self.owns_llm_budget = (not real) if owns_llm_budget is None else owns_llm_budget
         self.alerts, self.journal, self.llm, self.capital = alerts, journal, llm, capital
         self.cfg = cfg or PolicyConfig()
         home = home or paths.home()
@@ -100,7 +107,7 @@ class LiveTrader:
         self.pending: set[asyncio.Task] = set()                      # resultados esperando su minuto 2
         self.discarded: frozenset = frozenset()                      # estrategias descartadas por sus resultados
         self._verdict_at = float("-inf")
-        self._only: tuple = (None, None)                             # (huella de ARMADO.json, estrategias armadas)
+        self._arms: dict[str, tuple] = {}                            # archivo de armado → (huella, contenido)
 
     # -- arranque y estado ------------------------------------------------------------------------------
     async def start(self) -> None:
@@ -109,8 +116,8 @@ class LiveTrader:
         self.first = st is None
         self.st = st or shadow.new_state(self.capital, now, self.market)
         self.st["strategy_tag"] = shadow.STRATEGY_TAG     # el tablero muestra la evidencia de la versión que corre
-        if self.llm is not None and not self.real:     # el tope diario de la IA sobrevive a reinicios (C-4); lo
-            self.llm.budget = llm_mod.Budget.from_dict(self.st.get("llm"))   # lleva la cuenta de práctica
+        if self.llm is not None and self.owns_llm_budget:   # el tope diario de la IA sobrevive a reinicios (C-4); lo
+            self.llm.budget = llm_mod.Budget.from_dict(self.st.get("llm"))   # lleva la práctica (o el simulacro)
         self.pf = shadow._portfolio(self.st, self.market)
         warm = getattr(self.llm, "warm_up", None)      # la IA lista antes de la primera noticia (no la frena)
         if warm is not None:
@@ -165,27 +172,44 @@ class LiveTrader:
     def learned(self) -> dict:
         return paths.read_json(self.learned_path, None) or {}
 
-    def armed_only(self) -> frozenset | None:
-        """Real o simulacro armado solo para algunas estrategias (`armar-real --estrategias`; el dueño, 6-nov: solo los
-        listados de Upbit con dinero real): las demás no abren acá y siguen en la práctica. None: todas (la práctica
-        no tiene armado). Lee ARMADO.json solo si cambió."""
-        if not self.real:
-            return None
-        path = self.home / arming.ARM_FILE
+    def _arm(self, file: str) -> dict | None:
+        """Un archivo de armado (ARMADO.json o SIMULACRO.json), leído solo si cambió."""
+        path = self.home / file
         try:
             st = path.stat()
         except OSError:                                                # sin armado el venue no abre nada igual
+            self._arms.pop(file, None)
             return None
         mark = (st.st_mtime_ns, st.st_size)
-        if self._only[0] != mark:
+        got = self._arms.get(file)
+        if got is None or got[0] != mark:
             data = paths.read_json(path, None)
-            only = data.get("estrategias") if isinstance(data, dict) else None
-            self._only = (mark, frozenset(str(s) for s in only) if isinstance(only, list) else None)
-        return self._only[1]
+            got = self._arms[file] = (mark, data if isinstance(data, dict) else None)
+        return got[1]
+
+    def armed_only(self) -> frozenset | None:
+        """Real o simulacro armado solo para algunas estrategias (`armar-real --estrategias`; el dueño, 6-nov: solo los
+        listados de Upbit con dinero real): las demás no abren acá. None: todas (la práctica no tiene armado)."""
+        if not self.real:
+            return None
+        only = (self._arm(self.arm_file) or {}).get("estrategias")
+        return frozenset(str(s) for s in only) if isinstance(only, list) else None
+
+    def excluded(self) -> frozenset:
+        """El simulacro junto al dinero real nunca opera lo que opera la plata (el dueño, 6-nov: "siempre que los
+        simulacros de los demás módulos no compitan o afecten en nada a los módulos que trabajen con dinero real"): las
+        estrategias del armado real, leídas en cada noticia (si el dueño suma una, el simulacro la suelta). "*": todas."""
+        if not self.exclude_real:
+            return frozenset()
+        data = self._arm(arming.ARM_FILE)
+        if not data or data.get("simulacro"):
+            return frozenset()
+        only = data.get("estrategias")
+        return frozenset(str(s) for s in only) if isinstance(only, list) else frozenset({"*"})
 
     def allows(self, category: str) -> bool:
-        only = self.armed_only()
-        return only is None or category in only
+        only, out = self.armed_only(), self.excluded()
+        return (only is None or category in only) and "*" not in out and category not in out
 
     def run(self) -> _LiveRun:
         store = self.market.candle_store(self.session)
@@ -194,6 +218,7 @@ class LiveTrader:
                        self.session)
         run.discarded = self.discarded
         run.only = self.armed_only()
+        run.excluded = self.excluded()
         return run
 
     async def refresh_verdicts(self) -> None:
@@ -309,6 +334,9 @@ class LiveTrader:
             task = asyncio.create_task(self._upbit_listing(ing, coin), name=f"listado-upbit-{coin}")
             self.pending.add(task)
             task.add_done_callback(self.pending.discard)
+        only = self.armed_only()
+        if only is not None and only <= OWN_PATH and not self.st["positions"]:
+            return               # armado solo para reglas con camino propio y nada abierto: ni IA ni candado (6-nov)
         ev = self._event(ing)
         sig = classify(ev["title"], ev["body"], tier=ev["tier"], cluster_sources=ev["cluster_sources"],
                        hint_assets=tuple(ev["assets_hint"]))

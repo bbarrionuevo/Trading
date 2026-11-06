@@ -115,7 +115,7 @@ class RemoteTelemetry:
                "lag": (hb.get("loop_lag") or {}).get("p99_ms"), "peso": [peso.get("usado"), peso.get("limite")],
                "ia": [_num(llm.get("usd"), 5), llm.get("calls", 0), llm.get("failures", 0)],
                "kill": paths.kill_file().exists(), "cuentas": []}
-        for t in (a.real_trader, a.trader):
+        for t in (a.real_trader, getattr(a, "sim_trader", None), a.trader):
             if t is not None:
                 out["cuentas"].append(account(t))
         return out

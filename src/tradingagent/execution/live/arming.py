@@ -21,6 +21,10 @@
   automática de upbit ... ya quede funcionando con dinero real ... mientras seguimos haciendo pruebas ... con los demás
   módulos"): el armado guarda la lista y solo esas estrategias abren con dinero real; las demás siguen en la práctica.
   Sin lista, todas (lo de antes). Lo controla el operador (`live.py`) y, de nuevo, el venue antes de cada orden.
+- **Simulacro junto al dinero real** (el dueño, 6-nov: "opción 1 siempre que los simulacros de los demás módulos no
+  compitan o afecten en nada a los módulos que trabajen con dinero real"): con el dinero real armado, `armar-real
+  --simulacro` arma un simulacro aparte (`SIMULACRO.json`, siempre local y de mentira: ese archivo nunca arma plata).
+  Corre en el mismo agente y nunca opera las estrategias del dinero real (`live.py`).
 - Un solo ejecutor por cuenta (REGLAS G-9): si el agente del servidor de Tokio informó en la última hora (su
   telemetría, `state/tokio.json`) que opera DINERO REAL, esta máquina no abre con dinero real. En Tokio ese archivo
   no existe: allá no frena nada.
@@ -32,6 +36,7 @@ from pathlib import Path
 from ... import paths
 
 ARM_FILE = "ARMADO.json"
+SIM_FILE = "SIMULACRO.json"                       # el simulacro armado junto al dinero real: nunca arma plata
 VERIFY_FILE = "verificacion_real.json"                   # MEXC
 VERIFY_FILES = {"mexc-futuros": VERIFY_FILE, "binance-futuros": "verificacion_binance.json"}
 VERIFY_MAX_AGE_S = 30 * 86400
@@ -62,10 +67,15 @@ def venue_of(data: dict) -> str:
 
 def arm(home: Path, days: int, access_key: str, typed: str, *, assets: tuple = DEFAULT_ASSETS,
         simulacro: bool = False, capital: float | None = None, now: float | None = None,
-        venue: str = "mexc-futuros", mode: str | None = None, strategies: tuple | None = None) -> dict:
+        venue: str = "mexc-futuros", mode: str | None = None, strategies: tuple | None = None,
+        file: str = ARM_FILE) -> dict:
     """Arma el dinero real (todo el saldo de la cuenta) o, con `simulacro=True`, el simulacro con `capital` USDT
     de mentira: el operador real corre completo pero NUNCA manda órdenes (no pide frase ni prueba con órdenes).
-    `strategies`: solo esas estrategias abren (None: todas)."""
+    `strategies`: solo esas estrategias abren (None: todas). `file=SIM_FILE`: el simulacro junto al dinero real."""
+    if file not in (ARM_FILE, SIM_FILE):
+        raise ValueError(f"archivo de armado desconocido: {file}")
+    if file == SIM_FILE and not (simulacro and venue == "binance-futuros" and mode == "local"):
+        raise ValueError("junto al dinero real solo va el simulacro local de Binance (plata de mentira)")
     if not 1 <= int(days) <= MAX_DAYS:
         raise ValueError(f"el armado vence en 1 a {MAX_DAYS} días")
     if venue not in VENUES:
@@ -85,12 +95,14 @@ def arm(home: Path, days: int, access_key: str, typed: str, *, assets: tuple = D
             "venues": [venue], "simulacro": bool(simulacro), "clave": fingerprint(access_key),
             "armado_en": round(now), "vence": round(now + int(days) * 86400), **({"modo": mode} if mode else {}),
             **({"estrategias": only} if only is not None else {})}
-    paths.write_json_atomic(Path(home) / ARM_FILE, data)
+    paths.write_json_atomic(Path(home) / file, data)
     return data
 
 
-def disarm(home: Path) -> bool:
-    p = Path(home) / ARM_FILE
+def disarm(home: Path, file: str = ARM_FILE) -> bool:
+    if file not in (ARM_FILE, SIM_FILE):
+        raise ValueError(f"archivo de armado desconocido: {file}")
+    p = Path(home) / file
     existed = p.exists()
     p.unlink(missing_ok=True)
     return existed
@@ -105,14 +117,19 @@ def save_verification(home: Path, report: dict, access_key: str, now: float | No
 
 
 def status(home: Path, access_key: str | None, now: float | None = None,
-           venue: str | None = None) -> tuple[bool, str, dict]:
+           venue: str | None = None, file: str = ARM_FILE) -> tuple[bool, str, dict]:
     """(armado para ABRIR posiciones, motivo si no, datos del armado). Se consulta antes de cada entrada real. Con
-    `venue`, el armado tiene que ser de ese exchange (un armado de MEXC no arma Binance)."""
+    `venue`, el armado tiene que ser de ese exchange (un armado de MEXC no arma Binance). `file=SIM_FILE`: el
+    simulacro junto al dinero real (si ese archivo dijera dinero real, no arma nada)."""
     home = Path(home)
     now = now if now is not None else time.time()
-    data = paths.read_json(home / ARM_FILE, None)
+    if file not in (ARM_FILE, SIM_FILE):
+        return False, "archivo_desconocido", {}
+    data = paths.read_json(home / file, None)
     if not isinstance(data, dict):
         return False, "no_armado", {}
+    if file == SIM_FILE and not data.get("simulacro"):
+        return False, "no_es_simulacro", data
     if venue is not None and venue_of(data) != venue:
         return False, "otro_exchange", data
     if (home / "KILL").exists():

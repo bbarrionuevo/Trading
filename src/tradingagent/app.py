@@ -107,7 +107,9 @@ def armed_summary(home) -> tuple[bool, str]:
         return False, ""
     where = VENUE_ES.get(arming.venue_of(data), arming.venue_of(data))
     only = data.get("estrategias")
-    what = (f"solo {', '.join(STRATEGY_ES.get(s, s) for s in only)}; lo demás, en práctica" if only
+    side = isinstance(paths.read_json(home / arming.SIM_FILE, None), dict)
+    rest = "en el simulacro (plata de mentira)" if side and not data.get("simulacro") else "sin plata"
+    what = (f"solo {', '.join(STRATEGY_ES.get(s, s) for s in only)}; lo demás, {rest}" if only
             else "todas las estrategias")
     if data.get("simulacro"):
         return False, f"🧪 Simulacro armado en {where} (plata de mentira): {what}."
@@ -136,6 +138,8 @@ class OwnerActions:
             lines += a.trader.status_lines("Práctica")
         if a.real_trader is not None:
             lines += a.real_trader.status_lines("Simulacro" if a.real_trader.simulated else "💵 DINERO REAL")
+        if getattr(a, "sim_trader", None) is not None:
+            lines += a.sim_trader.status_lines("Simulacro de los demás módulos")
         current = paths.read_json(home / arming.ARM_FILE, None) or {}
         ok, why, data = arming.status(home, arm_key(a.env, current))
         if data:
@@ -146,9 +150,14 @@ class OwnerActions:
             if data.get("estrategias"):
                 from .alerts.model import STRATEGY_ES
                 lines.append("  solo " + ", ".join(STRATEGY_ES.get(s, s) for s in data["estrategias"])
-                             + "; lo demás, en práctica")
+                             + "; lo demás, sin plata")
         else:
             lines.append("Dinero real: no armado")
+        sok, swhy, side = arming.status(home, None, file=arming.SIM_FILE)
+        if side:
+            left = (float(side.get("vence", 0)) - time.time()) / 86400
+            lines.append("Simulacro junto al dinero real (plata de mentira, nunca lo que opera la plata): "
+                         + (f"opera, vence en {left:.0f} días" if sok else f"no abre nada nuevo ({swhy})"))
         if (home / "KILL").exists():
             lines.append("⏸ En pausa (/seguir para volver)")
         return "\n".join(lines)
@@ -183,8 +192,10 @@ class Agent:
         # Solo para pruebas (deploy/tokio/prueba_listado.py --pc): los datos públicos de Binance de un Binance falso local
         # que contesta con los tiempos de Tokio. Solo por código (nunca por configuración) y sin dinero real.
         self._binance_base = binance_base
-        self.trader = None
+        self.trader = None                            # la práctica (se puede apagar: `trader.practica: false`)
         self.real_trader = None                       # dinero real: solo si el dueño armó en esta PC (A-2)
+        self.sim_trader = None                        # el simulacro junto al dinero real (SIMULACRO.json, 6-nov)
+        self.llm = None                               # la IA, una sola para todos los operadores
         self.telegram_base_url, self.printer = telegram_base_url, printer
         self.stop_event = asyncio.Event()
         self.started = time.time()
@@ -194,6 +205,45 @@ class Agent:
 
     def stop(self) -> None:
         self.stop_event.set()
+
+    def traders(self) -> list:
+        """Los operadores que corren, el de dinero real primero: cada noticia le llega antes que a los demás."""
+        return [t for t in (self.real_trader, self.sim_trader, self.trader) if t is not None]
+
+    def _on_binance(self, session):
+        """Un operador de futuros de Binance que usa ese grupo de conexiones (para dejarlas tibias), o None."""
+        return next((t for t in self.traders() if getattr(t, "session", None) is session
+                     and getattr(getattr(t, "market", None), "name", "") == "binance-futuros"), None)
+
+    async def _start_traders(self, session, real_session, lim) -> None:
+        """La IA (una para todos), la práctica (si está prendida: `trader.practica`), el dinero real o el simulacro del
+        armado, y el simulacro junto al dinero real. Si uno no arranca, los demás siguen. El tope diario de la IA lo
+        lleva uno solo: la práctica; sin práctica, el simulacro; si no, el real."""
+        self.llm = self._build_llm(lim)
+        builders = (("trader", "la práctica",
+                     lambda: self._build_trader(session, lim) if self.cfg["trader"].get("practica", True) else None),
+                    ("real_trader", "el operador de DINERO REAL",
+                     lambda: self._build_real_trader(session, lim, real_session=real_session)),
+                    ("sim_trader", "el simulacro junto al dinero real", lambda: self._build_sim_trader(session, lim)))
+        built = {}
+        for name, what, build in builders:
+            try:
+                built[name] = build()
+            except Exception:                                    # uno que falla no frena a los demás
+                log.exception("no se pudo armar %s", what)
+                built[name] = None
+        owner = built["trader"] or built["sim_trader"] or built["real_trader"]
+        for name, what, _ in builders:
+            t = built[name]
+            if t is None:
+                continue
+            t.owns_llm_budget = t is owner
+            try:
+                await t.start()
+            except Exception:                                    # sin mercado, el agente igual lee y registra
+                log.exception("no arrancó %s", what)
+                t = None
+            setattr(self, name, t)
 
     async def _watch_stop_file(self, path) -> None:
         """Parada con calma pedida por el supervisor (archivo `state/parar`): cierra igual que Ctrl+C."""
@@ -225,18 +275,18 @@ class Agent:
                 "journal": self.journal.snapshot(), "bus": self.bus.stats(),
                 "streams": [s.snapshot() for s in self.streams],
                 "trader": self.trader.snapshot() if self.trader is not None else None,
-                "real": self.real_trader.snapshot() if self.real_trader is not None else None}
+                "real": self.real_trader.snapshot() if self.real_trader is not None else None,
+                "simulacro": self.sim_trader.snapshot() if self.sim_trader is not None else None}
 
     async def _print_accepted(self) -> None:
         """Cada noticia aceptada se muestra en consola y, si el operador en vivo está prendido, se evalúa ya."""
         sub = self.bus.subscribe(TOPIC_ACCEPTED, "consola", maxsize=200)
         async for ev in sub:
             it = ev.item
-            for trader in (self.trader, self.real_trader):      # no frena la lectura: cada noticia en su tarea
-                if trader is not None:
-                    t = asyncio.create_task(self._trade(ev, trader), name=f"noticia-{it.id[:8]}")
-                    self.news_tasks.add(t)
-                    t.add_done_callback(self.news_tasks.discard)
+            for trader in self.traders():                   # no frena la lectura: cada noticia en su tarea, la del
+                t = asyncio.create_task(self._trade(ev, trader), name=f"noticia-{it.id[:8]}")   # dinero real primero
+                self.news_tasks.add(t)
+                t.add_done_callback(self.news_tasks.discard)
             age = f"{ev.age_s:.0f}s" if ev.age_s is not None else "s/h"
             try:
                 self.printer(f"📰 [{it.source} n{it.tier} {age}] {it.title[:140]}")
@@ -363,8 +413,18 @@ class Agent:
         return [client.RelayClient(conf["host"], conf["port"], key, self.ingestion.handle, self.clock,
                                    kill_file=paths.kill_file(), on_telemetry=TokioSink(paths.home(), self.clock))]
 
-    def _build_trader(self, session, lim):
+    def _build_llm(self, lim):
+        """La IA, una sola para todos los operadores (la caché comparte cada consulta). Antes vivía en la práctica: sin
+        práctica, el dinero real se quedaba sin la segunda lectura."""
         from .intelligence.llm import LlmClassifier, api_key
+        t = self.cfg["trader"]
+        key = api_key(self.env) if t.get("llm", True) else None
+        cap = float(lim["ai"]["max_llm_usd_per_day"])                  # techo del sobre: frena un error, no el uso
+        if t.get("llm_usd_dia") is not None:
+            cap = min(cap, float(t["llm_usd_dia"]))                     # el dueño puede bajarlo, nunca subirlo
+        return LlmClassifier(key, limit_usd=cap, base_url=self._llm_base_url) if key else None
+
+    def _build_trader(self, session, lim):
         from .live import LiveTrader
         from .marketdata import mexc
         from .research.futures import BinanceFutures, MexcFutures
@@ -379,17 +439,13 @@ class Agent:
             else:
                 keys = (self.env.get("MEXC_ACCESS_KEY"), self.env.get("MEXC_SECRET_KEY"))
                 market = MexcFutures(readonly=mexc.ReadOnlyClient(session, *keys) if all(keys) else None)
-        key = api_key(self.env) if t.get("llm", True) else None
-        cap = float(lim["ai"]["max_llm_usd_per_day"])                  # techo del sobre: frena un error, no el uso
-        if t.get("llm_usd_dia") is not None:
-            cap = min(cap, float(t["llm_usd_dia"]))                     # el dueño puede bajarlo, nunca subirlo
-        llm = LlmClassifier(key, limit_usd=cap, base_url=self._llm_base_url) if key else None
         return LiveTrader(market, session, self.clock, lim, alerts=self.alerts, journal=self.journal,
-                          capital=float(t["capital_usdt"]), llm=llm)
+                          capital=float(t["capital_usdt"]), llm=self.llm)
 
-    def _build_real_trader(self, session, lim):
+    def _build_real_trader(self, session, lim, real_session=None):
         """El operador de DINERO REAL, en paralelo al de práctica: misma noticia, misma decisión. Existe solo si el
-        dueño armó en esta PC (aunque esté vencido: así las posiciones abiertas salen normal).
+        dueño armó en esta PC (aunque esté vencido: así las posiciones abiertas salen normal). Con dinero real de
+        Binance usa `real_session`: sus propias conexiones, que nadie más ocupa (6-nov).
 
         Armado como SIMULACRO (`armar-real --simulacro`): el mismo operador real completo, pero las órdenes se
         ejecutan contra el libro real de MEXC en un exchange simulado (dryrun.py): nunca sale una orden."""
@@ -404,7 +460,7 @@ class Agent:
         if not isinstance(data, dict) or not self.cfg["trader"].get("real", True):
             return None
         if arming.venue_of(data) == "binance-futuros":
-            return self._build_binance_real_trader(session, lim, data)
+            return self._build_binance_real_trader(session, lim, data, real_session=real_session)
         if self._binance_base:                                 # prueba con un Binance falso: MEXC no corre
             return None
         sim = bool(data.get("simulacro"))
@@ -425,17 +481,62 @@ class Agent:
 
         return LiveTrader(market, session, self.clock, lim, alerts=self.alerts, journal=self.journal,
                           capital=float(data["capital_usdt"]) if sim else 0.0,     # real: todo el saldo (lo lee)
-                          llm=self.trader.llm if self.trader else None,
+                          llm=self.llm,
                           venue_factory=venue, base_dir=base_dir, real=True, simulated=sim)
 
-    def _build_binance_real_trader(self, session, lim, data):
+    def _binance_local_sim(self, session, lim, data, *, side: bool = False):
+        """El simulacro LOCAL de Binance: precios y libro de PRODUCCIÓN, órdenes simuladas acá (binance_dryrun.py).
+        Nunca usa la clave de trading: solo la de lectura, para el saldo y la comisión reales. `side`: el simulacro
+        junto al dinero real (SIMULACRO.json, 6-nov): nunca opera lo que opera la plata y nunca usa sus conexiones."""
+        from .execution.live import arming
+        from .execution.live.binance_dryrun import LocalDryRunClient
+        from .execution.live.binance_futures import BinanceClient
+        from .execution.live.binance_venue import BinanceVenue
+        from .live import LiveTrader
+        from .research.futures import BinanceFutures
+        home, lev = paths.home(), int(lim["per_trade"]["max_leverage"])
+        arm_file = arming.SIM_FILE if side else arming.ARM_FILE
+        market = BinanceFutures(max_leverage=lev, **({"base": self._binance_base} if self._binance_base else {}))
+        market.label = "SIMULACRO futuros Binance"
+        base_dir = home / "simulacro" / market.name
+        rkey, rsecret = self.env.get("BINANCE_LECTURA_KEY"), self.env.get("BINANCE_LECTURA_SECRET")
+        if self._binance_base:                                 # prueba con un Binance falso: nada de la cuenta real
+            rkey = rsecret = None
+
+        def local(registry, books, pf, clock):
+            reader = BinanceClient(session, rkey, rsecret) if rkey and rsecret else None
+            client = LocalDryRunClient(books, session, capital=float(data["capital_usdt"]), clock=clock,
+                                       public_base=self._binance_base, reader=reader,
+                                       state_path=base_dir / "exchange-simulado.json")
+            return BinanceVenue(client, session, registry, books, pf, clock, home=home, api_key="", limits=lim,
+                                leverage=lev, state_path=base_dir / "stops.json", simulated=True, arm_file=arm_file)
+
+        return LiveTrader(market, session, self.clock, lim, alerts=self.alerts, journal=self.journal,
+                          capital=float(data["capital_usdt"]), llm=self.llm, venue_factory=local, base_dir=base_dir,
+                          real=True, simulated=True, arm_file=arm_file, exclude_real=side)
+
+    def _build_sim_trader(self, session, lim):
+        """El simulacro JUNTO al dinero real (el dueño, 6-nov: la práctica sobra y el simulacro mide mejor; "siempre que
+        los simulacros de los demás módulos no compitan o afecten en nada a los módulos que trabajen con dinero real"):
+        solo si hay dinero real armado y `SIMULACRO.json` (simulacro local de Binance, plata de mentira)."""
+        from .execution.live import arming
+        home = paths.home()
+        real = paths.read_json(home / arming.ARM_FILE, None)
+        data = paths.read_json(home / arming.SIM_FILE, None)
+        if not (isinstance(real, dict) and not real.get("simulacro") and isinstance(data, dict)):
+            return None
+        if not (data.get("simulacro") and data.get("modo") == "local"
+                and arming.venue_of(data) == "binance-futuros"):
+            log.warning("SIMULACRO.json no es un simulacro local de Binance: no arranca")
+            return None
+        return self._binance_local_sim(session, lim, data, side=True)
+
+    def _build_binance_real_trader(self, session, lim, data, real_session=None):
         """Binance (desde el 4-nov-2026): el operador real con el venue de Binance. Tres modos:
-        - real: la clave de trading, todo el saldo de la cuenta;
-        - simulacro LOCAL (el de siempre desde el 4-nov): precios y libro de PRODUCCIÓN, órdenes simuladas en la PC
-          (binance_dryrun.py). Nunca usa la clave de trading: solo la de lectura, para el saldo y la comisión reales;
+        - real: la clave de trading, todo el saldo de la cuenta, con sus propias conexiones (`real_session`);
+        - simulacro LOCAL (el de siempre desde el 4-nov): `_binance_local_sim`;
         - simulacro DEMO: contra la demo de Binance (claves *_TEST): órdenes de verdad, plata ficticia.
         Las decisiones usan siempre los precios del Binance real."""
-        from .execution.live.binance_dryrun import LocalDryRunClient
         from .execution.live.binance_futures import BASE, DEMO, BinanceClient
         from .execution.live.binance_venue import BinanceVenue
         from .live import LiveTrader
@@ -446,24 +547,7 @@ class Agent:
         mode = (data.get("modo") or "demo") if sim else "real"
         lev = int(lim["per_trade"]["max_leverage"])
         if mode == "local":                                    # el capital real, 100 % aislado: sin clave de trading
-            market = BinanceFutures(max_leverage=lev, **({"base": self._binance_base} if self._binance_base else {}))
-            market.label = "SIMULACRO futuros Binance"
-            base_dir = home / "simulacro" / market.name
-            rkey, rsecret = self.env.get("BINANCE_LECTURA_KEY"), self.env.get("BINANCE_LECTURA_SECRET")
-            if self._binance_base:                             # prueba con un Binance falso: nada de la cuenta real
-                rkey = rsecret = None
-
-            def local(registry, books, pf, clock):
-                reader = BinanceClient(session, rkey, rsecret) if rkey and rsecret else None
-                client = LocalDryRunClient(books, session, capital=float(data["capital_usdt"]), clock=clock,
-                                           public_base=self._binance_base, reader=reader,
-                                           state_path=base_dir / "exchange-simulado.json")
-                return BinanceVenue(client, session, registry, books, pf, clock, home=home, api_key="", limits=lim,
-                                    leverage=lev, state_path=base_dir / "stops.json", simulated=True)
-
-            return LiveTrader(market, session, self.clock, lim, alerts=self.alerts, journal=self.journal,
-                              capital=float(data["capital_usdt"]), llm=self.trader.llm if self.trader else None,
-                              venue_factory=local, base_dir=base_dir, real=True, simulated=True)
+            return self._binance_local_sim(session, lim, data)
         if self._binance_base:                                 # con un Binance falso nunca hay órdenes de verdad
             log.warning("prueba con un Binance falso: el operador real (o la demo) no arranca")
             return None
@@ -475,16 +559,17 @@ class Agent:
         market = BinanceFutures(max_leverage=lev)
         market.label = "SIMULACRO futuros Binance (demo)" if sim else "REAL futuros Binance"
         base_dir = home / ("simulacro-demo" if sim else "real") / market.name
+        own = real_session if real_session is not None and not sim else session   # dinero real: sus conexiones
 
         def venue(registry, books, pf, clock):
-            client = BinanceClient(session, key, secret, base=DEMO if sim else BASE)
-            pricing = bfd.books(session, clock, DEMO) if sim else books
-            return BinanceVenue(client, session, registry, pricing, pf, clock, home=home, api_key=key, limits=lim,
+            client = BinanceClient(own, key, secret, base=DEMO if sim else BASE)
+            pricing = bfd.books(own, clock, DEMO) if sim else books
+            return BinanceVenue(client, own, registry, pricing, pf, clock, home=home, api_key=key, limits=lim,
                                 leverage=lev, state_path=base_dir / "stops.json", simulated=sim)
 
-        return LiveTrader(market, session, self.clock, lim, alerts=self.alerts, journal=self.journal,
+        return LiveTrader(market, own, self.clock, lim, alerts=self.alerts, journal=self.journal,
                           capital=float(data["capital_usdt"]) if sim else 0.0,     # real: todo el saldo (lo lee)
-                          llm=self.trader.llm if self.trader else None,
+                          llm=self.llm,
                           venue_factory=venue, base_dir=base_dir, real=True, simulated=sim)
 
     async def run(self) -> None:
@@ -526,7 +611,9 @@ class Agent:
             self.lag = LoopLagMonitor()
             tasks: list[asyncio.Task] = []
             webhook = None
-            async with aiohttp.ClientSession() as session:
+            # Dos grupos de conexiones: el del dinero real, que nadie más usa (6-nov: que el simulacro no compita con él),
+            # y el de todo lo demás (fuentes, práctica, simulacro).
+            async with aiohttp.ClientSession() as session, aiohttp.ClientSession() as real_session:
                 rng = random.Random()
                 self.pollers = [PollingSource(s, session, self.clock, self.ingestion.on_source_items, rng=rng)
                                 for s in enabled]
@@ -549,19 +636,7 @@ class Agent:
                                             host=wh["host"], port=wh["port"], senders=wh.get("senders") or {})
                     await webhook.start()
                 if cfg["trader"].get("enabled", True):
-                    self.trader = self._build_trader(session, lim)
-                    try:
-                        await self.trader.start()
-                    except Exception:                        # sin mercado, el agente igual lee y registra
-                        log.exception("no arrancó el operador en vivo")
-                        self.trader = None
-                    try:
-                        self.real_trader = self._build_real_trader(session, lim)
-                        if self.real_trader is not None:
-                            await self.real_trader.start()
-                    except Exception:                        # el de práctica sigue igual
-                        log.exception("no arrancó el operador de DINERO REAL")
-                        self.real_trader = None
+                    await self._start_traders(session, real_session, lim)
                 hb = Heartbeat(self.collect, interval_s=cfg["heartbeat_s"], printer=self.printer)
                 tasks += [asyncio.create_task(p.run(self.stop_event), name=f"fuente-{p.spec.id}") for p in self.pollers]
                 self.streams = self._build_streams(lim)
@@ -574,24 +649,27 @@ class Agent:
                           asyncio.create_task(self._print_accepted(), name="consola"),
                           asyncio.create_task(self._watch_stop_file(stop_file), name="parada")]
                 tasks.append(asyncio.create_task(self._probe_loop(session), name="red"))
-                market = getattr(self.trader, "market", None)
-                if getattr(market, "name", "") == "binance-futuros":          # las entradas al instante, sin saludo TLS
-                    tasks.append(asyncio.create_task(self._keep_warm(session, f"{market.base}/fapi/v1/time"),
-                                                     name="conexiones-tibias"))
+                for name, t in (("conexiones-tibias", self._on_binance(session)),            # sin saludo TLS en las
+                                ("conexiones-tibias-real", self._on_binance(real_session))):  # entradas al instante
+                    if t is not None:
+                        tasks.append(asyncio.create_task(self._keep_warm(t.session, f"{t.market.base}/fapi/v1/time"),
+                                                         name=name))
                 if self.telemetry is not None:
                     tasks.append(asyncio.create_task(self.telemetry.run(self.stop_event), name="telemetria"))
                     tasks.append(asyncio.create_task(self._export_board(), name="tablero-exportado"))
                 commands = self._build_commands()
                 if commands is not None:                             # órdenes del dueño por Telegram
                     tasks.append(asyncio.create_task(commands.run(self.stop_event), name="ordenes"))
-                if self.trader is not None:
+                # Cada operador con su propia vigilancia: antes la del dinero real colgaba de la práctica (si la práctica
+                # no arrancaba, las posiciones reales quedaban sin vigilar).
+                for name, t in (("vigilancia-real", self.real_trader), ("vigilancia-simulacro", self.sim_trader),
+                                ("vigilancia", self.trader)):
+                    if t is not None:
+                        tasks.append(asyncio.create_task(t.watch(self.stop_event), name=name))
+                if self.traders() and cfg["trader"].get("aprender", True):
                     from .live import learn_loop
-                    tasks.append(asyncio.create_task(self.trader.watch(self.stop_event), name="vigilancia"))
-                    if self.real_trader is not None:
-                        tasks.append(asyncio.create_task(self.real_trader.watch(self.stop_event), name="vigilancia-real"))
-                    if cfg["trader"].get("aprender", True):
-                        tasks.append(asyncio.create_task(learn_loop(self.stop_event, cfg, env, lim, home / "datos"),
-                                                         name="aprendizaje"))
+                    tasks.append(asyncio.create_task(learn_loop(self.stop_event, cfg, env, lim, home / "datos"),
+                                                     name="aprendizaje"))
                 log.info("agente %s en modo %s: %d fuentes activas, %d apagadas", __version__, cfg["mode"], len(enabled),
                          len(self.sources_off))
                 for sid, why in self.sources_off.items():
@@ -604,14 +682,14 @@ class Agent:
                         await asyncio.wait(set(self.news_tasks), timeout=10)
                     for t in tasks:
                         if t.get_name() in ("lag", "consola", "aprendizaje", "red", "ordenes", "telemetria", "tablero-exportado",
-                                            "conexiones-tibias") or \
+                                            "conexiones-tibias", "conexiones-tibias-real") or \
                                 t.get_name().startswith("fuente-"):
                             t.cancel()
                     await asyncio.wait(tasks, timeout=15)
                     if webhook:
                         await webhook.stop()
-                    if self.trader is not None and self.trader.llm is not None:
-                        await self.trader.llm.close()
+                    if self.llm is not None:
+                        await self.llm.close()
         finally:                                      # también con Ctrl+C en Windows (cancelación)
             self.journal.record("stop", uptime_s=round(time.time() - self.started, 1))
             await asyncio.to_thread(self.alerts.stop, 5)

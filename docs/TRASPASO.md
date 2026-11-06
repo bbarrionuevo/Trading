@@ -44,7 +44,13 @@ Lo que pidió, en sus palabras:
   dueño en Tokio: `armar-real --estrategias listado_upbit`, todo el saldo de futuros, vence el 6-dic). Verificado
   solo leyendo: el ejecutor puede abrir, `listado_upbit` pasa y las demás estrategias (y una orden sin estrategia)
   no; leyó el saldo y el 30 % pasa el mínimo de 5 USDT; sin pausa ni errores. El simulacro de 100 USDT dejó de
-  correr (el armado es uno solo); lo demás sigue en la práctica. Antes, el 6-nov:
+  correr (el armado es uno solo); lo demás sigue en la práctica.
+- **Sin práctica, con el simulacro junto al dinero real** (REGLAS v3.5, pedido del dueño del 6-nov: "la practica tiene
+  sentido? creo que es mejor los simulacros"; "opción 1 siempre que los simulacros de los demás módulos no compitan
+  o afecten en nada a los módulos que trabajen con dinero real"): en Tokio corren el dinero real (solo Upbit) y un
+  simulacro aparte (`SIMULACRO.json`, 100 USDT de mentira) de los demás módulos, en el mismo agente. El simulacro
+  nunca opera lo que opera la plata; el dinero real tiene sus propias conexiones con Binance y no lee las noticias
+  que no puede operar; la práctica está apagada (`trader.practica: false`). Antes, el 6-nov:
   Armado por estrategia (REGLAS v3.4, #67, fusionado por el dueño). El 6-nov a las 12:28 UTC se instaló en Tokio con
   #66 (el bucle y la memoria), #68 (la prueba en la PC) y #69 (conexiones tibias con Binance). La prueba de punta a
   punta en Tokio dio: listados de Upbit con la orden a los 50-57 ms la primera y 21-29 ms las demás, el deslistado a
@@ -183,8 +189,12 @@ a Tokio como motor. Lee este archivo primero, y lo que manda es esta lista:
      (y `--cuenta practica`; con dinero real, `--cuenta real`: sus montos no se publican nunca, G-8).
    - Las decisiones y operaciones están en `/home/ubuntu/.trading/simulacro/binance-futuros/`, `real/binance-futuros/`
      y `paper-vivo/`.
-   - El simulacro está armado hasta el 5-dic-2026, con 100 USDT de mentira. Si vence y no hay dinero real armado:
-     `armar-real --simulacro --dias 30` en el servidor, con `TRADING_HOME=/home/ubuntu/.trading`.
+   - El simulacro (100 USDT de mentira): con el dinero real armado es `~/.trading/SIMULACRO.json` (corre junto al real,
+     vence a los 30 días); sin dinero real, `ARMADO.json`. Si vence, en el servidor, con
+     `TRADING_HOME=/home/ubuntu/.trading`: `armar-real --simulacro --dias 30`. Con el dinero real armado ese comando
+     escribe solo `SIMULACRO.json` y nunca toca el armado real (reinicia al agente: hacerlo sin posiciones reales).
+   - El simulacro nunca opera lo del dinero real: en `simulacro/.../decisiones`, los listados de Upbit dicen
+     `la_opera_el_dinero_real`. Si aparece una entrada del simulacro en una estrategia del dinero real, avisar.
    - **Dinero real solo para los listados de Upbit** (sección 6): cada entrada real tiene que ser `listado_upbit`; las
      demás estrategias dicen `estrategia_no_armada` en `real/.../decisiones`. Si aparece otra estrategia operando con
      dinero real, frenar primero (`touch ~/.trading/KILL`) y avisar al dueño.
@@ -352,10 +362,13 @@ la semana (4 %) y el halt por caída (8 %). La IA lee el aviso después de entra
      frase. Vence a los 30 días; el agente se reinicia solo (si no, `sudo systemctl restart agente-tokio`).
    - Telegram tiene que decir "💵 DINERO REAL armado en Binance ... solo listados de Upbit al instante; lo demás, en
      práctica". `/estado` lo repite.
-5. Frenar: /pausa por Telegram, el KILL de la PC (se copia a Tokio en ~1 s), o por SSH `touch ~/.trading/KILL`,
+5. El simulacro de los demás módulos va junto al dinero real (REGLAS v3.5): `armar-real --simulacro --dias 30` con el
+   dinero real armado escribe `SIMULACRO.json` (local, 100 USDT de mentira) y nunca toca el armado real; se saca con
+   `armar-real --desarmar --simulacro`. Nunca opera lo que opera la plata. La práctica está apagada en Tokio.
+6. Frenar: /pausa por Telegram, el KILL de la PC (se copia a Tokio en ~1 s), o por SSH `touch ~/.trading/KILL`,
    `armar-real --desarmar` o `cerrar-todo` en el servidor. Volver al simulacro: `armar-real --desarmar` y
    `armar-real --simulacro --dias 30`.
-6. La telemetría al tablero no lleva montos reales. El tablero completo los trae por SSH (cifrado) y se ven solo en
+7. La telemetría al tablero no lleva montos reales. El tablero completo los trae por SSH (cifrado) y se ven solo en
    la PC. Lo publicado nunca los lleva.
 
 
@@ -721,5 +734,6 @@ sección 11). Un estudio nuevo va con su línea acá.
 | 6-nov | **Conexión nueva contra abierta con Binance, desde Tokio** (`curl`) | nueva ~45 ms (TLS ~43), abierta ~1,8 ms; aiohttp cierra las ociosas a los 15 s | 4 conexiones tibias con un pedido liviano cada 10 s; medir la primera entrada con la prueba en Tokio | sección 11 |
 | 6-nov | **Tokio con #66 a #69 (instalado 12:28 UTC), antes de armar dinero real** | prueba de punta a punta en Tokio, 2 corridas: la primera entrada (SOL) a los 50-57 ms (antes 68), ETH 21-29 ms, el corto de DOGE 24 ms; la IA confirma en 1,1-1,7 s; sin errores. En la 1.ª corrida el simulacro no entró en DOGE (la práctica sí) y no quedó el motivo: desde ahora la prueba imprime por qué no entró cada aviso. Memoria: 118-121 MB en los primeros 5 min, con 1 arena de hilos (8 MB; antes 9 arenas, 68-92 MB) | listo para que el dueño arme (sección 6); comparar la memoria a las mismas horas (1,7 h: antes 186 MB; 2,5 h: antes 200-216 MB) | sección 6 |
 | 6-nov | **Dinero real armado en Tokio, solo listados de Upbit** (13:11 UTC, el dueño) | `binance-real-check` primero falló (-2013: el stop de prueba no se veía a los ~3 ms) y pasó con #71 (el stop apareció a los 1,08 s); armado `--estrategias listado_upbit`, todo el saldo, 30 días. Verificado: el ejecutor puede abrir, solo `listado_upbit`, saldo leído y suficiente, sin pausa ni errores | operando con dinero real; lo demás en práctica | sección 6 |
+| 6-nov | **Práctica o simulacro para los demás módulos** (pregunta del dueño) | la práctica toma las mismas decisiones con un llenado genérico (80 ms supuestos); el simulacro es el código del dinero real con el libro real nivel por nivel. Tokio no está cargado (agente 1,4 % de CPU, carga 0,00-0,02, 366 MB libres + 1 GB de swap). En la PC cada pedido a Binance tarda ~320 ms (Tokio 2-5 ms): mediría peor los deslistados | en Tokio, sin práctica: simulacro junto al real que nunca compite (opción 1 del dueño, REGLAS v3.5) | sección 2 |
 | 5-nov | **Agente completo en Tokio (simulacro)** | Claude 1,8 s; Binance 2-5 ms (PC ~320 ms); fuentes OK salvo el sitio de Upbit (403); memoria: agente 77 MB y relé 63 MB de 416 | andando (`agente-tokio`); telemetría al tablero de la PC; la pausa de la PC frena a Tokio | RELE-TOKIO |
 | 5-nov | **1.ª operación del simulacro** | Wendy's, resultados: entró a los 120 s, salió a los 30 min, −0,27 USDT (−0,5 %); su comunicado salió minutos antes del 8-K | normal (pierden ~35 %) | simulacro |

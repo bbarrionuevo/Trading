@@ -187,11 +187,15 @@ def split_accounts(home: Path, hb: dict | None, now: float, include_real: bool =
     (`ARMADO.json`: real, simulacro local o en la demo, con su exchange). Antes se mostraban todas las carpetas, y la
     primera era el simulacro viejo de MEXC (4-nov: MEXC ya no corría)."""
     arm = read_json(home / "ARMADO.json", None)
-    armed = None
+    armed = set()
     if isinstance(arm, dict):
         kind = "real" if not arm.get("simulacro") else ("demo" if arm.get("modo") == "demo" else "simulacro")
-        armed = (kind, str((arm.get("venues") or ["mexc-futuros"])[0]))
+        armed.add((kind, str((arm.get("venues") or ["mexc-futuros"])[0])))
+        side = read_json(home / "SIMULACRO.json", None)              # el simulacro junto al dinero real (6-nov)
+        if kind == "real" and isinstance(side, dict) and side.get("simulacro"):
+            armed.add(("simulacro", str((side.get("venues") or ["binance-futuros"])[0])))
     trader = ((hb or {}).get("trader") or {}).get("mercado") if isinstance(hb, dict) else None
+    practice_off = isinstance(hb, dict) and hb.get("ts") and "trader" in hb and hb["trader"] is None
     found = []
     for kind, folder in KINDS:
         if kind == "real" and not include_real:
@@ -201,11 +205,11 @@ def split_accounts(home: Path, hb: dict | None, now: float, include_real: bool =
             if a:
                 found.append((kind, d.name, {**a, "tipo": kind, **({kind: True} if kind != "practica" else {})}))
     practice = [(n, a) for k, n, a in found if k == "practica"]
-    if trader is None and practice:                   # sin latido (o uno viejo): la práctica guardada más reciente
-        trader = max(practice, key=lambda x: float(x[1].get("actualizado") or 0))[0]
+    if trader is None and practice and not practice_off:   # sin latido: la práctica guardada más reciente (con
+        trader = max(practice, key=lambda x: float(x[1].get("actualizado") or 0))[0]   # latido sin práctica: apagada)
     active, old = [], []
     for kind, name, a in found:
-        running = name == trader if kind == "practica" else armed == (kind, name)
+        running = name == trader if kind == "practica" else (kind, name) in armed
         (active if running else old).append(a if running else {**a, "inactiva": True})
     return active, old
 
