@@ -161,8 +161,11 @@ esta lista:
 4. **Avisos oficiales:** medir la demora de punta a punta en Tokio (publicado, recibido, decisión y entrada).
    - En los listados de Upbit al instante, mirar `variante-ia.jsonl`: es la prueba A/B que pidió el dueño (entrar al
      instante contra esperar a la IA).
-   - Canal de Binance en Tokio: el único aviso medido hasta ahora (6-nov, TradFi) llegó 41 s después de publicado.
-     En la PC eran 1,2-1,8 s. Medir con más avisos antes de concluir.
+   - Canal de Binance en Tokio: el único aviso medido hasta ahora (6-nov, TradFi, "Will Support ... IBM, Apple") llegó
+     41 s después de publicado. En la PC eran 1,2-1,8 s. Su hora de publicación era redonda (01:00:00): parece
+     programado, y Binance lo empujó tarde (la lista de la PC no lo tenía, es de otra categoría). **Lo importante:** si
+     los deslistados también se programan a hora redonda y llegan tarde, el canal no alcanza para entrar en 2-5 s. En
+     cada aviso de Binance anotar la hora de publicación, si es redonda, y la demora, hasta tener ~10.
    - En el registro del agente, cada entrada al instante deja sus tiempos por etapa: "listado de Upbit al instante
      (X): esperó N ms · candado · contrato · velas, libro y precio · orden a los M ms". Lo mismo para los deslistados
      y la etiqueta de vigilancia.
