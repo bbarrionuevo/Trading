@@ -173,7 +173,7 @@ memoria (docs/TRASPASO.md §11). Desde entonces:
 
 - los servicios tienen memoria acotada (`MemoryHigh` / `MemoryMax`);
 - la PC avisa por Telegram si Tokio se calla 3 min;
-- hay un vigía de la red (`deploy/tokio/vigia-red.*`) para que instale el dueño.
+- hay un vigía de la red (`deploy/tokio/vigia-red.*`); lo instaló el dueño el 6-nov.
 
 **Actualizar o reinstalar:** con el CI de `main` en verde,
 `ssh -i C:\Users\Brian\.ssh\lightsail-tokio.pem ubuntu@<IP> "bash ~/trading/deploy/tokio/instalar-agente.sh"`

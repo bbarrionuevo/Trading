@@ -41,8 +41,11 @@ Lo que pidió, en sus palabras:
   el tablero completo de Tokio, que se ve como si el agente corriera en la PC. El simulacro de la PC quedó desarmado
   (3 operaciones, +1,00 USDT de mentira: se ve en "Cuentas que ya no corren").
 - **Dinero real:** todo listo salvo lo que hace el dueño (sección 6, "Dinero real desde Tokio").
-- **Reglas:** v3.2 fusionada (#54). La v3.3 (#58: 3 % en los listados de Upbit, nada se cancela en Binance antes de
-  5 s, lineamientos medidos) espera al dueño.
+- **Reglas:** v3.3 fusionada (#58): 3 % en los listados de Upbit, nada se cancela en Binance antes de 5 s,
+  lineamientos medidos (sección L de REGLAS).
+- **Servidor nuevo desde el 6-nov** (el viejo se quedó sin red el 5-nov; sección 11): ~900 MB, misma IP. Tiene
+  memoria acotada por servicio, aviso por Telegram si se calla y el vigía de la red, que instaló el dueño. La
+  instancia vieja ya no está.
 
 | Qué | Estado |
 |---|---|
@@ -88,12 +91,15 @@ del dueño.
 
 - **Conectarse:** `ssh -i C:\Users\Brian\.ssh\lightsail-tokio.pem -o BatchMode=yes ubuntu@<IP>`. La IP está en
   `host` de `%LOCALAPPDATA%\TRADING\relay.json`; nunca se escribe en el repo, que es público. La llave la dio el
-  dueño, y la PC ya conoce al servidor (`known_hosts`). Desde Git Bash anda igual. Ubuntu 22.04, 2 vCPU, **416 MB de
-  memoria sin swap**, 20 GB de disco.
+  dueño, y la PC ya conoce al servidor (`known_hosts`; huella ED25519 desde el 6-nov:
+  `SHA256:enk3HfrP3BHU2xGLZZHFExFRCxXAgEVsIfbBFYPrp1g`). **Usar el ssh de Git**
+  (`C:\Program Files\Git\usr\bin\ssh.exe`, o Git Bash): el de Windows rechaza la llave por sus permisos ("bad
+  permissions"). Ubuntu 22.04, 2 vCPU, **~900 MB de memoria** (desde el 6-nov), sin swap, 20 GB de disco.
 - **Servicios** (systemd, se reinician solos):
   - `rele-tokio`: el canal oficial de Upbit en Telegram y la lista de Binance; reparte por UDP 50005.
   - `agente-tokio`: `python -m tradingagent run` con `TRADING_HOME=/home/ubuntu/.trading`.
-  - Ver: `systemctl is-active rele-tokio agente-tokio`.
+  - `vigia-red.timer`: el vigía de la red, cada minuto (sección 11). Su registro: `sudo journalctl -t vigia-red`.
+  - Ver: `systemctl is-active rele-tokio agente-tokio vigia-red.timer`.
   - Logs: `sudo journalctl -u agente-tokio --since -1h --no-pager -p warning` (y `-u rele-tokio`).
 - **Carpetas:**
   - `/home/ubuntu/trading`: el repo, en `main`, con `.venv` de Python 3.11.
@@ -109,10 +115,9 @@ del dueño.
 - **Actualizar los dos servicios**, con el CI de `main` en verde:
   `ssh -i C:\Users\Brian\.ssh\lightsail-tokio.pem ubuntu@<IP> "bash ~/trading/deploy/tokio/instalar-agente.sh"`.
   Corre pip solo si cambiaron las dependencias, y con los servicios parados.
-- **Memoria:** el 5-nov a las 22:48 el kernel mató al agente por falta de memoria, mientras pip corría y el agente
-  arrancaba (pico de 148 MB). Hoy el agente usa ~80 MB y el relé ~60; quedan ~100 MB libres. Los servicios tienen
-  `OOMScoreAdjust=-500`, y el diario quedó íntegro (`journal-verify`). **Recomendado antes del dinero real:** el plan de
-  1 GB o un swap de 1 GB. Es un cambio del sistema y lo hace el dueño.
+- **Memoria:** el agente usa ~75-130 MB y el relé ~50-60 MB, y quedan ~400 MB libres. Los servicios tienen tope
+  (`MemoryHigh` / `MemoryMax`: agente 400 / 500 MB, relé 150 / 200 MB) y `OOMScoreAdjust=-500`. No correr procesos
+  pesados en el servidor. El 5-nov, con 416 MB, la falta de memoria dejó al servidor sin red (sección 11).
 - **Telegram de Upbit:** la sesión es de un número secundario del dueño. Si se cae (`STATUS` del relé: desconectado),
   el inicio de sesión lo hace el dueño (pide el código que le llega al teléfono):
   `cd ~/trading && .venv/bin/python -m tradingagent.relay.telegram_upbit --login`.
@@ -126,6 +131,38 @@ del dueño.
 - Su estado llega al tablero de la PC (sección "Servidor de Tokio") por telemetría firmada a través del relé; la pausa de la PC (KILL o /pausa) se copia sola al agente de Tokio.
 - **Desde el 5-nov a la noche, todo corre en Tokio** (pedido del dueño): la PC está en "solo tablero" (archivo `%LOCALAPPDATA%\TRADING\SOLO-TABLERO`): el supervisor no corre al agente, sirve el tablero, publica y late al relé (`relay/monitor.py`). El bot de Telegram está en Tokio. Volver atrás: borrar `SOLO-TABLERO` (y sacar `TELEGRAM_*` del `.env` del agente de Tokio, `docs/RELE-TOKIO.md`).
 - Actualizar los dos servicios (con el CI de `main` en verde): `ssh -i C:\Users\Brian\.ssh\lightsail-tokio.pem ubuntu@<IP> "bash ~/trading/deploy/tokio/instalar-agente.sh"`. Logs: `sudo journalctl -u agente-tokio -n 50` y `-u rele-tokio`.
+
+### Vigilancia (qué revisar en cada pasada, también la vigilancia programada de cada 3 h)
+
+La tarea programada "Vigilancia del simulacro de TRADING" lee este archivo primero. Su texto todavía describe a la PC
+como motor: cambiarlo necesita el permiso del dueño para editar tareas programadas. Mientras tanto, lo que manda es
+esta lista:
+
+1. **PC** (`%LOCALAPPDATA%\TRADING`):
+   - `state\supervisor.json`: modo `solo_tablero`, versión = `origin/main`, publicación `ok`.
+   - `state\tokio.json`: "agente" de menos de 2 min; "rele" con `telegram.conectado`.
+   - `state\tablero-tokio.json`: de menos de 5 min.
+   - El tablero (http://127.0.0.1:18765) dice que funciona y muestra las cuentas de Tokio.
+   - Que el agente de la PC no corra es lo normal.
+2. **Tokio** (por SSH, con el ssh de Git):
+   - `systemctl is-active rele-tokio agente-tokio vigia-red.timer`.
+   - `free -m`: más de 200 MB libres.
+   - `cd ~/trading && git log --oneline -1` = `origin/main`. Si quedó atrás y el CI está verde:
+     `bash ~/trading/deploy/tokio/instalar-agente.sh`.
+   - `sudo journalctl -u agente-tokio -u rele-tokio --since -3h --no-pager -p warning` y `sudo journalctl -t vigia-red`.
+   - Si no responde tres veces seguidas: avisar al dueño para que lo reinicie desde la consola de Lightsail, y no
+     tocar nada más.
+3. **Simulacro de Tokio:**
+   - `cd ~/trading && TRADING_HOME=/home/ubuntu/.trading .venv/bin/python -m tradingagent informe-simulacro --dias 1`
+     (y `--cuenta practica`).
+   - Las decisiones y operaciones están en `/home/ubuntu/.trading/simulacro/binance-futuros/` y en `paper-vivo/`.
+   - Armado hasta el 5-dic-2026, con 100 USDT de mentira. Si vence:
+     `armar-real --simulacro --dias 30` en el servidor, con `TRADING_HOME=/home/ubuntu/.trading`.
+4. **Avisos oficiales:** medir la demora de punta a punta en Tokio (publicado, recibido, decisión y entrada).
+   - En los listados de Upbit al instante, mirar `variante-ia.jsonl`: es la prueba A/B que pidió el dueño (entrar al
+     instante contra esperar a la IA).
+   - Canal de Binance en Tokio: el único aviso medido hasta ahora (6-nov, TradFi) llegó 41 s después de publicado.
+     En la PC eran 1,2-1,8 s. Medir con más avisos antes de concluir.
 
 ## 4. Cómo funciona (de la noticia a la orden)
 
@@ -247,10 +284,11 @@ Pausa sin comandos: crear `%LOCALAPPDATA%\TRADING\KILL`.
 Todo lo demás ya está: el agente en Tokio, la PC sin agente, un solo ejecutor (G-9), la pausa de la PC llega a Tokio y
 el bot está en Tokio.
 
-1. Fusionar el #58 (REGLAS v3.3).
+1. ✅ #58 (REGLAS v3.3) fusionado. ✅ Servidor de ~900 MB con el vigía de la red. La IP no cambió: la clave de trading
+   sigue restringida a esa IP.
 2. Confirmar la clave de trading de Tokio. Ya verificado (solo lectura de permisos): IP restringida sí, retiros no,
    transferencia interna no. Falta confirmar que sea de una subcuenta con solo el capital a operar (A-3).
-3. Recomendado: el plan de 1 GB o un swap en el servidor (la memoria de arriba).
+3. Antes de armar, mirar el informe del simulacro de Tokio (`informe-simulacro` en el servidor; sección "Vigilancia").
 4. En el servidor, por SSH:
    - `cd ~/trading && .venv/bin/python deploy/tokio/preparar_env.py --trading < /dev/null`: pasa la clave de trading
      al agente.
@@ -451,10 +489,11 @@ Para que no vuelva a pasar:
 3. **Aviso:** el supervisor de la PC en "solo tablero" avisa por Telegram si Tokio no manda nada en 3 min (y cada
    30 min si sigue), y cuando vuelve (`Supervisor.watch_tokio`).
 4. **Vigía de la red** (`deploy/tokio/vigia-red.*`): cada minuto, si la interfaz quedó "failed" o sin ruta, la
-   reconfigura o reinicia `systemd-networkd`. Es un cambio del sistema: lo instala el dueño, con los tres comandos
-   del encabezado de `vigia-red.sh`.
-5. **La instancia vieja tiene que quedar apagada o borrada.** Tiene la misma sesión de Telegram y el mismo bot: si
-   vuelve a tener red, se pisan las dos (dos lectores del bot, y la sesión de Telegram puede quedar revocada).
+   reconfigura o reinicia `systemd-networkd`. Es un cambio del sistema: **lo instaló el dueño el 6-nov a las 01:26
+   UTC** (`systemctl is-active vigia-red.timer`).
+5. **La instancia vieja ya no está** (el dueño, 6-nov). Si algún día se arma otra desde una instantánea, la anterior
+   tiene que quedar apagada: tienen la misma sesión de Telegram y el mismo bot, y si las dos tienen red se pisan (dos
+   lectores del bot, y la sesión de Telegram puede quedar revocada).
 
 Ver qué pasó en un arranque anterior: `sudo journalctl --list-boots` y `sudo journalctl -b -1 ...`. Ojo con
 `--since`: sin fecha toma la de hoy.
