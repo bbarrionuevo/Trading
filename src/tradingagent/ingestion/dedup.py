@@ -6,9 +6,16 @@ dieron: eso es corroboración, y la etapa de inteligencia la usa para subir la c
 deliberadamente conservador: fusionar dos eventos distintos haría perder uno (peor que contar dos veces
 una historia, que el riesgo ya acota con un trade por cluster). La similitud semántica con embeddings se
 enchufa en la etapa 2 sobre los mismos clusters.
+
+Dos reglas para no fusionar avisos distintos con la misma plantilla (6-nov: dos listados de Upbit, "솔라나(SOL) 신규
+거래지원 안내 (KRW, BTC, USDT 마켓)" y el de ETH, se parecían 0,62 > 0,6 y el segundo se perdía; en los 180 días del
+estudio pasó dos veces, KMNO y BSB a los 45 min, RSR y GTC a las 5 h):
+- si los títulos nombran otros tickers (palabras en mayúsculas: SOL, ETH, ALPACA...), son otra historia;
+- dos avisos oficiales (nivel 1) de la misma fuente con distinto enlace son dos avisos.
 """
 import hashlib
 import random
+import re
 from collections import OrderedDict
 from dataclasses import dataclass, field
 
@@ -16,6 +23,12 @@ from ..core.events import DedupResult, NewsItem
 from .normalize import canonical_url, title_key, tokens
 
 _P = (1 << 61) - 1                     # primo de Mersenne para las permutaciones de MinHash
+_TICKER = re.compile(r"(?<![A-Za-z0-9])[A-Z][A-Z0-9]{1,9}(?![A-Za-z0-9])")
+
+
+def tickers(title: str) -> frozenset[str]:
+    """Las palabras en mayúsculas del título (tickers y siglas): si difieren, no es la misma historia."""
+    return frozenset(_TICKER.findall(title or ""))
 
 
 def _h64(s: str) -> int:
@@ -44,6 +57,7 @@ class _Entry:
     bands: tuple
     url_key: str
     title_key: str
+    tickers: frozenset = frozenset()
 
 
 @dataclass
@@ -129,8 +143,14 @@ class DedupIndex:
             candidates = set()
             for b in sig_bands:
                 candidates |= self.buckets.get(b, set())
+            tk = tickers(item.title)
             for cid in candidates:
-                s = jaccard(sh, self.entries[cid].shingles)
+                e = self.entries[cid]
+                if e.tickers != tk:                       # otros activos: otra historia (misma plantilla)
+                    continue
+                if item.tier == 1 and e.source == item.source and url_key and e.url_key and e.url_key != url_key:
+                    continue                              # dos avisos oficiales distintos de la misma fuente
+                s = jaccard(sh, e.shingles)
                 if s > best:
                     best, best_id = s, cid
             if best_id is not None and best >= self.threshold:
@@ -143,7 +163,8 @@ class DedupIndex:
         cluster.sources.add(item.source)
         cluster.size += 1
         if item.id not in self.entries:
-            e = _Entry(item.id, cluster.id, item.source, self.clock.time(), sh, sig_bands, url_key, tkey)
+            e = _Entry(item.id, cluster.id, item.source, self.clock.time(), sh, sig_bands, url_key, tkey,
+                       tickers(item.title))
             self.entries[item.id] = e
             for b in sig_bands:
                 self.buckets.setdefault(b, set()).add(item.id)

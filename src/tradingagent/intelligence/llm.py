@@ -257,6 +257,16 @@ class LlmClassifier:
             self._client = AsyncAnthropic(api_key=self.key, max_retries=0, timeout=self.timeout_s, **kw)
         return self._client
 
+    async def warm_up(self) -> None:
+        """Al arrancar, el SDK de la IA se carga en otro hilo (en el servidor de Tokio tarda ~1,2 s). Si no, lo carga la
+        primera noticia DENTRO del bucle y frena todo ese tiempo, también las entradas al instante: medido el 6-nov,
+        el primer listado de Upbit esperó 1,1 s y el segundo 6 ms. No hace ninguna consulta (no gasta)."""
+        if not self.enabled or self._client is not None:
+            return
+        import importlib
+        await asyncio.to_thread(importlib.import_module, "anthropic")
+        self._get_client()
+
     async def close(self) -> None:
         if self._client is not None:
             await self._client.close()

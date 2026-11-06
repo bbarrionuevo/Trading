@@ -47,6 +47,22 @@ LAUNCH_POLL_S = 60.0                      # catálogo de Binance: contratos nuev
 UNIVERSE_EVERY_S = 600.0
 
 
+class Stopwatch:
+    """Los tiempos de una entrada al instante, por etapa, para el registro (en ms): así se ve en cada aviso real dónde
+    se va el tiempo (en los listados de Upbit, entre el segundo 1 y el 5 cada segundo cuenta: REGLAS L-6)."""
+
+    def __init__(self, received_at: float, clock):
+        self.t0 = time.perf_counter()
+        self.waited_ms = round((clock.time() - received_at) * 1000)      # desde que llegó el aviso hasta empezar
+        self.marks: list[tuple[str, int]] = []
+
+    def mark(self, name: str) -> None:
+        self.marks.append((name, round((time.perf_counter() - self.t0) * 1000)))
+
+    def text(self) -> str:
+        return f"esperó {self.waited_ms} ms · " + " · ".join(f"{n} a los {ms} ms" for n, ms in self.marks)
+
+
 class _LiveRun(shadow._Run):
     """Una "corrida" instantánea: las marcas salen del libro (no de velas cerradas)."""
 
@@ -94,6 +110,9 @@ class LiveTrader:
         if self.llm is not None and not self.real:     # el tope diario de la IA sobrevive a reinicios (C-4); lo
             self.llm.budget = llm_mod.Budget.from_dict(self.st.get("llm"))   # lleva la cuenta de práctica
         self.pf = shadow._portfolio(self.st, self.market)
+        warm = getattr(self.llm, "warm_up", None)      # la IA lista antes de la primera noticia (no la frena)
+        if warm is not None:
+            await warm()
         await self.refresh_universe()
         symbols = sorted(set(self.st["positions"]) | {self.market.symbol(a) for a in shadow.CORE})
         self.registry = await self.market.instruments(self.session, symbols, self.st["instruments"], now)
@@ -389,7 +408,9 @@ class LiveTrader:
             if self.market.universe.kind(coin) != CRYPTO:              # sin perpetuo de cripto en Binance: nada
                 return
             t0 = ing.item.published_at or ing.item.received_at
+            watch = Stopwatch(ing.item.received_at, self.clock)
             async with self.lock:
+                watch.mark("candado")
                 run = self.run()
                 now, sym = run.now, self.market.symbol(coin)
                 ev, sig = self._event(ing), delistings.signal(coin, category)
@@ -414,6 +435,8 @@ class LiveTrader:
                 else:
                     await run.enter(ev, sig, coin, self.risk_blocks(run),
                                     assessment=delistings.assessment(coin, late, category), prefetched=(book, tick))
+                    watch.mark("orden")
+                    log.info("%s al instante (%s): %s", category, coin, watch.text())
                     if sym in self.st["positions"] and self.llm is not None and self.llm.enabled:
                         task = asyncio.create_task(self._ai_second_read(ing, coin, sym, category),
                                                    name=f"segunda-lectura-{coin}")
@@ -440,7 +463,9 @@ class LiveTrader:
             if self.market.universe.kind(coin) != CRYPTO:              # sin perpetuo de cripto en Binance: nada
                 return
             t0 = ing.item.published_at or ing.item.received_at
+            watch = Stopwatch(ing.item.received_at, self.clock)
             async with self.lock:
+                watch.mark("candado")
                 run = self.run()
                 now, sym = run.now, self.market.symbol(coin)
                 ev, sig = self._event(ing), upbit_listings.signal(coin)
@@ -452,9 +477,11 @@ class LiveTrader:
                 self.registry = await self.market.instruments(self.session, [sym], self.st["instruments"], now)
                 run.reg = self.registry
                 self.venue.registry = self.registry
+                watch.mark("contrato")
                 _, book, tick = await asyncio.gather(
                     run.store.load({sym: [(minute(t0) - 130 * MIN, minute(now))]}), self._book_or_none(sym),
                     self._ticker_or_none(sym))
+                watch.mark("velas, libro y precio")
                 bar = (run.store.candles.get(sym) or {}).get(minute(t0))       # el minuto del aviso: (o, h, l, c)
                 if not bar or book is None or book.mid is None or tick is None:
                     run.record(ev, sig, sym, "no_entrar", ["sin_datos:precio_del_aviso_o_libro"])
@@ -464,6 +491,8 @@ class LiveTrader:
                     await run.enter(ev, sig, coin, self.risk_blocks(run),
                                     assessment=upbit_listings.assessment(coin, late), prefetched=(book, tick),
                                     relaxed=True)
+                    watch.mark("orden")
+                    log.info("listado de Upbit al instante (%s): %s", coin, watch.text())
                     if sym in self.st["positions"] and self.llm is not None and self.llm.enabled:
                         task = asyncio.create_task(self._ai_second_read(ing, coin, sym, upbit_listings.CATEGORY,
                                                                         upbit_listings.signal(coin)),
