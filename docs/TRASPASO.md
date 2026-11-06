@@ -40,7 +40,11 @@ Lo que pidió, en sus palabras:
   actualizándose, sirve el tablero y publica la rama `pc`. Late al relé (la pausa de la PC frena a Tokio) y trae por SSH
   el tablero completo de Tokio, que se ve como si el agente corriera en la PC. El simulacro de la PC quedó desarmado
   (3 operaciones, +1,00 USDT de mentira: se ve en "Cuentas que ya no corren").
-- **Dinero real, solo listados de Upbit (6-nov, pedido del dueño): listo para que lo arme el dueño** (sección 6).
+- **DINERO REAL ARMADO desde el 6-nov a las 13:11 UTC, solo para los listados de Upbit al instante** (lo armó el
+  dueño en Tokio: `armar-real --estrategias listado_upbit`, todo el saldo de futuros, vence el 6-dic). Verificado
+  solo leyendo: el ejecutor puede abrir, `listado_upbit` pasa y las demás estrategias (y una orden sin estrategia)
+  no; leyó el saldo y el 30 % pasa el mínimo de 5 USDT; sin pausa ni errores. El simulacro de 100 USDT dejó de
+  correr (el armado es uno solo); lo demás sigue en la práctica. Antes, el 6-nov:
   Armado por estrategia (REGLAS v3.4, #67, fusionado por el dueño). El 6-nov a las 12:28 UTC se instaló en Tokio con
   #66 (el bucle y la memoria), #68 (la prueba en la PC) y #69 (conexiones tibias con Binance). La prueba de punta a
   punta en Tokio dio: listados de Upbit con la orden a los 50-57 ms la primera y 21-29 ms las demás, el deslistado a
@@ -651,7 +655,8 @@ Los comandos, por si hay que rehacerlo en otro servidor:
   - **el stop Algo recién puesto también se ve con demora:** desde Tokio (6-nov) la consulta salía ~3 ms después de
     ponerlo y Binance contestaba -2013 "Order does not exist"; `binance-real-check` fallaba sin que nada estuviera
     mal (desde la PC, a ~0,3 s, siempre aparecía). Ahora la prueba espera hasta 5 s a que aparezca, y si falla
-    limpia recién a los 6 s de puesto (D-6). El operador real no consulta el stop al ponerlo (lo revisa la
+    limpia recién a los 6 s de puesto (D-6). Medido en la prueba del dueño (6-nov 13:10 UTC): el stop apareció a
+    los 1,08 s y su cancelación se vio a los 1,53 s. El operador real no consulta el stop al ponerlo (lo revisa la
     conciliación, cada 30 s);
   - `/fapi/v1/order/test` valida órdenes comunes sin mandarlas;
   - `aggTrades` históricos solo de los últimos 2 días (código -4166): para estudiar segundos, las velas de 1 s
@@ -715,5 +720,6 @@ sección 11). Un estudio nuevo va con su línea acá.
 | 6-nov | **Freno del bucle del agente en Tokio** (máximo de cada minuto del latido, cada 15 s) | normal 10-45 ms; 122 ms en la pasada de aprendizaje (rehacía la deduplicación en el bucle; en la PC 300-365 ms) y 60-95 ms cada 2 min con el tablero exportado (redactaba releyendo el entorno 1.008 veces) | la deduplicación en un hilo (en la PC, máximo 37-99 ms) y el entorno leído una vez (#66); medir otra vez en Tokio | sección 11 |
 | 6-nov | **Conexión nueva contra abierta con Binance, desde Tokio** (`curl`) | nueva ~45 ms (TLS ~43), abierta ~1,8 ms; aiohttp cierra las ociosas a los 15 s | 4 conexiones tibias con un pedido liviano cada 10 s; medir la primera entrada con la prueba en Tokio | sección 11 |
 | 6-nov | **Tokio con #66 a #69 (instalado 12:28 UTC), antes de armar dinero real** | prueba de punta a punta en Tokio, 2 corridas: la primera entrada (SOL) a los 50-57 ms (antes 68), ETH 21-29 ms, el corto de DOGE 24 ms; la IA confirma en 1,1-1,7 s; sin errores. En la 1.ª corrida el simulacro no entró en DOGE (la práctica sí) y no quedó el motivo: desde ahora la prueba imprime por qué no entró cada aviso. Memoria: 118-121 MB en los primeros 5 min, con 1 arena de hilos (8 MB; antes 9 arenas, 68-92 MB) | listo para que el dueño arme (sección 6); comparar la memoria a las mismas horas (1,7 h: antes 186 MB; 2,5 h: antes 200-216 MB) | sección 6 |
+| 6-nov | **Dinero real armado en Tokio, solo listados de Upbit** (13:11 UTC, el dueño) | `binance-real-check` primero falló (-2013: el stop de prueba no se veía a los ~3 ms) y pasó con #71 (el stop apareció a los 1,08 s); armado `--estrategias listado_upbit`, todo el saldo, 30 días. Verificado: el ejecutor puede abrir, solo `listado_upbit`, saldo leído y suficiente, sin pausa ni errores | operando con dinero real; lo demás en práctica | sección 6 |
 | 5-nov | **Agente completo en Tokio (simulacro)** | Claude 1,8 s; Binance 2-5 ms (PC ~320 ms); fuentes OK salvo el sitio de Upbit (403); memoria: agente 77 MB y relé 63 MB de 416 | andando (`agente-tokio`); telemetría al tablero de la PC; la pausa de la PC frena a Tokio | RELE-TOKIO |
 | 5-nov | **1.ª operación del simulacro** | Wendy's, resultados: entró a los 120 s, salió a los 30 min, −0,27 USDT (−0,5 %); su comunicado salió minutos antes del 8-K | normal (pierden ~35 %) | simulacro |
