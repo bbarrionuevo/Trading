@@ -287,7 +287,7 @@ class Supervisor:
             self.mirror = TokioBoardMirror.from_home(self.home)
             if self.mirror is not None:
                 self.mirror.start()
-                log.info("solo tablero: traigo el tablero completo de Tokio por SSH cada 30 s")
+                log.info("solo tablero: traigo el tablero completo de Tokio por SSH cada minuto (%s)", self.mirror.ssh)
 
     def watch_tokio(self, now: float | None = None) -> str:
         """Solo tablero: si Tokio deja de mandar su telemetría (el agente y el relé) más de 3 min, avisa por Telegram
@@ -504,6 +504,7 @@ class Supervisor:
                    "anda bien. No hace falta que hagas nada; quedó anotado para revisarlo.", self.env)
             return "rechazada"
         self.version = remote
+        self.state["version"] = remote[:12]            # en solo tablero no se relanza al agente: se anota acá
         self.state.pop("pendiente", None)
         self.event("actualizaciones", de=head[:7], a=remote[:7], resultado="ok", titulo=subject[:120])
         notify(f"🔄 Actualicé TRADING (versión {remote[:7]}): {change_title(subject, body)[:150]}. Sigue "

@@ -10,6 +10,7 @@ Por SSH (cifrado y con la llave del dueño): la versión local puede llevar mont
 import gzip
 import json
 import logging
+import os
 import shutil
 import subprocess
 import threading
@@ -23,6 +24,16 @@ EVERY_S = 60.0                                  # el agente de Tokio lo arma cad
 REMOTE_FILE = "/home/ubuntu/.trading/state/tablero-exportado.json"
 LOCAL_FILE = "tablero-tokio.json"
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+WARN_EVERY_S = 1800                                  # una falla se anota como aviso, y después cada 30 min si sigue
+
+
+def find_ssh() -> str | None:
+    """El ssh de Git primero: el de Windows (OpenSSH) rechaza la llave si otros usuarios de la PC pueden leerla ("bad
+    permissions", visto el 6-nov), y el de Git no. Así no hace falta tocar los permisos de la llave del dueño."""
+    git_ssh = Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Git" / "usr" / "bin" / "ssh.exe"
+    if os.name == "nt" and git_ssh.exists():
+        return str(git_ssh)
+    return shutil.which("ssh")
 
 
 class TokioBoardMirror:
@@ -31,12 +42,13 @@ class TokioBoardMirror:
         self.home, self.host, self.user = Path(home), host, user
         self.key = Path(key) if key else Path.home() / ".ssh" / "lightsail-tokio.pem"
         self.every_s, self.remote_file = every_s, remote_file
-        self.ssh = ssh or shutil.which("ssh")
+        self.ssh = ssh or find_ssh()
         self.out = self.home / "state" / LOCAL_FILE
         self.stop_event = threading.Event()
         self.thread: threading.Thread | None = None
         self.counts = {"ok": 0, "fallas": 0}
         self.last_error = ""
+        self._warned_at = float("-inf")                 # para avisar en el registro sin llenarlo
 
     @classmethod
     def from_home(cls, home: Path, **kw) -> "TokioBoardMirror | None":
@@ -44,7 +56,7 @@ class TokioBoardMirror:
         conf = paths.read_json(Path(home) / "relay.json", None) or {}
         ssh_conf = conf.get("ssh") or {}
         key = Path(ssh_conf.get("llave") or Path.home() / ".ssh" / "lightsail-tokio.pem")
-        if not conf.get("host") or not key.exists() or not shutil.which("ssh"):
+        if not conf.get("host") or not key.exists() or not find_ssh():
             return None
         return cls(home, conf["host"], user=ssh_conf.get("usuario") or "ubuntu", key=key, **kw)
 
@@ -75,8 +87,13 @@ class TokioBoardMirror:
         except (OSError, subprocess.SubprocessError, RuntimeError, ValueError) as e:
             self.counts["fallas"] += 1
             self.last_error = str(e)[:200]
-            log.debug("espejo de Tokio: %s", self.last_error)
+            if time.monotonic() - self._warned_at > WARN_EVERY_S:   # se ve en el registro del supervisor
+                self._warned_at = time.monotonic()
+                log.warning("no pude traer el tablero de Tokio por SSH (%s): %s", self.ssh, self.last_error)
             return False
+        if self._warned_at > float("-inf"):
+            log.info("el tablero de Tokio volvió a llegar por SSH")
+            self._warned_at = float("-inf")
         self.counts["ok"] += 1
         return True
 
