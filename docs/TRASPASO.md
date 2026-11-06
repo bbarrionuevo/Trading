@@ -150,6 +150,9 @@ a Tokio como motor. Lee este archivo primero, y lo que manda es esta lista:
    - `cd ~/trading && git log --oneline -1` = `origin/main`. Si quedó atrás y el CI está verde:
      `bash ~/trading/deploy/tokio/instalar-agente.sh`.
    - `sudo journalctl -u agente-tokio -u rele-tokio --since -3h --no-pager -p warning` y `sudo journalctl -t vigia-red`.
+     "poca memoria en el servidor" en el registro: mirar si coincide con `unattended-upgrades`
+     (`sudo tail /var/log/unattended-upgrades/unattended-upgrades.log`) y anotarlo (sección 11).
+   - `[ -f /var/run/reboot-required ]`: el sistema pide reinicio (lo hace el dueño, a hora tranquila).
    - Si no responde tres veces seguidas: avisar al dueño para que lo reinicie desde la consola de Lightsail, y no
      tocar nada más.
 3. **Simulacro de Tokio:**
@@ -507,6 +510,27 @@ Para que no vuelva a pasar:
 
 Ver qué pasó en un arranque anterior: `sudo journalctl --list-boots` y `sudo journalctl -b -1 ...`. Ojo con
 `--since`: sin fecha toma la de hoy.
+
+**La actualización automática de Ubuntu (6-nov, 06:10 UTC):** `unattended-upgrades` instaló sola unos 20 paquetes
+(apt, curl, git, certificados y un núcleo nuevo).
+
+- Durante ~10 min la memoria libre bajó a 59-186 MB: tres procesos de ~170 MB y otro de 99 MB.
+- Reinició `systemd-networkd` (06:12:41) y dejó el sistema pidiendo un reinicio por el núcleo nuevo
+  (`/var/run/reboot-required`).
+- Nuestros servicios aguantaron (topes de memoria y `OOMScoreAdjust`), sin muertes por memoria y con la red bien.
+- El horario es malo: las 06:10 UTC son las 15:10 en Corea, hora de avisos de Upbit, y la actualización compite por
+  memoria y CPU con las entradas al instante.
+- Desde el #64, el latido trae la memoria libre del servidor (el tablero la muestra en rojo con menos de 150 MB), y
+  con menos de 120 MB queda el aviso "poca memoria en el servidor" en el registro del agente.
+
+**Recomendado (cambios del sistema: los hace el dueño, en la consola SSH de Lightsail):**
+
+1. Un swap de 1 GB, para que estos picos no aprieten:
+   `sudo fallocate -l 1G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile && echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab`
+2. Las actualizaciones automáticas a las 15:00 UTC (medianoche en Corea, mañana en Nueva York, pocos avisos):
+   `sudo mkdir -p /etc/systemd/system/apt-daily-upgrade.timer.d && printf '[Timer]\nOnCalendar=\nOnCalendar=*-*-* 15:00\nRandomizedDelaySec=10min\n' | sudo tee /etc/systemd/system/apt-daily-upgrade.timer.d/hora.conf && sudo systemctl daemon-reload`
+3. Reiniciar el servidor a esa hora tranquila para el núcleo nuevo: `sudo reboot`. Los servicios arrancan solos, el
+   simulacro y los stops quedan guardados, y la PC avisa por Telegram si Tokio no vuelve en 3 min.
 
 **Dos trampas encontradas con la prueba de punta a punta (6-nov):**
 

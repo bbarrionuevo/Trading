@@ -38,6 +38,7 @@ from .marketdata.peso import MONITOR as PESO
 from .marketdata.providers import RestBookProvider
 from .telemetry.heartbeat import Heartbeat
 from .telemetry.journal import Journal
+from .telemetry.remota import rss_mb, system_free_mb
 
 log = logging.getLogger("tradingagent")
 STOP_FILE, STOP_POLL_S = "parar", 1.0
@@ -192,6 +193,7 @@ class Agent:
                          "duplicadas": c.get("duplicado_exact", 0) + c.get("duplicado_near", 0),
                          "ruido": c.get("ruido", 0), "backlog": c.get("backlog", 0)},
                 "dedup": self.ingestion.dedup.stats(), "loop_lag": self.lag.stats(), "peso_binance": PESO.snapshot(),
+                "mem_libre_mb": system_free_mb(), "mem_agente_mb": rss_mb(),
                 "portfolio": self.venue.portfolio.snapshot(self.venue.marks), "paper": self.venue.summary()
                 | {"portfolio": None}, "execution": self.execution.counts, "alerts": self.alerts.snapshot(),
                 "journal": self.journal.snapshot(), "bus": self.bus.stats(),

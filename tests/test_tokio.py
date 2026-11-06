@@ -396,3 +396,24 @@ def test_el_latido_publicado_por_el_tablero_esconde_la_cuenta_real():
                             {"ts": time.time(), "real": {"simulacro": False, "equity": "999.9"}})
     assert "999.9" not in json.dumps(dashboard.gather(home, include_real=False), default=str)
     assert dashboard.gather(home)["agente"]["real"]["equity"] == "999.9"        # en la PC, sí
+
+
+def test_la_memoria_del_servidor_va_en_el_latido_y_avisa_si_falta(tmp_path, caplog):
+    """6-nov: la actualización automática de Ubuntu dejó al servidor con 59 MB libres unos minutos. La memoria libre
+    va en el latido (el tablero la muestra) y, con menos de 120 MB, queda un aviso en el registro (uno cada 10 min)."""
+    import logging
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text("MemTotal:  935936 kB\nMemFree:  72000 kB\nMemAvailable:  61440 kB\n", encoding="ascii")
+    assert remota.system_free_mb(str(meminfo)) == 60.0
+    assert remota.system_free_mb(str(tmp_path / "no-existe")) is None
+    t = remota.RemoteTelemetry(FakeAgent(FakeTrader(True, True)))
+    with caplog.at_level(logging.WARNING, logger="tradingagent.telemetria"):
+        assert t.watch_memory(60.0, now=0) and "60 MB libres" in caplog.text
+        assert not t.watch_memory(55.0, now=300)                              # no repite enseguida
+        assert t.watch_memory(55.0, now=700)
+        assert not t.watch_memory(400.0, now=2000)                            # con memoria, nada
+    paths.write_json_atomic(paths.home() / "state" / "heartbeat.json",
+                            {"ts": time.time(), "mem_libre_mb": 90.0, "mem_agente_mb": 160.0})
+    html = dashboard.page(dashboard.gather(paths.home()))
+    assert "90 MB libres" in html and "el agente usa 160.0 MB" in html
+

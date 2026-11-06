@@ -480,6 +480,10 @@ def fragment(s: dict) -> str:
         ["Noticias", f"{news.get('aceptadas', 0)} aceptadas · {news.get('stale', 0)} viejas · "
                      f"{news.get('duplicadas', 0)} duplicadas · {news.get('ruido', 0)} ruido"],
         ["Velocidad", f"lag del bucle p99 {e(str(lag.get('p99_ms', '—')))} ms"],
+        *([["Memoria del servidor", (f'<span class="down">{hb["mem_libre_mb"]:.0f} MB libres</span>'
+                                    if hb["mem_libre_mb"] < 150 else f'{hb["mem_libre_mb"]:.0f} MB libres')
+            + f" · el agente usa {e(str(hb.get('mem_agente_mb') or '—'))} MB"]]
+          if isinstance(hb.get("mem_libre_mb"), int | float) else []),
         ["Telegram", f"{e(str(al.get('health', '—')))} · cola {al.get('queued', 0)}"
                      + (f" · último error: {e(str(al.get('last_error'))[:120])}" if al.get("last_error") else "")],
         ["Diario", f"{jr.get('written', 0)} registros · {jr.get('dropped', 0)} perdidos"],
