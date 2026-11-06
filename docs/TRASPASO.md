@@ -41,6 +41,8 @@ Lo que pidió, en sus palabras:
   el tablero completo de Tokio, que se ve como si el agente corriera en la PC. El simulacro de la PC quedó desarmado
   (3 operaciones, +1,00 USDT de mentira: se ve en "Cuentas que ya no corren").
 - **Dinero real:** todo listo salvo lo que hace el dueño (sección 6, "Dinero real desde Tokio").
+- **Dinero real, solo listados de Upbit (6-nov, pedido del dueño):** armado por estrategia (REGLAS v3.4, PR
+  protegido); lo arma el dueño con los pasos de la sección 6. Lo demás sigue en práctica.
 - **Reglas:** v3.3 fusionada (#58): 3 % en los listados de Upbit, nada se cancela en Binance antes de 5 s,
   lineamientos medidos (sección L de REGLAS).
 - **Servidor nuevo desde el 6-nov** (el viejo se quedó sin red el 5-nov; sección 11): ~900 MB, misma IP. Tiene
@@ -304,25 +306,36 @@ Pausa sin comandos: crear `%LOCALAPPDATA%\TRADING\KILL`.
 
 ## 6. Vigilar con dinero real
 
-### Dinero real desde Tokio: lo que falta, y lo hace el dueño
+### Dinero real desde Tokio: solo los listados de Upbit (pedido del dueño, 6-nov); lo arma el dueño
 
-Todo lo demás ya está: el agente en Tokio, la PC sin agente, un solo ejecutor (G-9), la pausa de la PC llega a Tokio y
-el bot está en Tokio.
+Pedido del dueño (6-nov): "el módulo de inversión automática (y luego preguntar a la Api IA) de upbit (escucha por
+telegram) ya quede funcionando con dinero real (todo el de la cuenta binance)", y lo demás en pruebas hasta entenderlo.
+Para eso está el **armado por estrategia** (REGLAS v3.4, A-2): `armar-real --estrategias listado_upbit`. Solo esa
+estrategia abre con dinero real; las demás siguen en la **práctica** (`paper-vivo`, 120 USDT simulados). El simulacro
+de 100 USDT deja de correr mientras haya dinero real armado (el armado es uno solo).
 
-1. ✅ #58 (REGLAS v3.3) fusionado. ✅ Servidor de ~900 MB con el vigía de la red. La IP no cambió: la clave de trading
-   sigue restringida a esa IP.
-2. Confirmar la clave de trading de Tokio. Ya verificado (solo lectura de permisos): IP restringida sí, retiros no,
-   transferencia interna no. Falta confirmar que sea de una subcuenta con solo el capital a operar (A-3).
-3. Antes de armar, mirar el informe del simulacro de Tokio (`informe-simulacro` en el servidor; sección "Vigilancia").
-4. En el servidor, por SSH:
+**Tamaño:** todo el saldo de la cuenta de futuros es el capital. Cada listado arriesga el 3 % del saldo al stop de 10 %:
+entra con ~30 % del saldo (L-3; más pide ~30 operaciones reales y el OK del dueño). Siguen el freno del día (2 %), el de
+la semana (4 %) y el halt por caída (8 %). La IA lee el aviso después de entrar y, si no lo confirma, cierra (L-1).
+
+1. ✅ Servidor de ~900 MB con el vigía de la red; la clave de trading está restringida a la IP de Tokio, sin retiros
+   ni transferencia interna (verificado leyendo sus permisos).
+2. En Binance (el dueño): la billetera de futuros USDⓈ-M tiene **solo** lo que se quiere arriesgar (el programa usa
+   todo ese saldo, A-3), y la cuenta está en modo de posición unidireccional y de un solo activo.
+3. Fusionar el PR del armado por estrategia (protegido, lo fusiona el dueño). Claude lo instala en Tokio y corre la
+   prueba de punta a punta (`prueba_listado.py`).
+4. En el servidor, por SSH (los corre el dueño):
    - `cd ~/trading && .venv/bin/python deploy/tokio/preparar_env.py --trading < /dev/null`: pasa la clave de trading
      al agente.
    - `TRADING_HOME=/home/ubuntu/.trading .venv/bin/python -m tradingagent binance-real-check`: la prueba sin riesgo
-     con órdenes. La corre el dueño.
-   - `TRADING_HOME=/home/ubuntu/.trading .venv/bin/python -m tradingagent armar-real`: su frase.
-   - `sudo systemctl restart agente-tokio`.
+     con órdenes (una que no se puede ejecutar y un stop lejísimos; nada queda abierto).
+   - `TRADING_HOME=/home/ubuntu/.trading .venv/bin/python -m tradingagent armar-real --estrategias listado_upbit`: su
+     frase. Vence a los 30 días; el agente se reinicia solo (si no, `sudo systemctl restart agente-tokio`).
+   - Telegram tiene que decir "💵 DINERO REAL armado en Binance ... solo listados de Upbit al instante; lo demás, en
+     práctica". `/estado` lo repite.
 5. Frenar: /pausa por Telegram, el KILL de la PC (se copia a Tokio en ~1 s), o por SSH `touch ~/.trading/KILL`,
-   `armar-real --desarmar` o `cerrar-todo` en el servidor.
+   `armar-real --desarmar` o `cerrar-todo` en el servidor. Volver al simulacro: `armar-real --desarmar` y
+   `armar-real --simulacro --dias 30`.
 6. La telemetría al tablero no lleva montos reales. El tablero completo los trae por SSH (cifrado) y se ven solo en
    la PC. Lo publicado nunca los lleva.
 

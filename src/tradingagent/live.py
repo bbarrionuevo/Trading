@@ -27,6 +27,7 @@ from .core.bus import EventBus
 from .decision import delistings, earnings, launches, upbit_listings
 from .decision.policy import PolicyConfig, assess, news_blocks
 from .decision.risk import RiskState
+from .execution.live import arming
 from .execution.paper import PaperConfig, PaperVenue
 from .execution.service import ExecutionService
 from .intelligence import llm as llm_mod
@@ -99,6 +100,7 @@ class LiveTrader:
         self.pending: set[asyncio.Task] = set()                      # resultados esperando su minuto 2
         self.discarded: frozenset = frozenset()                      # estrategias descartadas por sus resultados
         self._verdict_at = float("-inf")
+        self._only: tuple = (None, None)                             # (huella de ARMADO.json, estrategias armadas)
 
     # -- arranque y estado ------------------------------------------------------------------------------
     async def start(self) -> None:
@@ -163,12 +165,35 @@ class LiveTrader:
     def learned(self) -> dict:
         return paths.read_json(self.learned_path, None) or {}
 
+    def armed_only(self) -> frozenset | None:
+        """Real o simulacro armado solo para algunas estrategias (`armar-real --estrategias`; el dueño, 6-nov: solo los
+        listados de Upbit con dinero real): las demás no abren acá y siguen en la práctica. None: todas (la práctica
+        no tiene armado). Lee ARMADO.json solo si cambió."""
+        if not self.real:
+            return None
+        path = self.home / arming.ARM_FILE
+        try:
+            st = path.stat()
+        except OSError:                                                # sin armado el venue no abre nada igual
+            return None
+        mark = (st.st_mtime_ns, st.st_size)
+        if self._only[0] != mark:
+            data = paths.read_json(path, None)
+            only = data.get("estrategias") if isinstance(data, dict) else None
+            self._only = (mark, frozenset(str(s) for s in only) if isinstance(only, list) else None)
+        return self._only[1]
+
+    def allows(self, category: str) -> bool:
+        only = self.armed_only()
+        return only is None or category in only
+
     def run(self) -> _LiveRun:
         store = self.market.candle_store(self.session)
         run = _LiveRun(self.market, self.st, self.pf, self.registry, self.service, self.books, store, self.clock,
                        self.limits, self, self.clock.time(), self.cfg, MetaModel(self.learned().get("meta")),
                        self.session)
         run.discarded = self.discarded
+        run.only = self.armed_only()
         return run
 
     async def refresh_verdicts(self) -> None:
@@ -266,19 +291,21 @@ class LiveTrader:
                    for a in sig.assets)
 
     async def on_news(self, ing) -> None:
+        # Las reglas al instante de una estrategia que este armado no incluye ni piden datos (no frenan a las que sí).
         cik = earnings.filing_cik(ing.item.source, ing.item.title, ing.item.body)
-        if cik is not None and hasattr(self.market, "universe"):    # 8-K de resultados: se mide a los 2 minutos
-            task = asyncio.create_task(self._earnings(ing, cik), name=f"resultados-{cik}")
+        if cik is not None and hasattr(self.market, "universe") and self.allows(earnings.CATEGORY):
+            task = asyncio.create_task(self._earnings(ing, cik), name=f"resultados-{cik}")   # se mide a los 2 minutos
             self.pending.add(task)
             task.add_done_callback(self.pending.discard)
         kind, delisted = (delistings.notice(ing.item.source, ing.item.title)
                           if getattr(self.market, "name", "") == "binance-futuros" else (None, ()))
-        for coin in delisted:                          # deslistado o etiqueta de vigilancia de Binance: ya, sin la IA
-            task = asyncio.create_task(self._delisting(ing, coin, kind.category), name=f"{kind.category}-{coin}")
+        for coin in delisted if kind is not None and self.allows(kind.category) else ():   # deslistado o etiqueta de
+            task = asyncio.create_task(self._delisting(ing, coin, kind.category),         # vigilancia: ya, sin la IA
+                                       name=f"{kind.category}-{coin}")
             self.pending.add(task)
             task.add_done_callback(self.pending.discard)
         listed = self.upbit_fast(ing)
-        for coin in listed:                            # listado de Upbit que llegó a tiempo (Telegram): ya, sin la IA
+        for coin in listed if self.allows(upbit_listings.CATEGORY) else ():   # listado de Upbit a tiempo: ya, sin la IA
             task = asyncio.create_task(self._upbit_listing(ing, coin), name=f"listado-upbit-{coin}")
             self.pending.add(task)
             task.add_done_callback(self.pending.discard)
