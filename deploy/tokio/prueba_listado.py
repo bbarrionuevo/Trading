@@ -4,7 +4,9 @@ simulacro), SIN tocar nada de verdad:
   sin aprendizaje;
 - un relé de prueba en otro puerto, sin Telegram (la sesión de Upbit sigue siendo solo del relé de verdad).
 Le manda dos avisos de listado armados a mano (SOL y, 15 s después, ETH: la misma plantilla de Upbit), como si
-Telegram los trajera 1 s después del sitio, y un deslistado de Binance (DOGE, por la lista de anuncios: entra corto).
+Telegram los trajera 1 s después del sitio, un deslistado de Binance (DOGE, por la lista de anuncios: entra corto) y un
+listado de Binance (PEPE, publicado 1,17 s antes, como llegó el canal de anuncios a Tokio el 6-nov: entra largo en
+1000PEPEUSDT, la regla al instante de decision/binance_listings.py).
 Mide cuánto tarda en entrar (orden simulada contra el libro) e imprime la línea de tiempo y la segunda lectura de la IA
 (unas pocas consultas: centavos de dólar). Al final borra todo. Nunca imprime claves.
 
@@ -38,6 +40,7 @@ from tradingagent.core.events import NewsItem
 from tradingagent.ingestion.catalog import DEFAULT_SOURCES
 from tradingagent.relay import server
 
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")      # Windows con la salida a un archivo: cp1252 no alcanza
 PC = "--pc" in sys.argv[1:]
 REPO = Path(__file__).resolve().parents[2]
 HOME = Path(tempfile.mkdtemp(prefix="prueba-tokio-")) if PC else Path("/tmp/prueba-tokio")
@@ -45,6 +48,8 @@ PORT = 50016
 AGENT_ENV = (Path(os.environ.get("LOCALAPPDATA", "")) / "TRADING" / ".env") if PC else Path("/home/ubuntu/.trading/.env")
 NOTICES = (("SOL", "솔라나"), ("ETH", "이더리움"))
 DELIST = "Binance Will Delist DOGE on 2026-12-20"                # la otra regla al instante: corto en el perpetuo
+LISTING = "Binance Will List Pepe (PEPE) with Seed Tag Applied"  # listado de Binance al instante: largo en 1000PEPEUSDT
+TEST_SYMBOLS = ("SOLUSDT", "ETHUSDT", "DOGEUSDT", "1000PEPEUSDT")
 BASE = HOME / "simulacro" / "binance-futuros"
 TOKIO_MS = 3.0                                                  # Binance desde Tokio: 2-5 ms por pedido
 # El Binance falso de los tests, en otro proceso (no comparte el bucle del agente), con la demora de Tokio por pedido.
@@ -131,7 +136,7 @@ def report(first_sent: float) -> int:
               f"USDT de mentira")
     entered = {t.get("symbol") for t in entries}
     for d in rows(BASE / "decisiones"):                         # por qué un aviso de la prueba no terminó en entrada
-        if d.get("symbol") in ("SOLUSDT", "ETHUSDT", "DOGEUSDT") and d.get("symbol") not in entered:
+        if d.get("symbol") in TEST_SYMBOLS and d.get("symbol") not in entered:
             print(f"no entró {d.get('symbol')} ({(d.get('signal') or {}).get('category')}): {d.get('decision')} · "
                   f"{', '.join(d.get('motivos') or [])[:200]}")
     for ab in rows(BASE / "variante-ia.jsonl"):
@@ -140,7 +145,7 @@ def report(first_sent: float) -> int:
     errors = [json.loads(x) for x in (HOME / "logs" / "agent.log").read_text(encoding="utf-8").splitlines()
               if '"ERROR"' in x]
     print("errores del agente de prueba:", [e.get("msg") for e in errors][-3:] or "ninguno")
-    return 0 if len(entries) >= len(NOTICES) + 1 else 1
+    return 0 if len(entries) >= len(NOTICES) + 2 else 1
 
 
 def free_port() -> int:
@@ -227,6 +232,13 @@ async def main() -> int:
                                       kind="api", title=DELIST, url="https://www.binance.com/en/support/announcement/prueba",
                                       published_at=now - 1.5, received_at=now))
         print(f"deslistado de DOGE mandado a los {(now - first_sent) * 1000:.0f} ms")
+        await asyncio.sleep(8)
+        now = time.time()
+        assert relay.forward(NewsItem(id="prueba-" + secrets.token_hex(4), source="binance.listados", tier=1,
+                                      kind="api", title=LISTING,     # otro enlace: con el mismo, es "el mismo aviso"
+                                      url="https://www.binance.com/en/support/announcement/prueba-listado",
+                                      published_at=now - 1.17, received_at=now))
+        print(f"listado de PEPE en Binance mandado a los {(now - first_sent) * 1000:.0f} ms (publicado 1,17 s antes)")
         await asyncio.sleep(8)
         return report(first_sent)
     finally:

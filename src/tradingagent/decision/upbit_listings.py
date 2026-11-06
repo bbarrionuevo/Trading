@@ -30,6 +30,7 @@ KINDS = ("listado_spot", "listado_krw")    # listado nuevo y alta en el mercado 
 CATEGORY = "listado_upbit"
 VERSION = "listado-upbit-1"
 RULE = "listado_upbit_al_instante"
+NAME = "listado de Upbit"
 # Desde la hora del mensaje de Telegram (≈ 1 s después del sitio, en segundos enteros): a los 5 s del sitio la mediana
 # ya es negativa. El sondeo del sitio (~8 s) queda afuera: lo opera la regla general de listados, como siempre.
 MAX_LATE_S = 3.0

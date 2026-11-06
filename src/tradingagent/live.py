@@ -24,7 +24,8 @@ from pathlib import Path
 from . import paths
 from .alerts.model import asset_es, circuit_breaker_alert, daily_alert, system_alert, usdt_es
 from .core.bus import EventBus
-from .decision import delistings, earnings, launches, upbit_listings
+from .decision import binance_listings, delistings, earnings, launches, upbit_listings
+from .decision.binance_listings import coin_key
 from .decision.policy import PolicyConfig, assess, news_blocks
 from .decision.risk import RiskState
 from .execution.live import arming
@@ -43,7 +44,8 @@ from .research.labeler import MIN, minute
 log = logging.getLogger("tradingagent.live")
 # Las estrategias con camino propio (no pasan por la lectura general de la noticia): si el armado es solo de estas y no
 # hay nada abierto, el operador no lee las demás noticias (el de dinero real solo para Upbit no gasta IA ni candado).
-OWN_PATH = frozenset({upbit_listings.CATEGORY, earnings.CATEGORY, launches.CATEGORY, *delistings.BY_CATEGORY})
+OWN_PATH = frozenset({upbit_listings.CATEGORY, binance_listings.CATEGORY, earnings.CATEGORY, launches.CATEGORY,
+                      *delistings.BY_CATEGORY})
 WATCH_S, HOUSEKEEP_S, LEARN_EVERY_S = 1.0, 30.0, 900.0
 LAUNCH_POLL_S = 60.0                      # catálogo de Binance: contratos nuevos (peso 1 por pedido)
 # La caché del universo dura 6 h. Releerla en cada vuelta (30 s, por cuenta) costaba ~17 ms del bucle (leer 140 KB
@@ -334,6 +336,11 @@ class LiveTrader:
             task = asyncio.create_task(self._upbit_listing(ing, coin), name=f"listado-upbit-{coin}")
             self.pending.add(task)
             task.add_done_callback(self.pending.discard)
+        quick = self.binance_fast(ing)
+        for coin in quick if self.allows(binance_listings.CATEGORY) else ():   # listado de Binance a tiempo: ya
+            task = asyncio.create_task(self._binance_listing(ing, coin), name=f"listado-binance-{coin}")
+            self.pending.add(task)
+            task.add_done_callback(self.pending.discard)
         only = self.armed_only()
         if only is not None and only <= OWN_PATH and not self.st["positions"]:
             return               # armado solo para reglas con camino propio y nada abierto: ni IA ni candado (6-nov)
@@ -372,6 +379,8 @@ class LiveTrader:
                 off.append("lo_opera_la_regla_de_deslistados")
             if listed:
                 off.append("lo_opera_la_regla_de_listados_de_upbit")
+            if quick:
+                off.append("lo_opera_la_regla_de_listados_de_binance")
             # Datos de mercado (contrato y 130 min de velas) solo para lo que puede entrar. Antes se bajaban para toda
             # noticia, con el candado tomado: una noticia que igual se descartaba por relevancia o alfa demoraba hasta
             # 14 s a la siguiente (diario de la PC, 3 y 4-nov), y esa siguiente podía ser un listado.
@@ -501,19 +510,36 @@ class LiveTrader:
         except Exception:                                              # una falla no tira al operador
             log.exception("falló la entrada por deslistado (%s)", coin)
 
+    def _fast(self, ing, rule, t0: float | None) -> tuple[str, ...]:
+        if getattr(self.market, "name", "") != "binance-futuros" or t0 is None:
+            return ()
+        _, coins = rule.notice(ing.item.source, ing.item.title)
+        return coins if coins and self.clock.time() - t0 <= rule.MAX_LATE_S else ()
+
     def upbit_fast(self, ing) -> tuple[str, ...]:
         """Las monedas de un listado de Upbit que llegó a tiempo para la regla al instante (decision/upbit_listings.py:
         por Telegram, ≤ 3 s). Más tarde (el sondeo del sitio, ~8 s), lo opera la regla general de listados."""
-        if getattr(self.market, "name", "") != "binance-futuros":
-            return ()
-        _, coins = upbit_listings.notice(ing.item.source, ing.item.title)
-        t0 = ing.item.published_at or ing.item.received_at
-        return coins if coins and self.clock.time() - t0 <= upbit_listings.MAX_LATE_S else ()
+        return self._fast(ing, upbit_listings, ing.item.published_at or ing.item.received_at)
+
+    def binance_fast(self, ing) -> tuple[str, ...]:
+        """Las monedas de un listado de Binance que llegó a tiempo para la regla al instante
+        (decision/binance_listings.py: ≤ 2,2 s de publicado; sin la hora de publicación, no). Más tarde, la regla
+        general de listados, con la IA."""
+        return self._fast(ing, binance_listings, ing.item.published_at)
 
     async def _upbit_listing(self, ing, coin: str) -> None:
         """Largo apenas llega un listado de Upbit (decision/upbit_listings.py), si el precio todavía no subió más que el
-        tope de Binance de los primeros segundos (+16 % desde la apertura del minuto del aviso). Sin la IA y sin las
-        alarmas de B-4 (el salto vacía el libro); protege el tope de precio de la orden. La IA lee después."""
+        tope de Binance de los primeros segundos (+16 % desde la apertura del minuto del aviso)."""
+        await self._listing_now(ing, coin, upbit_listings)
+
+    async def _binance_listing(self, ing, coin: str) -> None:
+        """Largo apenas llega un listado de Binance (decision/binance_listings.py), si llegó a ≤ 2,2 s de publicado y
+        el precio no subió más de 8 % desde la apertura del minuto del aviso."""
+        await self._listing_now(ing, coin, binance_listings)
+
+    async def _listing_now(self, ing, coin: str, rule) -> None:
+        """Un listado al instante (Upbit o Binance: `rule` es su módulo de decision/). Sin la IA y sin las alarmas de
+        B-4 (el salto vacía el libro); protege el tope de precio de la orden. La IA lee después."""
         try:
             if self.market.universe.kind(coin) != CRYPTO:              # sin perpetuo de cripto en Binance: nada
                 return
@@ -523,10 +549,10 @@ class LiveTrader:
                 watch.mark("candado")
                 run = self.run()
                 now, sym = run.now, self.market.symbol(coin)
-                ev, sig = self._event(ing), upbit_listings.signal(coin)
+                ev, sig = self._event(ing), rule.signal(coin)
                 late = now - t0
-                if late > upbit_listings.MAX_LATE_S:                   # el candado tardó: ya no es "al instante"
-                    run.record(ev, sig, sym, "no_entrar", [f"listado_upbit_tarde:{late:.1f}s"])
+                if late > rule.MAX_LATE_S:                             # el candado tardó: ya no es "al instante"
+                    run.record(ev, sig, sym, "no_entrar", [f"{rule.CATEGORY}_tarde:{late:.1f}s"])
                     await self.save(run)
                     return
                 self.registry = await self.market.instruments(self.session, [sym], self.st["instruments"], now)
@@ -540,23 +566,23 @@ class LiveTrader:
                 bar = (run.store.candles.get(sym) or {}).get(minute(t0))       # el minuto del aviso: (o, h, l, c)
                 if not bar or book is None or book.mid is None or tick is None:
                     run.record(ev, sig, sym, "no_entrar", ["sin_datos:precio_del_aviso_o_libro"])
-                elif (rise := float(book.mid) / float(bar[0]) - 1) > upbit_listings.MAX_RISE:
+                elif (rise := float(book.mid) / float(bar[0]) - 1) > rule.MAX_RISE:
                     run.record(ev, sig, sym, "no_entrar", [f"ya_subio:{rise * 100:+.2f}%"])
                 else:
                     await run.enter(ev, sig, coin, self.risk_blocks(run),
-                                    assessment=upbit_listings.assessment(coin, late), prefetched=(book, tick),
+                                    assessment=rule.assessment(coin, late), prefetched=(book, tick),
                                     relaxed=True)
                     watch.mark("orden")
-                    log.info("listado de Upbit al instante (%s): %s", coin, watch.text())
+                    log.info("%s al instante (%s): %s", rule.NAME, coin, watch.text())
                     if sym in self.st["positions"] and self.llm is not None and self.llm.enabled:
-                        task = asyncio.create_task(self._ai_second_read(ing, coin, sym, upbit_listings.CATEGORY,
-                                                                        upbit_listings.signal(coin)),
+                        task = asyncio.create_task(self._ai_second_read(ing, coin, sym, rule.CATEGORY,
+                                                                        rule.signal(coin)),
                                                    name=f"segunda-lectura-{coin}")
                         self.pending.add(task)
                         task.add_done_callback(self.pending.discard)
                 await self.save(run)
         except Exception:                                              # una falla no tira al operador
-            log.exception("falló la entrada por listado de Upbit (%s)", coin)
+            log.exception("falló la entrada por %s (%s)", rule.NAME, coin)
 
     async def _ai_second_read(self, ing, coin: str, sym: str, category: str, expected=None) -> None:
         """Segunda lectura de la IA, después de entrar (el "nivel 2 que aborta" del plan del 5-nov): la regla entró sin
@@ -568,7 +594,8 @@ class LiveTrader:
             asked = time.perf_counter()
             res = await self.llm.classify(ing.item.title, ing.item.body, expected)
             ai = res.signal
-            confirmed = ai is not None and ai.polarity * expected.polarity > 0 and coin in ai.assets
+            confirmed = (ai is not None and ai.polarity * expected.polarity > 0
+                         and coin_key(coin) in {coin_key(a) for a in ai.assets})
             await self._ai_variant(ing, sym, category, time.perf_counter() - asked, confirmed, ai is not None,
                                    expected.polarity)
             if ai is None or confirmed:

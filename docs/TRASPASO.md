@@ -30,6 +30,8 @@ Lo que pidió, en sus palabras:
 
 ## 2. Estado al 4-nov-2026 (y lo nuevo del 5-nov arriba)
 
+**6-nov a la tarde: listados de Binance al instante** (REGLAS v3.6, `decision/binance_listings.py`): apenas llega "Binance Will List …" o un HODLer Airdrop de una moneda con perpetuo, si la orden sale a ≤ 2,2 s de publicado y el precio no subió más de 8 %, largo sin esperar a la IA (stop 10 %, 15 min, 3 % al stop, como Upbit). El dueño pidió armarla ya con dinero real ("siendo tan pocos los avisos [...] quizá sea bueno armarlo ya para dinero real"): la arma él sumándola al armado (sección 6). Hasta entonces corre en el simulacro de Tokio.
+
 **5-nov a la noche: TODO corre en el servidor de Tokio** (pedido del dueño: "queda ya todo en Tokio"):
 
 - **Tokio** corre el agente completo (`agente-tokio`) y el relé (`rele-tokio`). Es el simulacro de Binance con 100 USDT
@@ -377,6 +379,20 @@ la semana (4 %) y el halt por caída (8 %). La IA lee el aviso después de entra
 7. La telemetría al tablero no lleva montos reales. El tablero completo los trae por SSH (cifrado) y se ven solo en
    la PC. Lo publicado nunca los lleva.
 
+### Sumar los listados de Binance al instante al dinero real (REGLAS v3.6, 6-nov)
+
+1. El dueño fusiona el PR protegido; Claude lo instala en Tokio (`instalar-agente.sh`) y corre la prueba de punta
+   a punta en Tokio (`prueba_listado.py`: ahora también un listado de Binance, PEPE en 1000PEPEUSDT; en la PC con
+   los tiempos de Tokio entró a los 39 ms de recibido, 1,2 s después de publicado).
+2. Con **ninguna posición real abierta** (el agente se reinicia), el dueño suma la estrategia con su frase:
+   `TRADING_HOME=/home/ubuntu/.trading .venv/bin/python -m tradingagent armar-real --estrategias listado_upbit,listado_binance`.
+   Telegram tiene que decir "solo listados de Upbit al instante, listados de Binance al instante". El simulacro
+   de al lado la suelta solo (nunca opera lo que opera la plata).
+3. Qué mirar en cada listado de Binance: en `real/binance-futuros/decisiones/`, `listado_binance_tarde:X.Xs` si el
+   canal llegó tarde (más de 2,2 s: no entra, la opera la regla general con la IA solo en el simulacro) o
+   `ya_subio:+X%`; en el diario, la demora del canal (`binance.ws`, de publicado a recibido). Con ~10 listados se
+   revisa el freno (2,2 s) con lo medido.
+
 
 Qué mirar, en orden:
 
@@ -546,7 +562,8 @@ dueño qué hiciste y por qué.
 13. **Órdenes maker** (0,02 % en vez de 0,05 % de comisión) para lo que no tiene apuro (salidas por tiempo).
 14. **Más velocidad, con costo (lo decide el dueño):** titulares de resultados con "supera / no alcanza lo esperado"
     en segundos (Benzinga por Alpaca: cuenta propia del dueño) y un servidor cerca de Binance (Tokio) en vez de la PC.
-15. **Listados de Binance al instante** (estudio del 6-nov, `estudios/binance_listados_segundos.py`): el perpetuo
+15. **Listados de Binance al instante: HECHO** (REGLAS v3.6; la arma el dueño, sección 6). Queda: medir el canal en
+    cada listado real y revisar el freno de 2,2 s con ~10 casos. El estudio (6-nov, `estudios/binance_listados_segundos.py`): el perpetuo
     salta a los ~2,3 s del aviso y el canal de anuncios llega a Tokio a los 1,2-1,8 s. Comprar a los 2 s (sin la IA,
     que tarda 1,1-1,8 s) y salir como Upbit da mediana +7,5 %; a los 2,5 s, +2,0 %. Falta: (a) medir el canal con
     listados de verdad, sobre todo los publicados a hora redonda (uno llegó a 2,6 s y un TradFi programado a 41 s);
@@ -751,6 +768,7 @@ sección 11). Un estudio nuevo va con su línea acá.
 | 6-nov | **Upbit: ¿salir antes de los 15 min?** (31, Telegram a 1 s, pedido del dueño) | 15 min (la regla): mediana +9,16 %, media +12,02 %, 71 %; 30-60 s: mediana +7,9 a +8,8 %, media +10,4 a +10,7 %, 74 %; 2-5 min: 1,5 a 1,8 puntos menos que 15 min (rango del 90 % debajo de 0); stop que sigue al pico de 3-8 %: media +5,0 a +6,6 % (el sacudón de los primeros segundos lo saca); mitad a 60 s y mitad a 15 min: +11,30 %. El techo: 21 de 31 en los primeros 30 s (mediana 15 s del aviso) y 9 entre los 5 y 15 min; a los 15 min devuelve 6 % del techo (mediana). Por mitades: 1.ª (hasta 5-ago) 45-60 s algo mejor; 2.ª, 15 min bastante mejor | sin cambio: se queda en 15 min | `estudios/upbit_salidas.py` |
 | 6-nov | **Upbit: ¿se llena la orden IOC?** (31; libro a +25 ms, orden a +50 ms) | tope de 0,5 % (el de hoy): a 1 s de Telegram se llena 30 de 31 (mediana +8,40 %, media +12,26 %; por listado +11,86 %); con 10 %, 31 de 31 (+12,54 %); a 0,5 s y a 2 s, 31 de 31 con cualquier tope | sin cambio (0,5 %) | `estudios/upbit_tope_ioc.py` |
 | 6-nov | **Resultados: filtrar por la guidance** (88, anexo 99 del 8-K en EDGAR) | la regla (60): mediana +0,93 %, media +1,17 %, 63 %; guidance a favor del precio (10): +1,47 %, 80 %; en contra (9): +0,55 %, 67 %; no dice o mantiene (41): +1,23 %, 59 % | sin cambio (todas positivas, muestras chicas) | `estudios/resultados_guia.py` |
+| 6-nov | **Listados de Binance al instante, construidos** (REGLAS v3.6) | tests: entra a 1,2 s aunque el libro dispare B-4, no entra a 2,6 s ni sin hora de publicación ni si ya subió 13 %, se cierra si la IA no confirma, confirma aunque la IA diga 1000PEPE; las 66 monedas del estudio salen de la regla de títulos. Punta a punta en la PC con los tiempos de Tokio: orden a los 39 ms de recibido (1000PEPEUSDT), la IA confirma en 1,2 s, sin errores (la prueba usaba el mismo enlace para dos avisos y la deduplicación los juntaba: arreglado en la prueba) | la arma el dueño con dinero real (sección 6) | `decision/binance_listings.py`, `tests/test_binance_listings.py` |
 | 6-nov | **Binance: ¿el perpetuo va 10 s detrás del listado?** (pedido del dueño; 66 monedas de 58 avisos con perpetuo, ene-2025 a oct-2026, operación por operación) | no hay 10 s ni es en la apertura del spot (ahí el perpetuo no sigue al spot: comprar pierde, mediana −1,6 %): es en el AVISO. El perpetuo salta a los 2,30 s de publicado (mediana; mitad central 2,15-2,58 s); a los 2 s, nada. Comprar a los 2 s con la regla de Upbit (stop 10 %, 15 min): mediana +7,50 %, media +18,58 %, 77 % (1.ª mitad +13,8 %, 2.ª +4,1 %); a los 2,5 s +2,0 %; a los 3,5 s (esperando a la IA) −0,5 %. El canal llega a Tokio a 1,2-1,8 s (5 avisos; 2,6 s uno a hora redonda) | candidato a regla al instante como la de Upbit, con freno de demora; lo decide el dueño (PR protegido) y se mide primero en el simulacro | `estudios/binance_listados_segundos.py` |
 | 5-nov | **Agente completo en Tokio (simulacro)** | Claude 1,8 s; Binance 2-5 ms (PC ~320 ms); fuentes OK salvo el sitio de Upbit (403); memoria: agente 77 MB y relé 63 MB de 416 | andando (`agente-tokio`); telemetría al tablero de la PC; la pausa de la PC frena a Tokio | RELE-TOKIO |
 | 5-nov | **1.ª operación del simulacro** | Wendy's, resultados: entró a los 120 s, salió a los 30 min, −0,27 USDT (−0,5 %); su comunicado salió minutos antes del 8-K | normal (pierden ~35 %) | simulacro |
