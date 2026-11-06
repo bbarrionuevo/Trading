@@ -381,9 +381,9 @@ la semana (4 %) y el halt por caída (8 %). La IA lee el aviso después de entra
 
 ### Sumar los listados de Binance al instante al dinero real (REGLAS v3.6, 6-nov)
 
-1. El dueño fusiona el PR protegido; Claude lo instala en Tokio (`instalar-agente.sh`) y corre la prueba de punta
-   a punta en Tokio (`prueba_listado.py`: ahora también un listado de Binance, PEPE en 1000PEPEUSDT; en la PC con
-   los tiempos de Tokio entró a los 39 ms de recibido, 1,2 s después de publicado).
+1. ✅ Fusionado (#76) e instalado en Tokio el 6-nov a las 23:38 UTC (`b42c9ae`). Prueba de punta a punta en Tokio
+   con el Binance real: el listado de Binance (PEPE en 1000PEPEUSDT) ordenó a los 31 ms de recibido (1,2 s después
+   de publicado) y la IA confirmó en 1,06 s; Upbit 26-63 ms, el deslistado 22 ms; sin errores.
 2. Con **ninguna posición real abierta** (el agente se reinicia), el dueño suma la estrategia con su frase:
    `TRADING_HOME=/home/ubuntu/.trading .venv/bin/python -m tradingagent armar-real --estrategias listado_upbit,listado_binance`.
    Telegram tiene que decir "solo listados de Upbit al instante, listados de Binance al instante". El simulacro
@@ -569,6 +569,18 @@ dueño qué hiciste y por qué.
     listados de verdad, sobre todo los publicados a hora redonda (uno llegó a 2,6 s y un TradFi programado a 41 s);
     (b) la regla con freno de demora (entrar solo si llegó a ≤ 2 s y el precio todavía no saltó), en el simulacro de
     Tokio primero. Excepción a C-4 y A-5: PR protegido, lo aprueba el dueño. ~3 por mes en 2026.
+16. **Bithumb al instante** (estudio del 6-nov, `estudios/otros_listados_segundos.py`): sus altas en wones mueven el
+    perpetuo como Upbit (comprar a 1 s: mediana +4,3 %), pero en 2026 la ventana es de ~1 s. El canal: su API oficial
+    de avisos (`api.bithumb.com/v1/notices`, 130 ms desde Tokio; la página da 403; su Telegram solo da precios).
+    Probado el 6-nov: su API pública pasa por Cloudflare con caché de 4 h que ignora los parámetros (la copia tenía
+    41-57 min); su canal oficial de Telegram (@bithumbexchangedata) solo da alertas de precio (800 mensajes, ningún
+    alta). Lo que sirve: `gw.bithumb.com/feed/v2/customer-support/articles/notices/recent`, la que usa su web de
+    trading, sin caché, 120 ms desde Tokio. **Midiendo en Tokio** desde el 6-nov 23:52 UTC por 72 h
+    (`~/diag/bithumb_demora.py`, nice 19, ~20 MB, un pedido por segundo a cada fuente; resultados en
+    `~/diag/bithumb-demora.jsonl`: filas `nuevo` con la demora de cada fuente; `http` 403 seguido = nos bloquearon).
+    No matarlo. Si gw muestra los avisos a ~1 s, la regla como Upbit leyendo gw (PR protegido, lo aprueba el dueño).
+    Pagas, si no: cryptolisting.ws (WebSocket de Binance, Upbit y Bithumb, precio a pedido) o PKCryptoListing (dice
+    < 1 s, tiene plan gratis); las dos piden una cuenta del dueño.
 
 ## 11. Detalles que muerden (Windows y MEXC)
 
@@ -769,6 +781,8 @@ sección 11). Un estudio nuevo va con su línea acá.
 | 6-nov | **Upbit: ¿se llena la orden IOC?** (31; libro a +25 ms, orden a +50 ms) | tope de 0,5 % (el de hoy): a 1 s de Telegram se llena 30 de 31 (mediana +8,40 %, media +12,26 %; por listado +11,86 %); con 10 %, 31 de 31 (+12,54 %); a 0,5 s y a 2 s, 31 de 31 con cualquier tope | sin cambio (0,5 %) | `estudios/upbit_tope_ioc.py` |
 | 6-nov | **Resultados: filtrar por la guidance** (88, anexo 99 del 8-K en EDGAR) | la regla (60): mediana +0,93 %, media +1,17 %, 63 %; guidance a favor del precio (10): +1,47 %, 80 %; en contra (9): +0,55 %, 67 %; no dice o mantiene (41): +1,23 %, 59 % | sin cambio (todas positivas, muestras chicas) | `estudios/resultados_guia.py` |
 | 6-nov | **Listados de Binance al instante, construidos** (REGLAS v3.6) | tests: entra a 1,2 s aunque el libro dispare B-4, no entra a 2,6 s ni sin hora de publicación ni si ya subió 13 %, se cierra si la IA no confirma, confirma aunque la IA diga 1000PEPE; las 66 monedas del estudio salen de la regla de títulos. Punta a punta en la PC con los tiempos de Tokio: orden a los 39 ms de recibido (1000PEPEUSDT), la IA confirma en 1,2 s, sin errores (la prueba usaba el mismo enlace para dos avisos y la deduplicación los juntaba: arreglado en la prueba) | la arma el dueño con dinero real (sección 6) | `decision/binance_listings.py`, `tests/test_binance_listings.py` |
+| 6-nov | **Bithumb, OKX, Bybit y Coinbase en el perpetuo de Binance, al segundo** (pedido del dueño) | Bithumb: 84 monedas (sep-2025 a nov-2026, la historia sacada de su página con el navegador), 77 saltan; comprar a 1 s del aviso con la regla: mediana +4,29 %, media +7,09 %, 83 %; a 2 s +2,32 %; en 2026 la ventana es de ~1 s. OKX (4) y Bybit (9): no saltan, ~0 %. Coinbase: la apertura del mercado (su página de estado) no mueve (31, −0,4 %); el aviso real sale por X, paga. Acceso desde Tokio: API de avisos de Bithumb 130 ms (solo los últimos 5), OKX 76 ms, Bybit 86 ms, estado de Coinbase 30 ms; Upbit sigue dando 403 a AWS | Bithumb: candidato (pendiente 16); OKX, Bybit y Coinbase: no | `estudios/otros_listados_segundos.py`, ESTUDIO-LISTADOS |
+| 6-nov | **Bithumb: por dónde llegar rápido** (pedido del dueño: "si te lo bloquea busca otras alternativas (ej telegram)") | API pública (`api.bithumb.com/v1/notices` → `feed-api`): Cloudflare con caché de 4 h que ignora los parámetros; canal oficial de Telegram: solo alertas de precio; ningún canal gratis repite sus altas; `gw.bithumb.com/feed/v2/customer-support/articles/notices/recent` (su web de trading): sin caché, 120 ms desde Tokio, sin bloqueo a un programa | medir las dos en Tokio 72 h (`estudios/bithumb_demora.py`) y decidir la regla con eso | pendiente 16 |
 | 6-nov | **Binance: ¿el perpetuo va 10 s detrás del listado?** (pedido del dueño; 66 monedas de 58 avisos con perpetuo, ene-2025 a oct-2026, operación por operación) | no hay 10 s ni es en la apertura del spot (ahí el perpetuo no sigue al spot: comprar pierde, mediana −1,6 %): es en el AVISO. El perpetuo salta a los 2,30 s de publicado (mediana; mitad central 2,15-2,58 s); a los 2 s, nada. Comprar a los 2 s con la regla de Upbit (stop 10 %, 15 min): mediana +7,50 %, media +18,58 %, 77 % (1.ª mitad +13,8 %, 2.ª +4,1 %); a los 2,5 s +2,0 %; a los 3,5 s (esperando a la IA) −0,5 %. El canal llega a Tokio a 1,2-1,8 s (5 avisos; 2,6 s uno a hora redonda) | candidato a regla al instante como la de Upbit, con freno de demora; lo decide el dueño (PR protegido) y se mide primero en el simulacro | `estudios/binance_listados_segundos.py` |
 | 5-nov | **Agente completo en Tokio (simulacro)** | Claude 1,8 s; Binance 2-5 ms (PC ~320 ms); fuentes OK salvo el sitio de Upbit (403); memoria: agente 77 MB y relé 63 MB de 416 | andando (`agente-tokio`); telemetría al tablero de la PC; la pausa de la PC frena a Tokio | RELE-TOKIO |
 | 5-nov | **1.ª operación del simulacro** | Wendy's, resultados: entró a los 120 s, salió a los 30 min, −0,27 USDT (−0,5 %); su comunicado salió minutos antes del 8-K | normal (pierden ~35 %) | simulacro |

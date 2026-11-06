@@ -43,6 +43,28 @@ mercado". Se repite en la PC con `python -m tradingagent estudio-listados` (deja
 Listados spot de OKX con contrato en MEXC (n = 4): mediana +0,2 % a 5 min, −0,2 % a 15 min y −0,3 % a 60 min:
 **no mueven el precio**. Los anuncios de Bitget son casi todos de acciones. Las dos fuentes quedan apagadas.
 
+### Bithumb, OKX, Bybit y Coinbase en el perpetuo de Binance, segundo a segundo (6-nov)
+
+Pedido del dueño: Bithumb "es literalmente un copy-paste" de Upbit, el "Coinbase Effect", y OKX y Bybit con "empujes del
+5 % al 12 %". `estudios/otros_listados_segundos.py`, cada operación del perpetuo de Binance (data.binance.vision), solo
+monedas con perpetuo antes del aviso, la regla de los listados (stop fijo de 10 %, 15 min), 0,2 % de costos:
+
+| Exchange | Canal más rápido desde Tokio | Monedas | Saltan (+2 % en 1 min) | Comprar a 1 s | a 2 s | a 3 s |
+|---|---|---|---|---|---|---|
+| **Bithumb** (alta en wones, sep-2025 a nov-2026) | su API oficial de avisos, 130 ms (solo los últimos 5; la página da 403) | 84 | 77 (empieza a los 2,5 s; en 2026, a los 1,6 s) | mediana +4,29 %, media +7,09 %, 83 % | +2,32 %, +4,38 %, 68 % | +0,38 %, +1,33 %, 55 % |
+| OKX (spot, 12 meses) | su API de avisos, 76 ms | 4 | 0 | ±0 (−2,3 a +0,9 %) | ±0 | ±0 |
+| Bybit (spot, 12 meses) | su API de avisos, 86 ms | 9 | 1 (a los 53 s) | −0,26 %, 33 % | −0,22 %, 33 % | −0,24 % |
+| Coinbase (apertura del mercado, 12 meses) | la página de estado del exchange, 30 ms | 31 | 3 | −0,49 %, 45 % | −0,44 %, 48 % | — |
+
+- **Bithumb sí:** como Upbit, más chico y más rápido. En 2026 la ventana se achicó: comprar a 1 s da +4,29 % de mediana
+  y a 2 s, +0,35 % (en 2025, a 2 s, +4,48 %). La hora del aviso viene al segundo (truncada). Falta medir en vivo cuánto
+  tarda su API en mostrar un aviso nuevo: decide si se llega en ~1 s.
+- **OKX y Bybit, no** (confirma el estudio del 3-nov con datos al segundo). Casi todos sus listados son de monedas que
+  ya estaban en Binance o que no tienen perpetuo.
+- **Coinbase:** la apertura del mercado (anunciada antes) no mueve nada. El aviso que importa sale por X, con API paga
+  (lectura lenta desde 200 USD/mes; al instante, ~5.000 USD/mes): no se puede medir con historia ni recibir rápido
+  gratis.
+
 ### Upbit (4-nov, desde la PC): el efecto más fuerte medido
 
 Su API de avisos solo responde desde la PC, con el almacén de certificados de Windows. Se repite con
@@ -240,5 +262,4 @@ Su API de avisos solo responde desde la PC (desde la nube está bloqueada). Se r
   midiendo cada operación y apaga una categoría si la evidencia sale en contra.
 - Las monedas chicas tienen libros finos: el stop puede ejecutarse peor. El riesgo por operación sigue siendo
   1 % del saldo al stop, y los frenos del día y del drawdown siguen iguales.
-- Falta: Bithumb (bloquea por país desde la nube; quizá desde la PC sí), un estudio de Upbit (ya es fuente
-  desde el PR #22) y los datos macro (Reserva Federal, inflación).
+- Falta: los datos macro (Reserva Federal, inflación). Bithumb, OKX, Bybit y Coinbase: medidos el 6-nov (arriba).
