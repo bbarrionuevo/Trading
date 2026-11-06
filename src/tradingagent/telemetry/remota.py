@@ -37,6 +37,24 @@ def rss_mb() -> float | None:
         return None
 
 
+LOW_MEMORY_MB = 120                                   # menos que esto libre en el servidor: aviso en el registro
+LOW_MEMORY_WARN_S = 600
+
+
+def system_free_mb(meminfo: str = "/proc/meminfo") -> float | None:
+    """Memoria disponible del sistema (Linux: MemAvailable; en otro sistema, None). El 6-nov, la actualización
+    automática de Ubuntu dejó al servidor de Tokio con 59 MB libres durante minutos (el 5-nov, con poca memoria, el
+    servidor viejo se quedó sin red): por eso se mide en cada latido."""
+    try:
+        with open(meminfo, encoding="ascii") as f:
+            for line in f:
+                if line.startswith("MemAvailable:"):
+                    return round(int(line.split()[1]) / 1024, 1)
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
+
+
 def _num(x, digits: int = 4):
     try:
         return round(float(x), digits)
@@ -73,6 +91,7 @@ class RemoteTelemetry:
         self.loop: asyncio.AbstractEventLoop | None = None
         self.pending: deque = deque(maxlen=20)               # alertas de antes de que el relé esté listo
         self.sent = self.lost = 0
+        self._low_memory_at = float("-inf")
 
     def attach(self, client) -> None:
         self.client = client
@@ -90,7 +109,8 @@ class RemoteTelemetry:
         llm = ((hb.get("trader") or {}).get("llm")) or {}
         peso = hb.get("peso_binance") or {}
         out = {"t": "tel", "k": "agente", "v": __version__[:12], "up": round(time.time() - a.started),
-               "mem": rss_mb(), "src": [src.get("ok", 0), src.get("total", 0)], "fallan": (src.get("failing") or [])[:4],
+               "mem": rss_mb(), "mem_libre": hb.get("mem_libre_mb"), "src": [src.get("ok", 0), src.get("total", 0)],
+               "fallan": (src.get("failing") or [])[:4],
                "news": [news.get("aceptadas", 0), news.get("duplicadas", 0), news.get("stale", 0)],
                "lag": (hb.get("loop_lag") or {}).get("p99_ms"), "peso": [peso.get("usado"), peso.get("limite")],
                "ia": [_num(llm.get("usd"), 5), llm.get("calls", 0), llm.get("failures", 0)],
@@ -107,12 +127,23 @@ class RemoteTelemetry:
         self.sent += 1
         return True
 
+    def watch_memory(self, free_mb: float | None, now: float | None = None) -> bool:
+        """Aviso en el registro si el servidor se queda con poca memoria (como mucho uno cada 10 min): así la
+        vigilancia lo ve aunque el pico dure pocos minutos."""
+        now = time.monotonic() if now is None else now
+        if free_mb is None or free_mb >= LOW_MEMORY_MB or now - self._low_memory_at < LOW_MEMORY_WARN_S:
+            return False
+        self._low_memory_at = now
+        log.warning("poca memoria en el servidor: %.0f MB libres (el agente usa %s MB)", free_mb, rss_mb())
+        return True
+
     def send_summary(self) -> bool:
         try:
             msg = self.summary()
         except Exception:                                        # la telemetría nunca frena al agente
             log.warning("no pude armar el resumen para la PC", exc_info=True)
             return False
+        self.watch_memory(msg.get("mem_libre"))
         while True:
             try:
                 protocol.encode(msg, b"\0" * 32)                   # ¿entra en un datagrama?

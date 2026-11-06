@@ -150,6 +150,18 @@ a Tokio como motor. Lee este archivo primero, y lo que manda es esta lista:
    - `cd ~/trading && git log --oneline -1` = `origin/main`. Si quedó atrás y el CI está verde:
      `bash ~/trading/deploy/tokio/instalar-agente.sh`.
    - `sudo journalctl -u agente-tokio -u rele-tokio --since -3h --no-pager -p warning` y `sudo journalctl -t vigia-red`.
+     "poca memoria en el servidor" en el registro: mirar si coincide con `unattended-upgrades`
+     (`sudo tail /var/log/unattended-upgrades/unattended-upgrades.log`) y anotarlo (sección 11).
+   - `[ -f /var/run/reboot-required ]`: el sistema pide reinicio (lo hace el dueño, a hora tranquila).
+   - **Memoria del agente:** anotar en §12 `systemctl show -p MemoryCurrent --value agente-tokio` y cuánto lleva
+     encendido. El latido también trae `mem_agente_mb`.
+     - 6-nov: 160 MB a los 57 min de arrancar y 165 MB a los 73 min (~19 MB/h). Probablemente es el pico de la pasada
+       de aprendizaje, que corre cada 15 min y queda tomado; no se vio nada que crezca sin tope.
+     - 7-nov 00:03 UTC: 218 MB a las 3,8 h (sigue ~20 MB/h). El deduplicador guarda 6 h de noticias
+       (`ingestion/dedup.py`, `ttl_s`), así que hasta las ~6 h es esperable que suba; tiene que aplanarse después.
+       Si a las 8-10 h sigue subiendo igual, investigar con `tracemalloc`.
+     - Si sigue creciendo más de ~20 MB/h varias horas: investigarlo. A los 400 MB (`MemoryHigh`) el sistema empieza
+       a frenar al agente, y a los 500 MB lo reinicia.
    - Si no responde tres veces seguidas: avisar al dueño para que lo reinicie desde la consola de Lightsail, y no
      tocar nada más.
 3. **Simulacro de Tokio:**
@@ -508,6 +520,27 @@ Para que no vuelva a pasar:
 Ver qué pasó en un arranque anterior: `sudo journalctl --list-boots` y `sudo journalctl -b -1 ...`. Ojo con
 `--since`: sin fecha toma la de hoy.
 
+**La actualización automática de Ubuntu (6-nov, 06:10 UTC):** `unattended-upgrades` instaló sola unos 20 paquetes
+(apt, curl, git, certificados y un núcleo nuevo).
+
+- Durante ~10 min la memoria libre bajó a 59-186 MB: tres procesos de ~170 MB y otro de 99 MB.
+- Reinició `systemd-networkd` (06:12:41) y dejó el sistema pidiendo un reinicio por el núcleo nuevo
+  (`/var/run/reboot-required`).
+- Nuestros servicios aguantaron (topes de memoria y `OOMScoreAdjust`), sin muertes por memoria y con la red bien.
+- El horario es malo: las 06:10 UTC son las 15:10 en Corea, hora de avisos de Upbit, y la actualización compite por
+  memoria y CPU con las entradas al instante.
+- Desde el #64, el latido trae la memoria libre del servidor (el tablero la muestra en rojo con menos de 150 MB), y
+  con menos de 120 MB queda el aviso "poca memoria en el servidor" en el registro del agente.
+
+**Recomendado (cambios del sistema: los hace el dueño, en la consola SSH de Lightsail):**
+
+1. Un swap de 1 GB, para que estos picos no aprieten:
+   `sudo fallocate -l 1G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile && echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab`
+2. Las actualizaciones automáticas a las 15:00 UTC (medianoche en Corea, mañana en Nueva York, pocos avisos):
+   `sudo mkdir -p /etc/systemd/system/apt-daily-upgrade.timer.d && printf '[Timer]\nOnCalendar=\nOnCalendar=*-*-* 15:00\nRandomizedDelaySec=10min\n' | sudo tee /etc/systemd/system/apt-daily-upgrade.timer.d/hora.conf && sudo systemctl daemon-reload`
+3. Reiniciar el servidor a esa hora tranquila para el núcleo nuevo: `sudo reboot`. Los servicios arrancan solos, el
+   simulacro y los stops quedan guardados, y la PC avisa por Telegram si Tokio no vuelve en 3 min.
+
 **Dos trampas encontradas con la prueba de punta a punta (6-nov):**
 
 - **El SDK de la IA (`import anthropic`) tarda 1,2 s en cargar en Tokio.** Si lo carga la primera noticia, frena el
@@ -608,6 +641,6 @@ sección 11). Un estudio nuevo va con su línea acá.
 | 5-nov | **Otros avisos de Upbit al instante** | fin del soporte corto (9): mediana +4,75 %; advertencia corto (18): +1,73 %, 78 %; extendida y levantada, no | candidatos (L-9): se deciden con ~30 casos | ESTUDIO-LISTADOS, `estudios/upbit_primero.py` |
 | 5-nov | **Binance: nada se cancela antes de 5 s** | el stop que sobra se cancela en segundo plano a los 5,5 s (pedido del dueño) | hecho (D-6, L-7) | `execution/live/binance_venue.py` |
 | 6-nov | **Prueba de punta a punta en Tokio** (`deploy/tokio/prueba_listado.py`, agente aparte, avisos armados a mano) | Al principio: el primer aviso esperó 1,1 s (cargar el SDK de la IA frenaba el bucle) y el segundo listado del día se perdía (la deduplicación juntaba dos avisos de Upbit con la misma plantilla: 0,62 > 0,6). Arreglado: cada aviso entra a los 23-60 ms de recibido (~1,07 s desde la hora del mensaje) | hecho (precarga de la IA, deduplicación por tickers, tiempos por etapa en el registro) | `live.py`, `ingestion/dedup.py`, `intelligence/llm.py` |
-| 6-nov | **Canal de anuncios de Binance en Tokio** | 2 avisos: TradFi programado a hora redonda (01:00:00), 41 s; "Recovery Update #9" (03:06:23 UTC, hora no redonda), 1,2 s de publicado a recibido y decisión en 4 ms. Lo lento sería lo programado, no el canal | medir con más avisos (sobre todo deslistados) | sección "Vigilancia" |
+| 6-nov | **Canal de anuncios de Binance en Tokio** | 3 avisos: TradFi programado a hora redonda (01:00:00), 41 s; "Recovery Update #9" (03:06:23 UTC, hora no redonda), 1,2 s de publicado a recibido y decisión en 4 ms; "Limited-Time Spot Taker Program" (7-nov 00:00:00 UTC, **hora redonda**), 2,6 s. La hora redonda no siempre llega tarde | medir con más avisos (sobre todo deslistados) | sección "Vigilancia" |
 | 5-nov | **Agente completo en Tokio (simulacro)** | Claude 1,8 s; Binance 2-5 ms (PC ~320 ms); fuentes OK salvo el sitio de Upbit (403); memoria: agente 77 MB y relé 63 MB de 416 | andando (`agente-tokio`); telemetría al tablero de la PC; la pausa de la PC frena a Tokio | RELE-TOKIO |
 | 5-nov | **1.ª operación del simulacro** | Wendy's, resultados: entró a los 120 s, salió a los 30 min, −0,27 USDT (−0,5 %); su comunicado salió minutos antes del 8-K | normal (pierden ~35 %) | simulacro |
