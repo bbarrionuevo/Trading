@@ -153,6 +153,12 @@ a Tokio como motor. Lee este archivo primero, y lo que manda es esta lista:
      "poca memoria en el servidor" en el registro: mirar si coincide con `unattended-upgrades`
      (`sudo tail /var/log/unattended-upgrades/unattended-upgrades.log`) y anotarlo (sección 11).
    - `[ -f /var/run/reboot-required ]`: el sistema pide reinicio (lo hace el dueño, a hora tranquila).
+   - **Memoria del agente:** anotar en §12 `systemctl show -p MemoryCurrent --value agente-tokio` y cuánto lleva
+     encendido. El latido también trae `mem_agente_mb`.
+     - 6-nov: 160 MB a los 57 min de arrancar y 165 MB a los 73 min (~19 MB/h). Probablemente es el pico de la pasada
+       de aprendizaje, que corre cada 15 min y queda tomado; no se vio nada que crezca sin tope.
+     - Si sigue creciendo más de ~20 MB/h varias horas: investigarlo. A los 400 MB (`MemoryHigh`) el sistema empieza
+       a frenar al agente, y a los 500 MB lo reinicia.
    - Si no responde tres veces seguidas: avisar al dueño para que lo reinicie desde la consola de Lightsail, y no
      tocar nada más.
 3. **Simulacro de Tokio:**
