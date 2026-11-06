@@ -417,3 +417,26 @@ def test_la_memoria_del_servidor_va_en_el_latido_y_avisa_si_falta(tmp_path, capl
     html = dashboard.page(dashboard.gather(paths.home()))
     assert "90 MB libres" in html and "el agente usa 160.0 MB" in html
 
+
+
+def test_la_prueba_en_la_pc_usa_el_binance_falso_y_nunca_la_cuenta_real(tmp_path, monkeypatch):
+    """deploy/tokio/prueba_listado.py --pc (6-nov): el agente apunta los datos públicos a un Binance falso local con los
+    tiempos de Tokio. Solo por código; la clave de lectura no se usa y, armado en real o en la demo, no arranca."""
+    from tradingagent import config
+    from tradingagent import limits as limits_mod
+    from tradingagent.app import Agent
+    from tradingagent.execution.live import arming
+    monkeypatch.setenv("TRADING_HOME", str(tmp_path))
+    env = {"BINANCE_LECTURA_KEY": "clave-lectura-0000", "BINANCE_LECTURA_SECRET": "secreto-lectura-0000",
+           "BINANCE_API_KEY": "clave-trading-0000", "BINANCE_API_SECRET": "secreto-trading-0000"}
+    fake = "http://127.0.0.1:59999"
+    agent = Agent(config.load(None), env, binance_base=fake)
+    agent.alerts = agent.journal = None
+    arming.arm(tmp_path, 3, "", "", simulacro=True, capital=100, venue="binance-futuros", mode="local")
+    t = agent._build_real_trader(None, limits_mod.load())
+    assert t.simulated and t.market.base == fake
+    v = t.venue_factory(None, None, None, SystemClock())
+    assert v.client.public_base == fake and v.client.reader is None              # nada de la cuenta real
+    arming.arm(tmp_path, 3, "clave-trading-0000", arming.phrase(3), venue="binance-futuros")
+    assert agent._build_real_trader(None, limits_mod.load()) is None               # dinero real: nunca en una prueba
+    assert Agent(config.load(None), env)._binance_base is None                    # lo normal: el Binance de verdad

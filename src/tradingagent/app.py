@@ -153,10 +153,14 @@ class OwnerActions:
 
 class Agent:
     def __init__(self, cfg: dict, env, *, clock=None, sources: list[SourceSpec] | None = None, book_provider=None,
-                 telegram_base_url: str | None = None, printer=print, trader_market=None, llm_base_url=None):
+                 telegram_base_url: str | None = None, printer=print, trader_market=None, llm_base_url=None,
+                 binance_base: str | None = None):
         self.cfg, self.env, self.clock = cfg, env, clock or SystemClock()
         self._sources_override, self._book_provider = sources, book_provider
         self._trader_market, self._llm_base_url = trader_market, llm_base_url
+        # Solo para pruebas (deploy/tokio/prueba_listado.py --pc): los datos públicos de Binance de un Binance falso local
+        # que contesta con los tiempos de Tokio. Solo por código (nunca por configuración) y sin dinero real.
+        self._binance_base = binance_base
         self.trader = None
         self.real_trader = None                       # dinero real: solo si el dueño armó en esta PC (A-2)
         self.telegram_base_url, self.printer = telegram_base_url, printer
@@ -325,7 +329,7 @@ class Agent:
             if t["mercado"] == "binance-spot":
                 market = BinanceSpot()
             elif t["mercado"] == "binance-futuros":
-                market = BinanceFutures()
+                market = BinanceFutures(**({"base": self._binance_base} if self._binance_base else {}))
             else:
                 keys = (self.env.get("MEXC_ACCESS_KEY"), self.env.get("MEXC_SECRET_KEY"))
                 market = MexcFutures(readonly=mexc.ReadOnlyClient(session, *keys) if all(keys) else None)
@@ -355,6 +359,8 @@ class Agent:
             return None
         if arming.venue_of(data) == "binance-futuros":
             return self._build_binance_real_trader(session, lim, data)
+        if self._binance_base:                                 # prueba con un Binance falso: MEXC no corre
+            return None
         sim = bool(data.get("simulacro"))
         keys = (self.env.get("MEXC_ACCESS_KEY"), self.env.get("MEXC_SECRET_KEY"))
         if not sim and not all(keys):
@@ -394,21 +400,27 @@ class Agent:
         mode = (data.get("modo") or "demo") if sim else "real"
         lev = int(lim["per_trade"]["max_leverage"])
         if mode == "local":                                    # el capital real, 100 % aislado: sin clave de trading
-            market = BinanceFutures(max_leverage=lev)
+            market = BinanceFutures(max_leverage=lev, **({"base": self._binance_base} if self._binance_base else {}))
             market.label = "SIMULACRO futuros Binance"
             base_dir = home / "simulacro" / market.name
             rkey, rsecret = self.env.get("BINANCE_LECTURA_KEY"), self.env.get("BINANCE_LECTURA_SECRET")
+            if self._binance_base:                             # prueba con un Binance falso: nada de la cuenta real
+                rkey = rsecret = None
 
             def local(registry, books, pf, clock):
                 reader = BinanceClient(session, rkey, rsecret) if rkey and rsecret else None
                 client = LocalDryRunClient(books, session, capital=float(data["capital_usdt"]), clock=clock,
-                                           reader=reader, state_path=base_dir / "exchange-simulado.json")
+                                           public_base=self._binance_base, reader=reader,
+                                           state_path=base_dir / "exchange-simulado.json")
                 return BinanceVenue(client, session, registry, books, pf, clock, home=home, api_key="", limits=lim,
                                     leverage=lev, state_path=base_dir / "stops.json", simulated=True)
 
             return LiveTrader(market, session, self.clock, lim, alerts=self.alerts, journal=self.journal,
                               capital=float(data["capital_usdt"]), llm=self.trader.llm if self.trader else None,
                               venue_factory=local, base_dir=base_dir, real=True, simulated=True)
+        if self._binance_base:                                 # con un Binance falso nunca hay órdenes de verdad
+            log.warning("prueba con un Binance falso: el operador real (o la demo) no arranca")
+            return None
         key, secret = binance_keys(self.env, demo=sim)
         if not (key and secret):
             log.warning("armado de Binance sin %s: el operador real no arranca",

@@ -184,10 +184,16 @@ a Tokio como motor. Lee este archivo primero, y lo que manda es esta lista:
    - En el registro del agente, cada entrada al instante deja sus tiempos por etapa: "listado de Upbit al instante
      (X): esperó N ms · candado · contrato · velas, libro y precio · orden a los M ms". Lo mismo para los deslistados
      y la etiqueta de vigilancia.
-5. **Después de cada instalación en Tokio**, la prueba de punta a punta:
-   `~/trading/.venv/bin/python ~/trading/deploy/tokio/prueba_listado.py`.
-   Corre con un agente y un relé aparte, sin tocar el simulacro ni Telegram. Gasta unos centavos de IA. Tiene que
-   terminar con las dos entradas y sin errores, con la orden a menos de ~150 ms de recibido el aviso.
+5. **Después de cada cambio**, la prueba de punta a punta **en la PC** (pedido del dueño, 6-nov: "para aliviar la
+   carga de Tokio todas las pruebas ... desde mi PC pero simulando los tiempos de Tokio"):
+   `python deploy/tokio/prueba_listado.py --pc`, desde el worktree con su `.venv` (`PYTHONPATH=src`).
+   - Corre un agente y un relé aparte en la PC, contra un Binance falso local que contesta en ~3 ms (como Binance desde
+     Tokio). No toca el simulacro, Telegram ni la cuenta real; solo usa la clave de la IA de la PC (centavos).
+   - Tiene que terminar con las tres entradas (SOL, ETH y el corto de DOGE), la IA confirmando y sin errores.
+   - Medido el 6-nov en la PC: orden a los 148 ms en la primera (conexiones en frío), 48 ms y 33 ms en las otras; IA
+     1,3-2,6 s.
+   - En Tokio (`~/trading/.venv/bin/python ~/trading/deploy/tokio/prueba_listado.py`, Binance real, suma ~150 MB
+     mientras corre) solo cuando cambia el servidor, Python o las dependencias, o antes de armar dinero real.
 
 ## 4. Cómo funciona (de la noticia a la orden)
 
@@ -673,6 +679,7 @@ sección 11). Un estudio nuevo va con su línea acá.
 | 6-nov | **Reinicio con swap y actualizaciones a las 15:00 UTC** (el dueño) | todo volvió en 10 s; prueba de punta a punta con `main`: órdenes a los 25-68 ms (SOL 68, ETH 27, deslistado de DOGE 25), sin errores; 387-457 MB libres + 1 GB de swap | hecho | sección 11 |
 | 6-nov | **Canal de anuncios de Binance en Tokio** | 3 avisos: TradFi programado a hora redonda (01:00:00), 41 s; "Recovery Update #9" (03:06:23 UTC, hora no redonda), 1,2 s de publicado a recibido y decisión en 4 ms; "Limited-Time Spot Taker Program" (6-nov 08:00:00 UTC, **hora redonda**), 2,6 s. La hora redonda no siempre llega tarde | medir con más avisos (sobre todo deslistados) | sección "Vigilancia" |
 | 6-nov | **Memoria del agente en Tokio, por partes** (`deploy/tokio/memoria.sh`) | a las 1,7 h: arena principal de glibc 30 MB, 9 arenas de hilos 68 MB, objetos de Python 80 MB; la misma réplica en la PC (Windows) ~105 MB; el SDK de la IA solo, ~45 MB. Plano entre 11:23 y 11:38 UTC | `MALLOC_ARENA_MAX=2` (#66); comparar a las mismas horas | sección 11 |
+| 6-nov | **Prueba de punta a punta en la PC con los tiempos de Tokio** (`prueba_listado.py --pc`, Binance falso a ~3 ms) | SOL, ETH y DOGE entran; orden a los 148 ms la primera (conexiones en frío; en Tokio, 68 ms) y a los 33-48 ms las demás; la IA confirma en 1,3-2,6 s; sin errores | la prueba de siempre, en la PC; en Tokio solo si cambia el servidor | sección "Vigilancia" |
 | 6-nov | **Freno del bucle del agente en Tokio** (máximo de cada minuto del latido, cada 15 s) | normal 10-45 ms; 122 ms en la pasada de aprendizaje (rehacía la deduplicación en el bucle; en la PC 300-365 ms) y 60-95 ms cada 2 min con el tablero exportado (redactaba releyendo el entorno 1.008 veces) | la deduplicación en un hilo (en la PC, máximo 37-99 ms) y el entorno leído una vez (#66); medir otra vez en Tokio | sección 11 |
 | 5-nov | **Agente completo en Tokio (simulacro)** | Claude 1,8 s; Binance 2-5 ms (PC ~320 ms); fuentes OK salvo el sitio de Upbit (403); memoria: agente 77 MB y relé 63 MB de 416 | andando (`agente-tokio`); telemetría al tablero de la PC; la pausa de la PC frena a Tokio | RELE-TOKIO |
 | 5-nov | **1.ª operación del simulacro** | Wendy's, resultados: entró a los 120 s, salió a los 30 min, −0,27 USDT (−0,5 %); su comunicado salió minutos antes del 8-K | normal (pierden ~35 %) | simulacro |
