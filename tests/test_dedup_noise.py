@@ -78,3 +78,31 @@ def test_oficial_nunca_es_ruido_y_no_verificado_penaliza():
     u = f.score(item("Shocking: here's why bitcoin dumped", tier=TIER_UNVERIFIED))
     assert u.score > m.score
     assert f.score(item("", tier=TIER_OFFICIAL)).reasons == ("titulo_vacio",)
+
+
+def test_dos_avisos_con_la_misma_plantilla_y_otra_moneda_no_se_fusionan(clock):
+    """6-nov: dos listados de Upbit con la misma plantilla (0,62 de parecido) se fusionaban y el segundo se perdía.
+    Con otros tickers, u otro enlace del mismo aviso oficial, son dos noticias; la misma historia en otro medio, una."""
+    d = DedupIndex(clock, ttl_s=6 * 3600, threshold=0.6)
+
+    def upbit(nid, coin, name):
+        return NewsItem(id=nid, source="upbit.avisos", tier=1, kind="telegram",
+                        title=f"{name}({coin}) 신규 거래지원 안내 (KRW, BTC, USDT 마켓)",
+                        url=f"https://upbit.com/service_center/notice?id={nid}", published_at=clock.time(),
+                        received_at=clock.time())
+
+    assert d.check(upbit("a1", "SOL", "솔라나")).kind == "new"
+    assert d.check(upbit("a2", "ETH", "이더리움")).kind == "new"                  # otro listado: no se pierde
+    same = upbit("a1", "SOL", "솔라나")
+    assert d.check(NewsItem(id="tg-a1", source="upbit.avisos", tier=1, kind="relay", title=same.title, url=same.url,
+                            published_at=clock.time(), received_at=clock.time())).kind == "exact"   # Telegram y sitio
+    b1 = NewsItem(id="b1", source="binance.ws", tier=1, kind="ws", title="Binance Will Delist ALPACA, PDA on 2026-11-20",
+                  url="", published_at=clock.time(), received_at=clock.time())
+    b2 = NewsItem(id="b2", source="binance.listados", tier=1, kind="api",
+                  title="Binance Will Delist ALPACA, PDA on 2026-11-20 (actualizado)", url="",
+                  published_at=clock.time(), received_at=clock.time())
+    b3 = NewsItem(id="b3", source="binance.ws", tier=1, kind="ws", title="Binance Will Delist KDA, LOOM on 2026-11-20",
+                  url="", published_at=clock.time(), received_at=clock.time())
+    assert d.check(b1).kind == "new" and d.check(b2).kind == "near"              # el mismo aviso por otro canal
+    assert d.check(b3).kind == "new"                                            # otro deslistado, otras monedas
+

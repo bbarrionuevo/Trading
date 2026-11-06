@@ -200,3 +200,19 @@ def test_la_ia_conoce_la_reaccion_medida_de_los_avisos_oficiales():
     after = Signal("listado", 0.9, 0.48, ("NIL",), 60, ("llm",), certainty=0.8, relevance=10, importance=8, impact=8)
     assert assess(ev, before, "NIL", T0, PolicyConfig()).reasons                  # así no entraba
     assert assess(ev, after, "NIL", T0, PolicyConfig()).reasons == ()             # así entra (p ≈ 0,77)
+
+
+async def test_la_ia_se_prepara_al_arrancar_sin_consultar(monkeypatch):
+    """El SDK se carga en otro hilo al arrancar (en Tokio tarda ~1,2 s): la primera noticia no frena el bucle."""
+    from tradingagent.intelligence.llm import LlmClassifier
+    c = LlmClassifier("clave-de-prueba")
+    await c.warm_up()
+    assert c._client is not None and c.budget.calls == 0                        # listo, sin gastar
+    first = c._client
+    await c.warm_up()
+    assert c._client is first                                                   # una sola vez
+    await c.close()
+    sin = LlmClassifier(None)
+    await sin.warm_up()
+    assert sin._client is None                                                  # sin clave, nada
+

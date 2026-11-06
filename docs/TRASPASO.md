@@ -163,6 +163,13 @@ esta lista:
      instante contra esperar a la IA).
    - Canal de Binance en Tokio: el único aviso medido hasta ahora (6-nov, TradFi) llegó 41 s después de publicado.
      En la PC eran 1,2-1,8 s. Medir con más avisos antes de concluir.
+   - En el registro del agente, cada entrada al instante deja sus tiempos por etapa: "listado de Upbit al instante
+     (X): esperó N ms · candado · contrato · velas, libro y precio · orden a los M ms". Lo mismo para los deslistados
+     y la etiqueta de vigilancia.
+5. **Después de cada instalación en Tokio**, la prueba de punta a punta:
+   `~/trading/.venv/bin/python ~/trading/deploy/tokio/prueba_listado.py`.
+   Corre con un agente y un relé aparte, sin tocar el simulacro ni Telegram. Gasta unos centavos de IA. Tiene que
+   terminar con las dos entradas y sin errores, con la orden a menos de ~150 ms de recibido el aviso.
 
 ## 4. Cómo funciona (de la noticia a la orden)
 
@@ -498,6 +505,15 @@ Para que no vuelva a pasar:
 Ver qué pasó en un arranque anterior: `sudo journalctl --list-boots` y `sudo journalctl -b -1 ...`. Ojo con
 `--since`: sin fecha toma la de hoy.
 
+**Dos trampas encontradas con la prueba de punta a punta (6-nov):**
+
+- **El SDK de la IA (`import anthropic`) tarda 1,2 s en cargar en Tokio.** Si lo carga la primera noticia, frena el
+  bucle ese tiempo, entradas al instante incluidas. Ahora se carga al arrancar, en otro hilo
+  (`LlmClassifier.warm_up`). Cualquier import pesado nuevo tiene que ir al arranque, no a la primera noticia.
+- **La deduplicación juntaba dos avisos distintos con la misma plantilla** (dos listados de Upbit de otra moneda: 0,62
+  de parecido, umbral 0,6). En 180 días pasó dos veces (KMNO y BSB, RSR y GTC). Ahora otros tickers en el título u
+  otro enlace del mismo aviso oficial nunca son "la misma noticia" (`ingestion/dedup.py`).
+
 - **SEC lenta, no caída (5-nov):** la página de 8-K tarda de 0,4 a 8 s y a veces más de 10 s (64 veces en 14 h). Con la espera que se duplica tras cada falla, 4 fallas seguidas dejaban ~10 min sin la SEC. Ahora: hasta 25 s de espera, reintento como mucho al minuto y el corte de 10 min recién después de 20 fallas.
 - **El sitio de anuncios de Binance (www.binance.com) cuenta los pedidos por IP:** el agente lo lee cada 3 s. Un estudio que lo consulte desde la PC provoca 429 en el agente: el 4-nov a 2 s entre pedidos y el 5-nov **también a 6 s** (tres 429 seguidos cada vez; se recuperó en ~20 s). Desde la PC: un pedido cada 30 s como mínimo y cortar al primer 429 (`estudios/vigilancia_binance.py` lo hace). Los datos de mercado de fapi.binance.com tienen su propio límite (2.400 de peso por minuto, también compartido con el agente: los estudios frenan a 900).
 
@@ -588,5 +604,7 @@ sección 11). Un estudio nuevo va con su línea acá.
 | 5-nov | **Tamaño de los listados de Upbit** (31, 10.000 órdenes al azar) | 3 % al stop: 100 USDT → 297 (peor 5 %: 185), 10 % de chance de tocar el freno de 8 %; 5 %: 50 %; 1x: 97 % | 3 % (L-3); más, con ~30 operaciones reales | ESTUDIO-LISTADOS, `estudios/upbit_tamano.py` |
 | 5-nov | **Otros avisos de Upbit al instante** | fin del soporte corto (9): mediana +4,75 %; advertencia corto (18): +1,73 %, 78 %; extendida y levantada, no | candidatos (L-9): se deciden con ~30 casos | ESTUDIO-LISTADOS, `estudios/upbit_primero.py` |
 | 5-nov | **Binance: nada se cancela antes de 5 s** | el stop que sobra se cancela en segundo plano a los 5,5 s (pedido del dueño) | hecho (D-6, L-7) | `execution/live/binance_venue.py` |
+| 6-nov | **Prueba de punta a punta en Tokio** (`deploy/tokio/prueba_listado.py`, agente aparte, avisos armados a mano) | Al principio: el primer aviso esperó 1,1 s (cargar el SDK de la IA frenaba el bucle) y el segundo listado del día se perdía (la deduplicación juntaba dos avisos de Upbit con la misma plantilla: 0,62 > 0,6). Arreglado: cada aviso entra a los 23-60 ms de recibido (~1,07 s desde la hora del mensaje) | hecho (precarga de la IA, deduplicación por tickers, tiempos por etapa en el registro) | `live.py`, `ingestion/dedup.py`, `intelligence/llm.py` |
+| 6-nov | **Canal de anuncios de Binance en Tokio** | 1 aviso medido (TradFi): 41 s de publicado a recibido; en la PC eran 1,2-1,8 s | medir con más avisos | sección "Vigilancia" |
 | 5-nov | **Agente completo en Tokio (simulacro)** | Claude 1,8 s; Binance 2-5 ms (PC ~320 ms); fuentes OK salvo el sitio de Upbit (403); memoria: agente 77 MB y relé 63 MB de 416 | andando (`agente-tokio`); telemetría al tablero de la PC; la pausa de la PC frena a Tokio | RELE-TOKIO |
 | 5-nov | **1.ª operación del simulacro** | Wendy's, resultados: entró a los 120 s, salió a los 30 min, −0,27 USDT (−0,5 %); su comunicado salió minutos antes del 8-K | normal (pierden ~35 %) | simulacro |
