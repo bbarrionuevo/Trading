@@ -353,3 +353,46 @@ async def test_el_tablero_en_solo_tablero_muestra_a_tokio_arriba(tmp_path):
     html = dashboard.page(s)
     assert "La PC solo muestra el tablero" in html and "Salud del agente" not in html
     assert dashboard.gather(home, time.time() + 600)["estado"] == "caido"      # Tokio sin noticias
+
+
+def test_el_tablero_de_tokio_se_ve_tal_cual_en_la_pc_y_lo_publico_nunca_lleva_dinero_real(tmp_path, monkeypatch):
+    """Pedido del dueño: "en el dashboard no es necesaria esa distinción de PC y Tokio". El agente de Tokio exporta su
+    tablero (local y público), la PC lo trae por SSH (relay/espejo.py) y lo muestra como propio. Con dinero real armado,
+    la versión pública esconde la cuenta real (también en el latido: REGLAS G-8)."""
+    import gzip
+    import subprocess
+
+    from tradingagent.relay import espejo
+    tokio_home = tmp_path / "tokio"
+    paths.write_json_atomic(tokio_home / "state" / "heartbeat.json",
+                            {"ts": time.time(), "mode": "PAPER", "real": {"simulacro": False, "equity": "1234.5"},
+                             "sources": {"ok": 13, "total": 13, "failing": []}})
+    board = dashboard.export_board(tokio_home)
+    assert board["local"]["agente"]["real"]["equity"] == "1234.5"
+    assert "1234.5" not in json.dumps(board["publico"])                         # lo público, sin el saldo real
+    exported = (tokio_home / "state" / dashboard.EXPORT_FILE).read_bytes()
+
+    def fake_run(cmd, **kw):                                                    # el "ssh" a Tokio
+        assert cmd[-1].startswith("gzip -c ") and "BatchMode=yes" in cmd
+        return subprocess.CompletedProcess(cmd, 0, gzip.compress(exported), b"")
+
+    monkeypatch.setattr(espejo.subprocess, "run", fake_run)
+    pc = paths.home()
+    m = espejo.TokioBoardMirror(pc, "203.0.113.9", key=tmp_path / "k.pem", ssh="ssh")
+    assert m.fetch_once() and m.counts["ok"] == 1
+    assert dashboard.gather(pc).get("espejo") is None                          # sin SOLO-TABLERO, el de la PC
+    (pc / "SOLO-TABLERO").write_text("", encoding="utf-8")
+    s = dashboard.gather(pc)
+    assert s["espejo"] and s["solo_tablero"] and s["agente"]["real"]["equity"] == "1234.5"
+    assert "Servidor de Tokio" not in dashboard.page(s)                         # todo es uno
+    pub = dashboard.gather(pc, include_real=False)                             # lo que se publica en la rama pc
+    assert "1234.5" not in json.dumps(pub, default=str)
+    assert dashboard.gather(pc, time.time() + 600).get("espejo") is None       # viejo: no se usa
+
+
+def test_el_latido_publicado_por_el_tablero_esconde_la_cuenta_real():
+    home = paths.home()
+    paths.write_json_atomic(home / "state" / "heartbeat.json",
+                            {"ts": time.time(), "real": {"simulacro": False, "equity": "999.9"}})
+    assert "999.9" not in json.dumps(dashboard.gather(home, include_real=False), default=str)
+    assert dashboard.gather(home)["agente"]["real"]["equity"] == "999.9"        # en la PC, sí

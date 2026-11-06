@@ -218,6 +218,7 @@ class Supervisor:
         self.crashes: list[float] = []
         self.board = None
         self.monitor = None                 # solo tablero: la telemetría de Tokio (relay/monitor.py)
+        self.mirror = None                  # solo tablero: el tablero completo de Tokio por SSH (relay/espejo.py)
         self.job = _kill_on_close_job()
         self.version = self.head()
 
@@ -278,8 +279,17 @@ class Supervisor:
         if self.state.get("modo") != mode:
             self.state["modo"] = mode
             self.save()
+        if self.mirror is None or not self.mirror.alive():
+            from .relay.espejo import TokioBoardMirror
+            self.mirror = TokioBoardMirror.from_home(self.home)
+            if self.mirror is not None:
+                self.mirror.start()
+                log.info("solo tablero: traigo el tablero completo de Tokio por SSH cada 30 s")
 
     def stop_monitor(self) -> None:
+        if self.mirror is not None:
+            self.mirror.stop()
+            self.mirror = None
         if self.monitor is not None:
             self.monitor.stop()
             self.monitor = None
@@ -651,6 +661,8 @@ class Supervisor:
             self.stop_child()                          # también con Ctrl+C: el agente cierra en orden
             if self.monitor is not None:
                 self.monitor.stop()
+            if self.mirror is not None:
+                self.mirror.stop()
             if self.board is not None:
                 self.board.shutdown()
                 self.board.server_close()

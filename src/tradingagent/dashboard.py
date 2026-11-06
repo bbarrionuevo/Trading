@@ -32,6 +32,9 @@ PORT = 18765                        # lejos de los puertos comunes: el 8765 ya l
 PORT_TRIES = 20
 HB_STALE_S = 60                     # el latido se escribe cada 15 s: un minuto sin latido es una caída
 TOKIO_STALE_S = 60                  # el agente de Tokio manda su resumen cada 15 s (el relé, cada 30 s)
+MIRROR_STALE_S = 330                # el tablero completo de Tokio se arma cada 2 min y llega cada 1 (relay/espejo.py)
+EXPORT_FILE = "tablero-exportado.json"
+MIRROR_FILE = "tablero-tokio.json"
 TOKIO_EVENTS = 12
 F3_TRADES = 60                      # REGLAS F-3: evidencia que se mide (no frena, decisión del dueño)
 REFRESH_MS = 5000
@@ -230,17 +233,54 @@ def tokio(home: Path, now: float, include_real: bool = True) -> dict | None:
             "eventos": events[::-1]}
 
 
-def gather(home: Path, now: float | None = None, repo: Path = REPO, include_real: bool = True) -> dict:
+def hide_real(hb):
+    """G-8: el latido sin la cuenta de DINERO REAL (el simulacro sí se ve: es plata de mentira)."""
+    real = hb.get("real") if isinstance(hb, dict) else None
+    if isinstance(real, dict) and not real.get("simulacro"):
+        return {**hb, "real": {"oculto": "cuenta de dinero real: no se publica (REGLAS G-8)"}}
+    return hb
+
+
+def export_board(home: Path, repo: Path = REPO, now: float | None = None) -> dict:
+    """El tablero completo de este agente, en sus dos versiones (local: con todo; pública: sin dinero real), para la PC
+    "solo tablero" (relay/espejo.py lo trae por SSH). Lo escribe el agente de Tokio cada 30 s."""
+    now = time.time() if now is None else now
+    board = {"generado": round(now, 3), "local": gather(home, now, repo, True, mirror=False),
+             "publico": gather(home, now, repo, False, mirror=False)}
+    paths.write_json_atomic(Path(home) / "state" / EXPORT_FILE, board)
+    return board
+
+
+def from_mirror(home: Path, now: float, include_real: bool) -> dict | None:
+    """En la PC "solo tablero": el tablero que armó Tokio (la versión pública si es para publicar), si es reciente."""
+    m = read_json(Path(home) / "state" / MIRROR_FILE, None)
+    if not isinstance(m, dict) or now - float(m.get("recibido") or 0) > MIRROR_STALE_S:
+        return None
+    board = m.get("local" if include_real else "publico")
+    return board if isinstance(board, dict) else None
+
+
+def gather(home: Path, now: float | None = None, repo: Path = REPO, include_real: bool = True,
+           mirror: bool = True) -> dict:
     """Todo lo que muestra el tablero, sin E/S de red. Lo que se publica para Claude va sin la cuenta de dinero
     real (`include_real=False`, REGLAS G-8: nunca saldos reales)."""
     now = time.time() if now is None else now
+    board_only = (home / "SOLO-TABLERO").exists()          # la PC solo muestra el tablero: el agente corre en Tokio
+    remote = from_mirror(home, now, include_real) if board_only and mirror else None
+    if remote is not None:                                 # el tablero de Tokio, tal cual: sin distinción PC / Tokio
+        sup = read_json(home / "state" / "supervisor.json", None) or {}
+        return {**remote, "supervisor": {**sup, "version": (remote.get("supervisor") or {}).get("version")
+                                         or sup.get("version")},
+                "tests": tests_summary(home / "logs" / "tests.txt"), "tokio": tokio(home, now, include_real),
+                "solo_tablero": True, "espejo": True, "generado": round(now)}
     hb = read_json(home / "state" / "heartbeat.json", None)
+    if not include_real:
+        hb = hide_real(hb)
     sup = read_json(home / "state" / "supervisor.json", None) or {}
     accounts, inactive = split_accounts(home, hb, now, include_real)
     age = None if not isinstance(hb, dict) else round(now - float(hb.get("ts", 0)))
     kill = (home / "KILL").exists()
     halted = [a["mercado"] for a in accounts if a["halt"]]
-    board_only = (home / "SOLO-TABLERO").exists()          # la PC solo muestra el tablero: el agente corre en Tokio
     tk = tokio(home, now, include_real)
     if board_only:
         inactive = [{**a, "inactiva": True} for a in accounts] + inactive
@@ -364,13 +404,13 @@ TIPO_ES = {"real": "dinero real", "simulacro": "simulacro", "demo": "simulacro e
 
 def fragment(s: dict) -> str:
     """El contenido del tablero (se recarga cada 5 s sin perder el scroll)."""
-    beat = ("La PC solo muestra el tablero" if s.get("solo_tablero") else
+    beat = ("La PC solo muestra el tablero" if s.get("solo_tablero") and not s.get("espejo") else
              f"Último latido hace {fmt_age(s['latido_hace_s'])}")
     parts = [f'<section class="status {e(s["estado"])}"><span class="icon">{STATUS_ICON.get(s["estado"], "?")}'
              f'</span><div><strong>{e(s["estado_texto"])}</strong><div class="muted">{beat} · '
              f'versión {e(str((s["supervisor"] or {}).get("version", "?"))[:7])} · '
              f'actualizado {e(fmt_ts(s["generado"]))}</div></div></section>']
-    if s.get("tokio"):
+    if s.get("tokio") and not s.get("espejo"):           # con el tablero de Tokio, todo es uno: sin sección aparte
         parts.append(tokio_fragment(s["tokio"]))
     hb = s.get("agente") or {}
     llm = s.get("llm") or {}
@@ -446,7 +486,13 @@ def fragment(s: dict) -> str:
         ["Encendido hace", e(fmt_age((hb.get("uptime_min") or 0) * 60))],
         ["KILL", "ACTIVO: no abre posiciones nuevas" if s["kill"] else "no (para pausar: crear el archivo KILL)"],
     ]
-    if not s.get("solo_tablero"):                          # el agente de la PC no corre: su salud es la de Tokio
+    tg = (((s.get("tokio") or {}).get("rele") or {}).get("telegram") or {}) if s.get("espejo") else {}
+    if s.get("espejo"):                                    # el canal de Upbit y el relé, como una fuente más
+        rele = (s.get("tokio") or {}).get("rele") or {}
+        health.insert(1, ["Canal de Upbit (Telegram)", ("conectado" if tg.get("conectado") else "DESCONECTADO")
+                          + f" · {tg.get('avisos', 0)} avisos de trading · relé "
+                          + ("con la PC" if rele.get("pc") else "sin la PC")])
+    if not s.get("solo_tablero") or s.get("espejo"):       # sin el tablero de Tokio, la salud de la PC no dice nada
         parts.append('<h2>Salud del agente</h2>' + _table(["", ""], [[e(k), v] for k, v in health], ""))
     sup = s["supervisor"] or {}
     last = sup.get("ultima_revision") or {}
