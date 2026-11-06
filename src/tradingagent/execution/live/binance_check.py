@@ -34,6 +34,8 @@ WAIT_BEFORE_CANCEL_S = 6.0
 CANCELED = ("CANCELED", "CANCELLED")
 STOP_CONFIRM_S = 10.0                 # cuánto esperar a que Binance muestre el stop cancelado (4-nov: más de 0,5 s)
 STOP_POLL_S = 0.5
+STOP_SHOW_S = 5.0                     # cuánto esperar a que Binance muestre el stop recién puesto (6-nov, Tokio)
+STOP_SHOW_POLL_S = 0.1
 
 
 def _round(x: Decimal, unit: Decimal, up: bool) -> Decimal:
@@ -47,6 +49,20 @@ def _locked(status: dict) -> list[str]:
             if r.get("isLocked"):
                 out.append(f"{sym}:{r.get('indicator')}")
     return out
+
+
+async def _stop_when_shown(client: BinanceClient, sid: str, *, wait_s: float, poll_s: float) -> tuple[dict, float]:
+    """El stop recién puesto, apenas Binance lo muestra, y cuántos segundos tardó. Desde Tokio (6-nov) la consulta
+    salía ~3 ms después de ponerlo y Binance contestaba -2013 "Order does not exist": todavía no lo mostraba (desde la
+    PC, a ~0,3 s, siempre aparecía). Si pasados `wait_s` sigue sin aparecer, el error de Binance."""
+    since = time.monotonic()
+    while True:
+        try:
+            return await client.stop(sid), time.monotonic() - since
+        except BinanceError as e:
+            if e.code != -2013 or time.monotonic() - since >= wait_s:
+                raise
+        await asyncio.sleep(poll_s)
 
 
 async def _stop_after_cancel(client: BinanceClient, sid: str, *, since: float, wait_s: float,
@@ -74,14 +90,15 @@ async def _stop_after_cancel(client: BinanceClient, sid: str, *, since: float, w
 
 
 async def real_check(client: BinanceClient, symbol: str = SYMBOL, *, pause_s: float = WAIT_BEFORE_CANCEL_S,
-                     confirm_s: float = STOP_CONFIRM_S, poll_s: float = STOP_POLL_S) -> dict:
+                     confirm_s: float = STOP_CONFIRM_S, poll_s: float = STOP_POLL_S, show_s: float = STOP_SHOW_S,
+                     show_poll_s: float = STOP_SHOW_POLL_S) -> dict:
     steps: list[dict] = []
 
     def step(name: str, ok: bool, detail: str = "") -> bool:
         steps.append({"paso": name, "ok": bool(ok), "detalle": "" if ok else detail})   # la ayuda, solo si falla
         return ok
 
-    placed, stop_seen = False, None
+    placed, stop_seen, placed_at, shown_s = False, None, None, None
     try:
         await client.sync_time()
         money = await client.usdt()
@@ -121,7 +138,7 @@ async def real_check(client: BinanceClient, symbol: str = SYMBOL, *, pause_s: fl
                                            "cargues la plata")
             return {"ok": False, "solo_lectura": True, "simbolo": symbol, "pasos": steps}
         cid, sid = f"chk{ms}m", f"chk{ms}s"
-        placed = True
+        placed, placed_at = True, time.monotonic()
         await client.submit(symbol=symbol, side=BUY, qty=qty, price=far, tif=GTX, client_id=cid)
         trigger = _round(ask * (1 + ALGO_DISTANCE), tick, up=True)     # solo con +50 %: imposible en 6 s
         await client.emergency_stop(symbol=symbol, side=BUY, trigger_price=trigger, client_id=sid, qty=qty)
@@ -139,7 +156,7 @@ async def real_check(client: BinanceClient, symbol: str = SYMBOL, *, pause_s: fl
             problems.append("se ejecutó (no debía)")
         if o.get("status") != "NEW":
             problems.append(f"estado {o.get('status')} en vez de abierta")
-        st = await client.stop(sid)
+        st, shown_s = await _stop_when_shown(client, sid, wait_s=show_s, poll_s=show_poll_s)
         stop_problems = []
         if st.get("orderType", st.get("type")) != STOP_MARKET or st.get("side") != BUY:
             stop_problems.append(f"tipo {st.get('orderType')}/{st.get('side')} en vez de {STOP_MARKET}/{BUY}")
@@ -168,6 +185,9 @@ async def real_check(client: BinanceClient, symbol: str = SYMBOL, *, pause_s: fl
         step("error", False, redact(str(e))[:300])
     ok = len(steps) >= 10 and all(s["ok"] for s in steps)
     if not ok and placed:
+        young = pause_s - (time.monotonic() - placed_at)
+        if young > 0:                                 # tampoco al limpiar se cancela antes de 5 s (D-6)
+            await asyncio.sleep(young)
         for cleanup in (client.cancel_all, client.cancel_all_stops):    # nada colgado (nunca cierra posiciones)
             try:                                      # cada una por separado: si falla una, igual va la otra
                 await cleanup(symbol)
@@ -176,4 +196,6 @@ async def real_check(client: BinanceClient, symbol: str = SYMBOL, *, pause_s: fl
     out = {"ok": ok, "simbolo": symbol, "pasos": steps}
     if stop_seen:
         out["stop"] = stop_seen                       # cómo y cuándo Binance mostró el stop cancelado
+    if shown_s is not None:
+        out.setdefault("stop", {})["visible_a_los_s"] = round(shown_s, 3)   # cuánto tardó en mostrar el recién puesto
     return out

@@ -1,5 +1,7 @@
 """Binance Futures (modo real) contra un Binance falso: firma, lista cerrada de operaciones (A-3), nada de órdenes a
 mercado sin tope (D-2), pausa ante límites (429) para no ser baneados, y la prueba sin riesgo."""
+import time
+
 import aiohttp
 import pytest
 
@@ -90,6 +92,30 @@ async def test_el_stop_tarda_en_mostrarse_cancelado_y_la_prueba_lo_espera():
     assert rep["ok"], rep["pasos"]
     assert rep["stop"]["estados"] == ["NEW", "CANCELED"]
     assert ("DELETE", "/fapi/v1/algoOpenOrders") not in fake.calls                  # no hizo falta limpiar
+
+
+async def test_desde_tokio_el_stop_recien_puesto_tarda_en_aparecer_y_la_prueba_lo_espera():
+    """6-nov, Tokio: la consulta salía ~3 ms después de poner el stop y Binance contestaba -2013 "Order does not exist"
+    (todavía no lo mostraba); la prueba fallaba sin que nada estuviera mal. Ahora espera a que aparezca."""
+    fake = FakeBinance()
+    fake.algo_hidden = 3
+    async with serve(fake.app()) as url, aiohttp.ClientSession() as s:
+        rep = await real_check(BinanceClient(s, KEY, SECRET, base=url), pause_s=0, poll_s=0.01, show_poll_s=0.01)
+    assert rep["ok"], rep["pasos"]
+    assert fake.algo_hidden == 0 and rep["stop"]["visible_a_los_s"] > 0
+
+
+async def test_si_el_stop_nunca_aparece_falla_y_limpia_sin_cancelar_antes_de_5_s():
+    fake = FakeBinance()
+    fake.algo_hidden = 10_000
+    async with serve(fake.app()) as url, aiohttp.ClientSession() as s:
+        t0 = time.monotonic()
+        rep = await real_check(BinanceClient(s, KEY, SECRET, base=url), pause_s=0.3, show_s=0.05, show_poll_s=0.01)
+        took = time.monotonic() - t0
+    assert not rep["ok"] and "-2013" in rep["pasos"][-1]["detalle"]
+    assert all(o["status"] == "CANCELED" for o in fake.orders.values())              # nada quedó colgado
+    assert all(a["algoStatus"] == "CANCELED" for a in fake.algos.values())
+    assert took >= 0.25                                  # limpió recién a los `pause_s` de puesto (5 s de verdad)
 
 
 async def test_si_el_stop_no_se_cancela_lo_dice_y_limpia():
