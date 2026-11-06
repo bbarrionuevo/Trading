@@ -292,7 +292,7 @@ def startup_alert(mode: str, sources_active: int, sources_total: int, version: s
 # Nombres de las estrategias para el dueño (las categorías del sistema).
 STRATEGY_ES = {"resultados_impulso": "resultados", "lanzamiento_corto": "contratos nuevos",
                "deslistado_corto": "deslistados", "vigilancia_corto": "etiqueta de vigilancia", "listado": "listados",
-               "listado_upbit": "listados de Upbit al instante"}
+               "listado_upbit": "listados de Upbit al instante", "listado_binance": "listados de Binance al instante"}
 
 
 def daily_alert(day: str, *, mode: str, closed: int, won: int, pnl, equity, initial, total_closed: int,

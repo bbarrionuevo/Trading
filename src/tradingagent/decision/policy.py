@@ -214,7 +214,7 @@ def news_move(candles: dict, t_pub: float | None, price_now: float, side: int) -
 # Categorías cuyo efecto sigue después del primer salto (estudio del 3-nov, docs/ESTUDIO-LISTADOS.md: con los
 # listados spot de Binance la moneda siguió subiendo en MEXC hasta la hora, mediana +12,5 % a los 5 min y +28 % a
 # los 60). Ahí, que ya se haya movido a favor no es motivo para no entrar.
-DRIFT = {"listado", "listado_upbit", "resultados_impulso"}
+DRIFT = {"listado", "listado_upbit", "listado_binance", "resultados_impulso"}
 
 
 @dataclass(frozen=True)
@@ -264,7 +264,12 @@ EXITS = {"listado": ExitProfile(max_age_s=120, stop=0.10, hold_s=900, target=Fal
          # por Telegram, stop FIJO de 10 % y salida a los 15 min (A-5). 0,30 veces = el 3 % del sobre al stop (el
          # dueño, 5-nov: "arriesga el 3%"; estudios/upbit_tamano.py: 31 listados, 100 USDT → 297, peor 5 % → 185).
          "listado_upbit": ExitProfile(max_age_s=10, stop=0.10, hold_s=900, target=False, b_kelly=1.5,
-                                      max_slippage_bps=50, max_x=0.30)}
+                                      max_slippage_bps=50, max_x=0.30),
+         # Listados de Binance al instante (decision/binance_listings.py, estudios/binance_listados_segundos.py):
+         # largo apenas llega el aviso, si llegó a <= 2,2 s de publicado; la misma salida y el mismo tamaño que
+         # Upbit (el dueño, 6-nov): stop FIJO de 10 %, 15 min, 0,30 veces = el 3 % del sobre al stop.
+         "listado_binance": ExitProfile(max_age_s=10, stop=0.10, hold_s=900, target=False, b_kelly=1.5,
+                                        max_slippage_bps=50, max_x=0.30)}
 
 
 def chase_blocks(move: float | None, sl_frac: float, tp_frac: float, category: str = "") -> list[str]:

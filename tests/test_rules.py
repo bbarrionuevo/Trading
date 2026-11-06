@@ -103,17 +103,20 @@ def test_g9_un_solo_ejecutor_del_dinero_real(tmp_path):
 
 
 def test_l_lineamientos_medidos_trabados_en_el_codigo():
-    """REGLAS L-1, L-3 y L-7: lo aprendido con datos no se cambia por error."""
-    from tradingagent.decision import policy, upbit_listings
+    """REGLAS L-1, L-3, L-7 y L-10: lo aprendido con datos no se cambia por error."""
+    from tradingagent.decision import binance_listings, policy, upbit_listings
     assert upbit_listings.MAX_LATE_S <= 3.0                                  # L-1: al instante, por Telegram
+    assert binance_listings.MAX_LATE_S <= 2.5 and binance_listings.MAX_RISE <= 0.08   # L-10: a los 3,5 s ya es tarde
     live_src = (SRC / "live.py").read_text(encoding="utf-8")
     start = live_src.index("    async def on_news(")
     on_news = live_src[start:live_src.index("\n    async def ", start + 10)]
     assert on_news.index("self._upbit_listing(") < on_news.index("self.llm.classify(")   # primero entra, después la IA
+    assert on_news.index("self._binance_listing(") < on_news.index("self.llm.classify(")
     lim = limits.load()                                                         # L-3: 3 % y sin apalancamiento
     assert float(lim["per_trade"]["max_risk_pct"]) <= 3 and int(lim["per_trade"]["max_leverage"]) == 1
-    p = policy.EXITS["listado_upbit"]
-    assert p.stop == 0.10 and p.max_x * p.stop <= 0.03 + 1e-9
+    for name in ("listado_upbit", "listado_binance"):
+        p = policy.EXITS[name]
+        assert p.stop == 0.10 and p.max_x * p.stop <= 0.03 + 1e-9
     venue = (SRC / "execution" / "live" / "binance_venue.py").read_text(encoding="utf-8")   # L-7: nunca antes de 5 s
     assert float(re.search(r"^MIN_CANCEL_AGE_S = ([\d.]+)", venue, re.M).group(1)) >= 5
 
