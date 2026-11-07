@@ -1,6 +1,7 @@
 """Relé de Tokio (relay/): datagramas UDP firmados, latido de la PC que abre el túnel del NAT y avisos que el
 servidor manda a la PC. Con el servidor y el cliente de verdad, por UDP en 127.0.0.1."""
 import asyncio
+import json
 import secrets
 
 from tradingagent.core.clock import SystemClock
@@ -74,3 +75,20 @@ async def test_latido_aviso_y_datagrama_falso():
         stop.set()
         await task
         srv_transport.close()
+
+
+async def test_cada_aviso_de_telegram_queda_anotado_con_su_demora(tmp_path):
+    """7-nov: la demora real de Telegram a Tokio decide si un listado de Upbit llega a tiempo; el diario del sistema se
+    borra al reiniciar, así que el relé la anota (después de reenviar el aviso). Sin carpeta, no anota y sigue."""
+    clock = SystemClock()
+    f = tmp_path / "telegram-upbit.jsonl"
+    relay = server.RelayServer(KEY, clock, telegram_log=f)
+    item = NewsItem(id="t1", source="upbit.avisos", tier=1, kind="telegram", title="[거래] 푸코인(FOO) 신규 거래지원 안내",
+                    published_at=float(int(clock.time())), received_at=clock.time())
+    await relay.on_telegram(item)
+    row = json.loads(f.read_text(encoding="utf-8"))
+    assert row["publicado"] == item.published_at and row["recibido"] >= row["publicado"]
+    assert row["mandado"] >= row["recibido"] and row["a_alguien"] is False and "FOO" in row["titulo"]
+    broken = server.RelayServer(KEY, clock, telegram_log=tmp_path / "no-existe" / "x.jsonl")
+    await broken.on_telegram(item)                                   # no puede escribir: avisa en el registro y sigue
+    assert broken.counts["telegram"] == 1
