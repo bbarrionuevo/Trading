@@ -144,3 +144,23 @@ async def test_el_mismo_anuncio_por_el_canal_y_por_el_sondeo_se_opera_una_vez():
     second = await eng.handle(polled, max_age_s=600)
     assert first.accepted and not second.accepted and second.dedup.kind != "new"
     assert src.parse(json.dumps({"type": "COMMAND", "data": "SUCCESS", "subType": "SUBSCRIBE"})) is None
+
+
+async def test_un_catalogo_que_no_conocemos_se_avisa_una_vez_despues_de_entregar_el_anuncio():
+    """Pedido del dueño (7-nov): si Binance publica en un catálogo nuevo, avisar (una vez por catálogo) y seguir."""
+    seen = []
+    src = BinanceAnnouncements(KEY, SECRET, None, SystemClock(), on_new_catalog=lambda *a: seen.append(a))
+
+    def msg(**kw):
+        return json.dumps({"type": "DATA", "topic": TOPIC, "data": json.dumps(announcement(**kw))})
+
+    for cat in (48, 161, 49, 51, 93, 128, 157):                      # los 7 de la lista sin catálogo: conocidos
+        assert src.parse(msg(catalog=cat)) is not None
+    item = src.parse(msg(title="Binance Launches Something New", catalog=999, name="New Things"))
+    assert item is not None and item.category_hint == "New Things"   # el anuncio sigue su camino igual
+    assert seen == []                                                 # el aviso sale después (call_soon)
+    await asyncio.sleep(0)
+    assert seen == [(999, "New Things", "Binance Launches Something New")]
+    src.parse(msg(title="Another one", catalog=999, name="New Things"))
+    await asyncio.sleep(0)
+    assert len(seen) == 1                                             # una sola vez por catálogo

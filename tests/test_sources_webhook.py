@@ -1,4 +1,5 @@
 import asyncio
+import itertools
 import json
 import random
 
@@ -168,8 +169,18 @@ def test_binance_y_upbit_se_leen_rapido():
     b, u = specs["binance.listados"], specs["upbit.avisos"]
     assert b.interval_s <= 3 and 6 <= u.interval_s <= 10     # Upbit: ~10 pedidos/min (2 y 5 s daban HTTP 429)
     v = binance_variants()
-    assert len(v) == len(set(v)) == 72 and b.url_variants == v
+    assert b.url_variants == v
+    listings, every = {x for x in v if "catalogId=48" in x}, {x for x in v if "catalogId" not in x}
+    assert len(listings) == 72 and len(every) == 40 and len(listings) + len(every) == len(set(v))
+    assert all(("catalogId" in a) != ("catalogId" in c) for a, c in itertools.pairwise(v))   # el 48 cada 3 s, todos cada 6
     for x in v:                                             # solo los tamaños que CloudFront acepta (si no, HTTP 400)
         q = dict(p.split("=") for p in x.split("?")[1].split("&"))
-        assert q["type"] == "1" and q["catalogId"] == "48" and q["pageNo"] == "1" and q["pageSize"] in {"10", "15", "20"}
-    assert len(v) * b.interval_s > 120 * 1.5                # cada forma vuelve recién con la copia del CDN vencida
+        assert q["type"] == "1" and q.get("catalogId", "48") == "48" and q["pageNo"] == "1"
+        assert q["pageSize"] in ({"10", "15", "20"} if "catalogId" in q else {"5", "10", "15", "20"})
+        assert x.split("?")[1] != f"type=1&pageNo=1&pageSize={q['pageSize']}"   # el orden de la web: siempre copia
+    last, gap = {}, {}
+    for i, x in enumerate(v + v):
+        if x in last:
+            gap[x] = min(gap.get(x, len(v)), i - last[x])
+        last[x] = i
+    assert min(gap.values()) * b.interval_s > 120 * 1.5     # cada forma vuelve recién con la copia del CDN vencida

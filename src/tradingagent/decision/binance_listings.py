@@ -26,7 +26,7 @@ from ..intelligence import vector as vec
 from ..intelligence.classifier import Signal
 from .policy import Assessment
 
-SOURCES = {"binance.ws", "binance.listados"}       # el canal de anuncios y el sondeo del catálogo 48
+SOURCES = {"binance.ws", "binance.listados"}       # el canal de anuncios y el sondeo de la lista (el relé)
 CATEGORY = "listado_binance"
 VERSION = "listado-binance-1"
 RULE = "listado_binance_al_instante"

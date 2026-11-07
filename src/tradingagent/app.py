@@ -387,7 +387,16 @@ class Agent:
             self.sources_off[SOURCE_ID] = "falta BINANCE_LECTURA_KEY y BINANCE_LECTURA_SECRET en TRADING_HOME/.env"
             return streams
         return streams + [BinanceAnnouncements(key, secret, self.ingestion.handle, self.clock,
-                                               max_age_s=safety.news_max_age(float(o.get("max_age_s") or 600), lim))]
+                                               max_age_s=safety.news_max_age(float(o.get("max_age_s") or 600), lim),
+                                               on_new_catalog=self._new_catalog_alert)]
+
+    def _new_catalog_alert(self, cat, name: str, title: str) -> None:
+        """Binance publicó en un catálogo que no está en binance_ws.CATALOGS: un aviso por Telegram, sin sonido."""
+        from .alerts.model import Alert, Priority, clip, esc
+        self.alerts.submit(Alert(Priority.INFO, "info", clip(
+            f"🆕 Binance publicó en un catálogo que no conocía: {esc(cat)} «{esc(name)}».\nPrimer anuncio: "
+            f"{esc(title[:200])}\nLo leo igual (la IA decide por el texto); si suma, lo estudiamos."),
+            key=f"catalogo-{cat}", silent=True))
 
     def _relay_settings(self) -> dict | None:
         """Relé de Tokio: la dirección en TRADING_HOME/relay.json ({"host": ..., "port": 50005, "telemetria": ...}) o en
