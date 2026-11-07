@@ -1,0 +1,200 @@
+♥ 19:22:17 PAPER up 7m · fuentes 15/15 (fallan: -) · noticias ok 15 stale 397 dup 29 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 31
+♥ 19:22:32 PAPER up 7m · fuentes 15/15 (fallan: -) · noticias ok 15 stale 397 dup 29 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 31
+♥ 19:22:47 PAPER up 7m · fuentes 15/15 (fallan: -) · noticias ok 15 stale 397 dup 29 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 31
+♥ 19:23:02 PAPER up 8m · fuentes 15/15 (fallan: -) · noticias ok 15 stale 397 dup 29 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 31
+♥ 19:23:17 PAPER up 8m · fuentes 15/15 (fallan: -) · noticias ok 15 stale 397 dup 29 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 31
+📰 [sec.edgar.8k n1 98s] 8-K - Public Policy Holding Company, Inc. (0001903508) (Filer)
+♥ 19:23:32 PAPER up 8m · fuentes 15/15 (fallan: -) · noticias ok 16 stale 397 dup 29 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 32
+♥ 19:23:47 PAPER up 8m · fuentes 15/15 (fallan: -) · noticias ok 16 stale 397 dup 29 ruido 3 · lag p99 29.0 ms · equity 1000 · alertas ok (cola 0) · diario 32
+📰 [sec.edgar.8k n1 33s] 8-K - Mount Logan Capital Inc. (0002051820) (Filer)
+♥ 19:24:02 PAPER up 8m · fuentes 15/15 (fallan: -) · noticias ok 17 stale 397 dup 29 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 33
+📰 [sec.edgar.8k n1 25s] 8-K - Datavault AI Inc. (0001682149) (Filer)
+19:24:12 W tradingagent.sources: fuente fed.press: HTTP 404 (falla 1 seguida)
+♥ 19:24:17 PAPER up 9m · fuentes 14/15 (fallan: fed.press) · noticias ok 18 stale 397 dup 29 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 34
+📰 [sec.edgar.8k n1 41s] 8-K - Algorhythm Holdings, Inc. (0000923601) (Filer)
+♥ 19:24:32 PAPER up 9m · fuentes 14/15 (fallan: fed.press) · noticias ok 19 stale 397 dup 29 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 35
+♥ 19:24:47 PAPER up 9m · fuentes 14/15 (fallan: fed.press) · noticias ok 19 stale 397 dup 29 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 35
+♥ 19:25:02 PAPER up 10m · fuentes 14/15 (fallan: fed.press) · noticias ok 19 stale 397 dup 29 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 35
+📰 [seekingalpha n2 74s] TSS GAAP EPS of $0.04 misses by $0.01, revenue of $50.06M beats by $3.42M
+📰 [seekingalpha n2 94s] The Beauty Health GAAP EPS of -$0.14 beats by $1.18, revenue of $69.2M beats by $1.07M
+📰 [seekingalpha n2 95s] INmune Bio GAAP EPS of -$0.17 misses by $0.02
+📰 [seekingalpha n2 152s] Voyager Therapeutics GAAP EPS of -$0.40 beats by $0.02, revenue of $4.01M misses by $2.34M
+📰 [seekingalpha n2 197s] Allogene Therapeutics GAAP EPS of -$0.15 in-line
+📰 [seekingalpha n2 205s] Mettler-Toledo Non-GAAP EPS of $12.57 beats by $0.48, revenue of $1.09B beats by $20M
+📰 [seekingalpha n2 256s] WillScot Non-GAAP EPS of $0.29 beats by $0.01, revenue of $601M beats by $14.3M
+♥ 19:25:17 PAPER up 10m · fuentes 14/15 (fallan: fed.press) · noticias ok 26 stale 397 dup 29 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 42
+♥ 19:25:32 PAPER up 10m · fuentes 14/15 (fallan: fed.press) · noticias ok 26 stale 398 dup 29 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 43
+♥ 19:25:47 PAPER up 10m · fuentes 14/15 (fallan: fed.press) · noticias ok 26 stale 408 dup 30 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 53
+📰 [sec.edgar.8k n1 38s] 8-K - Annovis Bio, Inc. (0001477845) (Filer)
+♥ 19:26:02 PAPER up 10m · fuentes 14/15 (fallan: fed.press) · noticias ok 27 stale 408 dup 30 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 54
+19:26:08 W tradingagent.sources: fuente cnbc.earnings: respuesta vacía (falla 1 seguida)
+♥ 19:26:17 PAPER up 11m · fuentes 13/15 (fallan: fed.press,cnbc.earnings) · noticias ok 27 stale 408 dup 30 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 54
+19:26:26 W tradingagent.sources: fuente cnbc.top: respuesta vacía (falla 1 seguida)
+♥ 19:26:32 PAPER up 11m · fuentes 13/15 (fallan: cnbc.top,cnbc.earnings) · noticias ok 27 stale 408 dup 30 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 54
+♥ 19:26:47 PAPER up 11m · fuentes 13/15 (fallan: cnbc.top,cnbc.earnings) · noticias ok 27 stale 408 dup 30 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 54
+♥ 19:27:02 PAPER up 12m · fuentes 13/15 (fallan: cnbc.top,cnbc.earnings) · noticias ok 27 stale 408 dup 30 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 54
+♥ 19:27:17 PAPER up 12m · fuentes 13/15 (fallan: cnbc.top,cnbc.earnings) · noticias ok 27 stale 408 dup 30 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 54
+📰 [sec.edgar.8k n1 38s] 8-K - Avalanche Treasury Corp (0002092446) (Filer)
+19:27:24 I httpx2: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+♥ 19:27:32 PAPER up 12m · fuentes 13/15 (fallan: cnbc.top,cnbc.earnings) · noticias ok 28 stale 408 dup 30 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 57
+19:27:34 W tradingagent.sources: fuente cnbc.earnings: respuesta vacía (falla 2 seguida)
+19:27:44 W tradingagent.sources: fuente cnbc.top: respuesta vacía (falla 2 seguida)
+♥ 19:27:47 PAPER up 12m · fuentes 13/15 (fallan: cnbc.top,cnbc.earnings) · noticias ok 28 stale 408 dup 30 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 57
+♥ 19:28:02 PAPER up 12m · fuentes 13/15 (fallan: cnbc.top,cnbc.earnings) · noticias ok 28 stale 408 dup 30 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 57
+♥ 19:28:17 PAPER up 13m · fuentes 13/15 (fallan: cnbc.top,cnbc.earnings) · noticias ok 28 stale 408 dup 30 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 57
+📰 [investing n2 192s] Pangaea earnings beat by $0.22, revenue topped estimates
+📰 [investing n2 222s] Analysis-Japanese savers have rediscovered interest rates and banks are feeling it
+📰 [investing n2 255s] Playboy earnings beat by $1.86, revenue topped estimates
+♥ 19:28:32 PAPER up 13m · fuentes 13/15 (fallan: cnbc.top,cnbc.earnings) · noticias ok 31 stale 415 dup 30 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 67
+📰 [sec.edgar.8k n1 28s] 8-K - Parabolic Technologies, Inc. (0001826011) (Filer)
+♥ 19:28:47 PAPER up 13m · fuentes 13/15 (fallan: cnbc.top,cnbc.earnings) · noticias ok 32 stale 415 dup 30 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 68
+♥ 19:29:02 PAPER up 14m · fuentes 13/15 (fallan: cnbc.top,cnbc.earnings) · noticias ok 32 stale 415 dup 30 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 68
+♥ 19:29:17 PAPER up 14m · fuentes 13/15 (fallan: cnbc.top,cnbc.earnings) · noticias ok 32 stale 416 dup 30 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 69
+19:29:21 W tradingagent.sources: fuente fed.press: HTTP 404 (falla 1 seguida)
+♥ 19:29:32 PAPER up 14m · fuentes 12/15 (fallan: fed.press,cnbc.top,cnbc.earnings) · noticias ok 32 stale 416 dup 30 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 69
+♥ 19:29:47 PAPER up 14m · fuentes 12/15 (fallan: fed.press,cnbc.top,cnbc.earnings) · noticias ok 32 stale 416 dup 30 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 69
+📰 [seekingalpha n2 88s] Trupanion GAAP EPS of $0.21 beats by $0.06, revenue of $405.6M beats by $3.07M
+📰 [seekingalpha n2 102s] PAR Technology Non-GAAP EPS of $0.26 beats by $0.04, revenue of $137.1M beats by $7.31M
+📰 [seekingalpha n2 206s] workiva Non-GAAP EPS of $0.72 misses by $0.08, revenue of $263M beats by $1.63M
+📰 [seekingalpha n2 247s] Kodiak AI, Inc. GAAP EPS of -$0.09 beats by $0.16, revenue of $2.97M beats by $0.5M
+📰 [seekingalpha n2 264s] FIGS GAAP EPS of $0.10 beats by $0.03, revenue of $190.7M beats by $7.87M
+📰 [seekingalpha n2 288s] Funko Non-GAAP EPS of $0.16 beats by $0.06, revenue of $258.3M beats by $9.36M
+♥ 19:30:02 PAPER up 14m · fuentes 12/15 (fallan: fed.press,cnbc.top,cnbc.earnings) · noticias ok 38 stale 416 dup 30 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 75
+📰 [sec.edgar.8k n1 42s] 8-K - REVELATION BIOSCIENCES, INC. (0001810560) (Filer)
+19:30:15 I tradingagent: parada pedida por el supervisor: cierro en orden
+♥ 19:30:15 PAPER up 15m · fuentes 12/15 (fallan: fed.press,cnbc.top,cnbc.earnings) · noticias ok 39 stale 416 dup 30 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 76
+19:30:35 I tradingagent.live: universo de binance-futuros: 745 activos operables
+19:30:35 I tradingagent.live: universo de binance-futuros: 745 activos operables
+19:30:35 I tradingagent: agente 0.1.0 en modo paper: 15 fuentes activas, 2 apagadas
+19:30:35 I tradingagent: fuente okx.listados apagada: apagada en la configuración
+19:30:35 I tradingagent: fuente bitget.listados apagada: apagada en la configuración
+19:30:35 I tradingagent.relay: relé de Tokio: latidos a 176.32.87.26:50005
+♥ 19:30:35 PAPER up 0m · fuentes 0/15 (fallan: -) · noticias ok 0 stale 0 dup 0 ruido 0 · lag p99 0.0 ms · equity 1000 · alertas inactivo (cola 0) · diario 1
+19:30:36 I tradingagent.ingestion: fuente fed.monetary: 15 ítems de historia registrados (no se operan)
+19:30:36 I tradingagent.ingestion: fuente cointelegraph: 30 ítems de historia registrados (no se operan)
+19:30:36 I tradingagent.alerts: alertas: telegram listo @StarkLedger_bot (1672 ms)
+19:30:36 I tradingagent.ingestion: fuente binance.listados: 15 ítems de historia registrados (no se operan)
+19:30:36 I tradingagent.ingestion: fuente seekingalpha: 7 ítems de historia registrados (no se operan)
+19:30:36 I tradingagent.ingestion: fuente coindesk: 25 ítems de historia registrados (no se operan)
+19:30:36 I tradingagent.ingestion: fuente upbit.avisos: 20 ítems de historia registrados (no se operan)
+19:30:36 I tradingagent.ingestion: fuente theblock: 20 ítems de historia registrados (no se operan)
+19:30:37 I tradingagent.ingestion: fuente sec.press: 25 ítems de historia registrados (no se operan)
+19:30:37 I tradingagent.ingestion: fuente decrypt: 37 ítems de historia registrados (no se operan)
+19:30:37 I tradingagent.binance_ws: canal de anuncios de Binance conectado
+19:30:37 I tradingagent.ingestion: fuente cnbc.earnings: 30 ítems de historia registrados (no se operan)
+19:30:37 I tradingagent.ingestion: fuente prn.resultados: 20 ítems de historia registrados (no se operan)
+19:30:38 I tradingagent.ingestion: fuente sec.edgar.8k: 97 ítems de historia registrados (no se operan)
+19:30:38 I tradingagent.ingestion: fuente fed.press: 20 ítems de historia registrados (no se operan)
+19:30:39 I tradingagent.ingestion: fuente investing: 10 ítems de historia registrados (no se operan)
+19:30:40 I tradingagent.ingestion: fuente cnbc.top: 30 ítems de historia registrados (no se operan)
+♥ 19:30:50 PAPER up 0m · fuentes 15/15 (fallan: -) · noticias ok 0 stale 385 dup 25 ruido 3 · lag p99 91.0 ms · equity 1000 · alertas ok (cola 0) · diario 1
+♥ 19:31:05 PAPER up 0m · fuentes 15/15 (fallan: -) · noticias ok 0 stale 385 dup 25 ruido 3 · lag p99 75.0 ms · equity 1000 · alertas ok (cola 0) · diario 1
+♥ 19:31:20 PAPER up 1m · fuentes 15/15 (fallan: -) · noticias ok 0 stale 385 dup 25 ruido 3 · lag p99 59.0 ms · equity 1000 · alertas ok (cola 0) · diario 1
+♥ 19:31:35 PAPER up 1m · fuentes 15/15 (fallan: -) · noticias ok 0 stale 390 dup 27 ruido 3 · lag p99 59.0 ms · equity 1000 · alertas ok (cola 0) · diario 6
+♥ 19:31:50 PAPER up 1m · fuentes 15/15 (fallan: -) · noticias ok 0 stale 391 dup 27 ruido 3 · lag p99 44.0 ms · equity 1000 · alertas ok (cola 0) · diario 7
+♥ 19:32:05 PAPER up 2m · fuentes 15/15 (fallan: -) · noticias ok 0 stale 391 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 7
+♥ 19:32:20 PAPER up 2m · fuentes 15/15 (fallan: -) · noticias ok 0 stale 391 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 7
+♥ 19:32:35 PAPER up 2m · fuentes 15/15 (fallan: -) · noticias ok 0 stale 391 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 7
+♥ 19:32:50 PAPER up 2m · fuentes 15/15 (fallan: -) · noticias ok 0 stale 391 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 7
+♥ 19:33:05 PAPER up 2m · fuentes 15/15 (fallan: -) · noticias ok 0 stale 391 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 7
+♥ 19:33:20 PAPER up 3m · fuentes 15/15 (fallan: -) · noticias ok 0 stale 391 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 7
+♥ 19:33:35 PAPER up 3m · fuentes 15/15 (fallan: -) · noticias ok 0 stale 391 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 7
+♥ 19:33:50 PAPER up 3m · fuentes 15/15 (fallan: -) · noticias ok 0 stale 391 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 7
+♥ 19:34:05 PAPER up 4m · fuentes 15/15 (fallan: -) · noticias ok 0 stale 391 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 7
+♥ 19:34:20 PAPER up 4m · fuentes 15/15 (fallan: -) · noticias ok 0 stale 391 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 7
+♥ 19:34:35 PAPER up 4m · fuentes 15/15 (fallan: -) · noticias ok 0 stale 391 dup 27 ruido 3 · lag p99 29.0 ms · equity 1000 · alertas ok (cola 0) · diario 7
+📰 [seekingalpha n2 59s] Aura Minerals reports Q3 results
+📰 [seekingalpha n2 145s] PRA Group GAAP EPS of $0.39 misses by $0.12, revenue of $286.3M misses by $21.1M
+📰 [seekingalpha n2 154s] Perdoceo Education Non-GAAP EPS of $0.77 beats by $0.03, revenue of $215.9M beats by $4.83M
+📰 [seekingalpha n2 161s] Outfront Media GAAP EPS of $0.36 misses by $0.03, revenue of $511.1M beats by $3.04M
+📰 [seekingalpha n2 177s] Pinnacle Bank promotes Cliff Dennett to CEO in leadership shake-up
+📰 [seekingalpha n2 233s] CarGurus Non-GAAP EPS of $0.73 beats by $0.07, revenue of $258.4M beats by $1.92M
+♥ 19:34:50 PAPER up 4m · fuentes 15/15 (fallan: -) · noticias ok 6 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 14
+♥ 19:35:05 PAPER up 4m · fuentes 15/15 (fallan: -) · noticias ok 6 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 14
+♥ 19:35:20 PAPER up 5m · fuentes 15/15 (fallan: -) · noticias ok 6 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 14
+♥ 19:35:35 PAPER up 5m · fuentes 15/15 (fallan: -) · noticias ok 6 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 14
+♥ 19:35:50 PAPER up 5m · fuentes 15/15 (fallan: -) · noticias ok 6 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 14
+♥ 19:36:05 PAPER up 6m · fuentes 15/15 (fallan: -) · noticias ok 6 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 14
+♥ 19:36:20 PAPER up 6m · fuentes 15/15 (fallan: -) · noticias ok 6 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 14
+♥ 19:36:35 PAPER up 6m · fuentes 15/15 (fallan: -) · noticias ok 6 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 14
+♥ 19:36:50 PAPER up 6m · fuentes 15/15 (fallan: -) · noticias ok 6 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 14
+♥ 19:37:05 PAPER up 6m · fuentes 15/15 (fallan: -) · noticias ok 6 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 14
+♥ 19:37:20 PAPER up 7m · fuentes 15/15 (fallan: -) · noticias ok 6 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 14
+♥ 19:37:35 PAPER up 7m · fuentes 15/15 (fallan: -) · noticias ok 6 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 14
+♥ 19:37:50 PAPER up 7m · fuentes 15/15 (fallan: -) · noticias ok 6 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 14
+♥ 19:38:05 PAPER up 8m · fuentes 15/15 (fallan: -) · noticias ok 6 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 14
+♥ 19:38:20 PAPER up 8m · fuentes 15/15 (fallan: -) · noticias ok 6 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 14
+♥ 19:38:35 PAPER up 8m · fuentes 15/15 (fallan: -) · noticias ok 6 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 14
+♥ 19:38:50 PAPER up 8m · fuentes 15/15 (fallan: -) · noticias ok 6 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 14
+♥ 19:39:05 PAPER up 8m · fuentes 15/15 (fallan: -) · noticias ok 6 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 14
+♥ 19:39:20 PAPER up 9m · fuentes 15/15 (fallan: -) · noticias ok 6 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 14
+♥ 19:39:35 PAPER up 9m · fuentes 15/15 (fallan: -) · noticias ok 6 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 14
+♥ 19:39:50 PAPER up 9m · fuentes 15/15 (fallan: -) · noticias ok 6 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 14
+♥ 19:40:05 PAPER up 10m · fuentes 15/15 (fallan: -) · noticias ok 6 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 14
+♥ 19:40:20 PAPER up 10m · fuentes 15/15 (fallan: -) · noticias ok 6 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 14
+📰 [seekingalpha n2 110s] Inspired Entertainment reports Q3 results
+📰 [seekingalpha n2 128s] Arteries IP Non-GAAP EPS of -$0.02 beats by $0.02, revenue of $25.8M beats by $1.3M
+📰 [seekingalpha n2 147s] D’Amico outlines $40M interim dividend while targeting 2026 payout ratio in line with 55%
+📰 [seekingalpha n2 160s] Caribou Bioscience GAAP EPS of -$0.25 beats by $0.02, revenue of $1.6M in-line
+📰 [seekingalpha n2 192s] StepStone Non-GAAP EPS of $0.66 beats by $0.10, revenue of $773.14M beats by $451.49M
+📰 [seekingalpha n2 217s] StandardAero Non-GAAP EPS of $0.39 beats by $0.01, revenue of $1.56B in-line
+📰 [seekingalpha n2 227s] Protagonist GAAP EPS of $3.07 beats by $0.38, revenue of $274.4M beats by $33.08M
+♥ 19:40:35 PAPER up 10m · fuentes 15/15 (fallan: -) · noticias ok 13 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 21
+♥ 19:40:50 PAPER up 10m · fuentes 15/15 (fallan: -) · noticias ok 13 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 21
+♥ 19:41:05 PAPER up 10m · fuentes 15/15 (fallan: -) · noticias ok 13 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 21
+♥ 19:41:20 PAPER up 11m · fuentes 15/15 (fallan: -) · noticias ok 13 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 21
+♥ 19:41:35 PAPER up 11m · fuentes 15/15 (fallan: -) · noticias ok 13 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 21
+♥ 19:41:50 PAPER up 11m · fuentes 15/15 (fallan: -) · noticias ok 13 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 21
+♥ 19:42:05 PAPER up 12m · fuentes 15/15 (fallan: -) · noticias ok 13 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 21
+♥ 19:42:20 PAPER up 12m · fuentes 15/15 (fallan: -) · noticias ok 13 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 21
+♥ 19:42:35 PAPER up 12m · fuentes 15/15 (fallan: -) · noticias ok 13 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 21
+♥ 19:42:50 PAPER up 12m · fuentes 15/15 (fallan: -) · noticias ok 13 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 21
+♥ 19:43:05 PAPER up 12m · fuentes 15/15 (fallan: -) · noticias ok 13 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 21
+♥ 19:43:20 PAPER up 13m · fuentes 15/15 (fallan: -) · noticias ok 13 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 21
+♥ 19:43:35 PAPER up 13m · fuentes 15/15 (fallan: -) · noticias ok 13 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 21
+♥ 19:43:50 PAPER up 13m · fuentes 15/15 (fallan: -) · noticias ok 13 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 21
+♥ 19:44:05 PAPER up 14m · fuentes 15/15 (fallan: -) · noticias ok 13 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 21
+♥ 19:44:20 PAPER up 14m · fuentes 15/15 (fallan: -) · noticias ok 13 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 21
+19:44:24 W tradingagent.sources: fuente fed.press: HTTP 404 (falla 1 seguida)
+♥ 19:44:35 PAPER up 14m · fuentes 14/15 (fallan: fed.press) · noticias ok 13 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 21
+♥ 19:44:50 PAPER up 14m · fuentes 14/15 (fallan: fed.press) · noticias ok 13 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 21
+♥ 19:45:05 PAPER up 14m · fuentes 14/15 (fallan: fed.press) · noticias ok 13 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 21
+📰 [seekingalpha n2 116s] F&G Annuities & Life Non-GAAP EPS of $0.74 beats by $0.08, revenue of $1.13B beats by $399M
+📰 [seekingalpha n2 146s] eGain Communications Non-GAAP EPS of $0.09 beats by $0.03, revenue of $21.9M beats by $0.79M
+📰 [seekingalpha n2 148s] Assured Guaranty Non-GAAP EPS of $1.94 beats by $0.24, revenue of $214M beats by $8.3M
+📰 [seekingalpha n2 168s] Moelis Non-GAAP EPS of $0.75 beats by $0.03, revenue of $425.6M misses by $11.14M
+📰 [seekingalpha n2 214s] El Pollo Loco Non-GAAP EPS of $0.24 in-line, revenue of $126.3M misses by $0.73M
+📰 [seekingalpha n2 240s] ePlus Non-GAAP EPS of $1.98 beats by $0.51, revenue of $667.9M beats by $31.8M
+📰 [seekingalpha n2 260s] HASI trades mixed amid Q3 earnings beat, disappointing long-term dividend guide
+19:45:16 I tradingagent: parada pedida por el supervisor: cierro en orden
+♥ 19:45:16 PAPER up 15m · fuentes 14/15 (fallan: fed.press) · noticias ok 20 stale 392 dup 27 ruido 3 · lag p99 28.0 ms · equity 1000 · alertas ok (cola 0) · diario 28
+19:46:10 I tradingagent.live: universo de binance-futuros: 745 activos operables
+19:46:10 I tradingagent.live: universo de binance-futuros: 745 activos operables
+19:46:10 I tradingagent: agente 0.1.0 en modo paper: 15 fuentes activas, 2 apagadas
+19:46:10 I tradingagent: fuente okx.listados apagada: apagada en la configuración
+19:46:10 I tradingagent: fuente bitget.listados apagada: apagada en la configuración
+19:46:10 I tradingagent.relay: relé de Tokio: latidos a 176.32.87.26:50005
+♥ 19:46:10 PAPER up 0m · fuentes 0/15 (fallan: -) · noticias ok 0 stale 0 dup 0 ruido 0 · lag p99 0.0 ms · equity 1000 · alertas inactivo (cola 0) · diario 1
+19:46:11 I tradingagent.ingestion: fuente upbit.avisos: 20 ítems de historia registrados (no se operan)
+19:46:11 I tradingagent.ingestion: fuente cointelegraph: 30 ítems de historia registrados (no se operan)
+19:46:11 I tradingagent.alerts: alertas: telegram listo @StarkLedger_bot (1500 ms)
+19:46:11 I tradingagent.ingestion: fuente sec.press: 25 ítems de historia registrados (no se operan)
+19:46:11 I tradingagent.ingestion: fuente binance.listados: 20 ítems de historia registrados (no se operan)
+19:46:12 I tradingagent.binance_ws: canal de anuncios de Binance conectado
+19:46:12 I tradingagent.ingestion: fuente theblock: 20 ítems de historia registrados (no se operan)
+19:46:13 I tradingagent.ingestion: fuente decrypt: 37 ítems de historia registrados (no se operan)
+19:46:13 I tradingagent.ingestion: fuente fed.monetary: 15 ítems de historia registrados (no se operan)
+19:46:13 I tradingagent.ingestion: fuente investing: 10 ítems de historia registrados (no se operan)
+19:46:13 I tradingagent.ingestion: fuente sec.edgar.8k: 97 ítems de historia registrados (no se operan)
+19:46:13 I tradingagent.ingestion: fuente coindesk: 25 ítems de historia registrados (no se operan)
+19:46:13 I tradingagent.ingestion: fuente cnbc.earnings: 30 ítems de historia registrados (no se operan)
+19:46:14 I tradingagent.ingestion: fuente seekingalpha: 7 ítems de historia registrados (no se operan)
+19:46:14 I tradingagent.ingestion: fuente fed.press: 20 ítems de historia registrados (no se operan)
+19:46:14 I tradingagent.ingestion: fuente cnbc.top: 30 ítems de historia registrados (no se operan)
+19:46:15 I tradingagent.ingestion: fuente prn.resultados: 20 ítems de historia registrados (no se operan)
+♥ 19:46:25 PAPER up 0m · fuentes 15/15 (fallan: -) · noticias ok 0 stale 400 dup 27 ruido 3 · lag p99 59.0 ms · equity 1000 · alertas ok (cola 0) · diario 1
+♥ 19:46:41 PAPER up 0m · fuentes 15/15 (fallan: -) · noticias ok 0 stale 400 dup 27 ruido 3 · lag p99 59.0 ms · equity 1000 · alertas ok (cola 0) · diario 1
+♥ 19:46:56 PAPER up 1m · fuentes 15/15 (fallan: -) · noticias ok 0 stale 400 dup 27 ruido 3 · lag p99 107.0 ms · equity 1000 · alertas ok (cola 0) · diario 1
+♥ 19:47:11 PAPER up 1m · fuentes 15/15 (fallan: -) · noticias ok 0 stale 401 dup 27 ruido 3 · lag p99 59.0 ms · equity 1000 · alertas ok (cola 0) · diario 2
+19:47:20 I tradingagent: parada pedida por el supervisor: cierro en orden
+♥ 19:47:20 PAPER up 1m · fuentes 15/15 (fallan: -) · noticias ok 0 stale 401 dup 27 ruido 3 · lag p99 59.0 ms · equity 1000 · alertas ok (cola 0) · diario 2

@@ -1,0 +1,110 @@
+{"ts": 1793710028.315, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión cb69533)"}
+{"ts": 1793710028.657, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1793725422.174, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1793725448.942, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión 3d8a9be)"}
+{"ts": 1793725449.265, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1793726433.008, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1793726469.01, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión cc327e0)"}
+{"ts": 1793726469.341, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1793726542.411, "level": "WARNING", "logger": "tradingagent.supervisor", "msg": "el agente terminó (código 0, vivió 73 s): lo relanzo"}
+{"ts": 1793741861.487, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1793741889.457, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión 89107a3)"}
+{"ts": 1793741889.788, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1793743772.818, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1793743810.099, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión 056fe40)"}
+{"ts": 1793743810.429, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1793750803.867, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1793750829.608, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión 1ab76be)"}
+{"ts": 1793750829.923, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1793801775.923, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1793801829.062, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión 59e7b2f)"}
+{"ts": 1793801829.386, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1793803712.534, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1793803749.335, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión 713f89a)"}
+{"ts": 1793803749.648, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1793810125.993, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1793810169.24, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión c42b92a)"}
+{"ts": 1793810169.55, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1793812353.896, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1793812388.531, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión 32565a1)"}
+{"ts": 1793812388.869, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1793820570.392, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1793820608.66, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión 34b4a98)"}
+{"ts": 1793820608.974, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1793822493.588, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1793822528.891, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión b0f8d43)"}
+{"ts": 1793822529.201, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1793823796.8, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1793823849.048, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión ab411d2)"}
+{"ts": 1793823849.354, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1793823879.41, "level": "WARNING", "logger": "tradingagent.supervisor", "msg": "el agente terminó (código 0, vivió 30 s): lo relanzo"}
+{"ts": 1793825400.231, "level": "WARNING", "logger": "tradingagent.supervisor", "msg": "el agente terminó (código 0, vivió 1519 s): lo relanzo"}
+{"ts": 1793825531.668, "level": "WARNING", "logger": "tradingagent.supervisor", "msg": "el agente terminó (código 0, vivió 131 s): lo relanzo"}
+{"ts": 1793828424.588, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1793828468.84, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión 2376912)"}
+{"ts": 1793828469.177, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1793862787.871, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1793862789.219, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión cc39ed3)"}
+{"ts": 1793862789.682, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1793901382.081, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1793901429.741, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión 1f4f810)"}
+{"ts": 1793901430.076, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1793915623.227, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1793915649.423, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión c044276)"}
+{"ts": 1793915649.77, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1793918722.644, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1793918768.835, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión d56648b)"}
+{"ts": 1793918769.15, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1793918840.103, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "solo tablero: paro al agente de la PC (corre en Tokio)"}
+{"ts": 1793918841.504, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "solo tablero: el agente corre en Tokio; la PC muestra el tablero y le pasa la pausa"}
+{"ts": 1793918841.504, "level": "INFO", "logger": "tradingagent.relay", "msg": "solo tablero: latidos al relé de Tokio 176.32.87.26:50005"}
+{"ts": 1793924544.499, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1793924588.989, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión a6f9180)"}
+{"ts": 1793924589.327, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1793924589.385, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "solo tablero: el agente corre en Tokio; la PC muestra el tablero y le pasa la pausa"}
+{"ts": 1793924589.385, "level": "INFO", "logger": "tradingagent.relay", "msg": "solo tablero: latidos al relé de Tokio 176.32.87.26:50005"}
+{"ts": 1793924589.423, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "solo tablero: traigo el tablero completo de Tokio por SSH cada 30 s"}
+{"ts": 1793929159.138, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1793929209.568, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión 15ed06f)"}
+{"ts": 1793929209.888, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1793929209.904, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "solo tablero: el agente corre en Tokio; la PC muestra el tablero y le pasa la pausa"}
+{"ts": 1793929209.904, "level": "INFO", "logger": "tradingagent.relay", "msg": "solo tablero: latidos al relé de Tokio 176.32.87.26:50005"}
+{"ts": 1793929209.92, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "solo tablero: traigo el tablero completo de Tokio por SSH cada minuto (C:\\Program Files\\Git\\usr\\bin\\ssh.exe)"}
+{"ts": 1793958880.781, "level": "WARNING", "logger": "tradingagent.relay", "msg": "no pude traer el tablero de Tokio por SSH (C:\\Program Files\\Git\\usr\\bin\\ssh.exe): ssh: connect to host 176.32.87.26 port 22: Connection timed out"}
+{"ts": 1793958945.023, "level": "INFO", "logger": "tradingagent.relay", "msg": "el tablero de Tokio volvió a llegar por SSH"}
+{"ts": 1793960796.387, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1793960829.163, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión f944ee3)"}
+{"ts": 1793960829.502, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1793960829.583, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "solo tablero: el agente corre en Tokio; la PC muestra el tablero y le pasa la pausa"}
+{"ts": 1793960829.583, "level": "INFO", "logger": "tradingagent.relay", "msg": "solo tablero: latidos al relé de Tokio 176.32.87.26:50005"}
+{"ts": 1793960829.595, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "solo tablero: traigo el tablero completo de Tokio por SSH cada minuto (C:\\Program Files\\Git\\usr\\bin\\ssh.exe)"}
+{"ts": 1793967217.473, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1793967248.958, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión 4286e2d)"}
+{"ts": 1793967249.287, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1793967249.363, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "solo tablero: el agente corre en Tokio; la PC muestra el tablero y le pasa la pausa"}
+{"ts": 1793967249.363, "level": "INFO", "logger": "tradingagent.relay", "msg": "solo tablero: latidos al relé de Tokio 176.32.87.26:50005"}
+{"ts": 1793967249.379, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "solo tablero: traigo el tablero completo de Tokio por SSH cada minuto (C:\\Program Files\\Git\\usr\\bin\\ssh.exe)"}
+{"ts": 1793982623.612, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1793982668.573, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión 04c66db)"}
+{"ts": 1793982668.887, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1793982668.903, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "solo tablero: el agente corre en Tokio; la PC muestra el tablero y le pasa la pausa"}
+{"ts": 1793982668.903, "level": "INFO", "logger": "tradingagent.relay", "msg": "solo tablero: latidos al relé de Tokio 176.32.87.26:50005"}
+{"ts": 1793982668.919, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "solo tablero: traigo el tablero completo de Tokio por SSH cada minuto (C:\\Program Files\\Git\\usr\\bin\\ssh.exe)"}
+{"ts": 1794025957.59, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1794025989.473, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión 02407dd)"}
+{"ts": 1794025989.805, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1794025989.869, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "solo tablero: el agente corre en Tokio; la PC muestra el tablero y le pasa la pausa"}
+{"ts": 1794025989.87, "level": "INFO", "logger": "tradingagent.relay", "msg": "solo tablero: latidos al relé de Tokio 176.32.87.26:50005"}
+{"ts": 1794025989.882, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "solo tablero: traigo el tablero completo de Tokio por SSH cada minuto (C:\\Program Files\\Git\\usr\\bin\\ssh.exe)"}
+{"ts": 1794043166.065, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1794043208.534, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión 953bb9b)"}
+{"ts": 1794043208.853, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1794043208.885, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "solo tablero: el agente corre en Tokio; la PC muestra el tablero y le pasa la pausa"}
+{"ts": 1794043208.885, "level": "INFO", "logger": "tradingagent.relay", "msg": "solo tablero: latidos al relé de Tokio 176.32.87.26:50005"}
+{"ts": 1794043208.9, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "solo tablero: traigo el tablero completo de Tokio por SSH cada minuto (C:\\Program Files\\Git\\usr\\bin\\ssh.exe)"}
+{"ts": 1794045991.503, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "cambió el supervisor: salgo para que la tarea me relance con el código nuevo"}
+{"ts": 1794046029.103, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "supervisor 0.1.0 en ~ (versión f61079c)"}
+{"ts": 1794046029.449, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "tablero en http://127.0.0.1:18765/"}
+{"ts": 1794046029.464, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "solo tablero: el agente corre en Tokio; la PC muestra el tablero y le pasa la pausa"}
+{"ts": 1794046029.464, "level": "INFO", "logger": "tradingagent.relay", "msg": "solo tablero: latidos al relé de Tokio 176.32.87.26:50005"}
+{"ts": 1794046029.471, "level": "INFO", "logger": "tradingagent.supervisor", "msg": "solo tablero: traigo el tablero completo de Tokio por SSH cada minuto (C:\\Program Files\\Git\\usr\\bin\\ssh.exe)"}

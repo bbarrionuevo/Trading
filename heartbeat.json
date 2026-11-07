@@ -1,0 +1,143 @@
+{
+ "mode": "PAPER",
+ "version": "0.1.0",
+ "sources": {
+  "total": 15,
+  "ok": 15,
+  "failing": [],
+  "off": {
+   "okx.listados": "apagada en la configuración",
+   "bitget.listados": "apagada en la configuración"
+  }
+ },
+ "news": {
+  "aceptadas": 0,
+  "stale": 401,
+  "duplicadas": 27,
+  "ruido": 3,
+  "backlog": 406
+ },
+ "dedup": {
+  "new": 380,
+  "exact": 10,
+  "near": 17,
+  "evicted": 0,
+  "window": 407,
+  "clusters": 380
+ },
+ "loop_lag": {
+  "p50_ms": 12.0,
+  "p99_ms": 59.0,
+  "max_ms": 3059.0,
+  "n": 1105
+ },
+ "peso_binance": {
+  "usado": 14,
+  "limite": 2400,
+  "maximo_visto": 26,
+  "esperas": 0
+ },
+ "portfolio": {
+  "cash": "1000",
+  "equity": "1000",
+  "initial": "1000",
+  "realized": "0",
+  "fees": "0",
+  "positions": []
+ },
+ "paper": {
+  "orders": 0,
+  "fills": 0,
+  "rejected": 0,
+  "open": 0,
+  "latency_ms_avg": null,
+  "slippage_bps_avg": null,
+  "portfolio": null
+ },
+ "execution": {
+  "encoladas": 0,
+  "rechazadas": 0,
+  "ejecutadas": 0
+ },
+ "alerts": {
+  "health": "ok",
+  "queued": 0,
+  "stats": {
+   "enviadas": 1
+  },
+  "last_error": "",
+  "submit_us_max": 0.0,
+  "startup": {
+   "ok": true,
+   "transport": "telegram",
+   "bot": "@StarkLedger_bot",
+   "error": "",
+   "latency_ms": 1500.0
+  }
+ },
+ "journal": {
+  "written": 2,
+  "queued": 0,
+  "dropped": 0,
+  "seq": 6129
+ },
+ "bus": {
+  "news.accepted/consola": {
+   "depth": 0,
+   "max": 200,
+   "delivered": 0,
+   "dropped": 0
+  }
+ },
+ "streams": [
+  {
+   "rtt_ms": 440.1,
+   "latidos": 7,
+   "acks": 7,
+   "telemetria": 8
+  },
+  {
+   "conectada": true,
+   "anuncios": 0,
+   "conexiones": 1,
+   "cortes": 0,
+   "estado": "ok",
+   "ultimo_error": ""
+  }
+ ],
+ "trader": {
+  "mercado": "binance-futuros",
+  "cash": "121.1523838120000000000000000",
+  "equity": "121.152384",
+  "abiertas": [],
+  "operaciones": 3,
+  "pnl_neto": "1.15238381",
+  "halt": false,
+  "llm": {
+   "day": "2026-11-05",
+   "usd": 0.0080381,
+   "calls": 14,
+   "failures": 0,
+   "tope_usd": 5.0
+  }
+ },
+ "real": {
+  "mercado": "binance-futuros",
+  "cash": "100.9980558440000000000000000",
+  "equity": "100.998056",
+  "abiertas": [],
+  "operaciones": 3,
+  "pnl_neto": "0.99805584",
+  "halt": false,
+  "llm": {
+   "day": "2026-11-05",
+   "usd": 0.0080381,
+   "calls": 14,
+   "failures": 0,
+   "tope_usd": 5.0
+  },
+  "simulacro": true
+ },
+ "uptime_min": 1.2,
+ "ts": 1793918840.9255328
+}

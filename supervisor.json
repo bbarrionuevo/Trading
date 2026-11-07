@@ -1,0 +1,401 @@
+{
+ "tablero": "http://127.0.0.1:18765/",
+ "arranques": 45,
+ "version": "b41e857663ef",
+ "agente_desde": 1793918769,
+ "supervisor": "0.1.0",
+ "tests_version": "b41e857",
+ "tests_desde": 1794067720,
+ "ultima_revision": {
+  "ts": 1794076706,
+  "resultado": "al_dia"
+ },
+ "tests_resultado": {
+  "ts": 1794067932,
+  "codigo": 0,
+  "version": "b41e857"
+ },
+ "publicacion": {
+  "ts": 1794075866,
+  "resultado": "ok"
+ },
+ "actualizaciones": [
+  {
+   "ts": 1793804715,
+   "de": "713f89a",
+   "a": "677ebd7",
+   "resultado": "ok",
+   "titulo": "Merge pull request #30 from bbarrionuevo/claude/a5-listados"
+  },
+  {
+   "ts": 1793810125,
+   "de": "677ebd7",
+   "a": "c42b92a",
+   "resultado": "ok",
+   "titulo": "Merge pull request #33 from bbarrionuevo/claude/test-windows-tiempo"
+  },
+  {
+   "ts": 1793810835,
+   "de": "c42b92a",
+   "a": "7702dd8",
+   "resultado": "ok",
+   "titulo": "Merge pull request #34 from bbarrionuevo/claude/upbit-8s"
+  },
+  {
+   "ts": 1793812338,
+   "de": "7702dd8",
+   "a": "32565a1",
+   "resultado": "ok",
+   "titulo": "Merge pull request #35 from bbarrionuevo/claude/binance-stop-cancelado"
+  },
+  {
+   "ts": 1793820569,
+   "de": "32565a1",
+   "a": "34b4a98",
+   "resultado": "ok",
+   "titulo": "Merge pull request #36 from bbarrionuevo/claude/binance-practica"
+  },
+  {
+   "ts": 1793822478,
+   "de": "34b4a98",
+   "a": "b0f8d43",
+   "resultado": "ok",
+   "titulo": "Merge pull request #37 from bbarrionuevo/claude/binance-operador"
+  },
+  {
+   "ts": 1793823796,
+   "de": "b0f8d43",
+   "a": "ab411d2",
+   "resultado": "ok",
+   "titulo": "Merge pull request #38 from bbarrionuevo/claude/simulacro-local"
+  },
+  {
+   "ts": 1793826920,
+   "de": "ab411d2",
+   "a": "2e51b89",
+   "resultado": "ok",
+   "titulo": "Merge pull request #39 from bbarrionuevo/claude/calibracion-diaria"
+  },
+  {
+   "ts": 1793828424,
+   "de": "2e51b89",
+   "a": "2376912",
+   "resultado": "ok",
+   "titulo": "Merge pull request #40 from bbarrionuevo/claude/tablero-binance"
+  },
+  {
+   "ts": 1793839638,
+   "de": "2376912",
+   "a": "af4fa70",
+   "resultado": "ok",
+   "titulo": "Merge pull request #41 from bbarrionuevo/claude/resultados-impulso"
+  },
+  {
+   "ts": 1793843843,
+   "de": "af4fa70",
+   "a": "198ab65",
+   "resultado": "ok",
+   "titulo": "Merge pull request #42 from bbarrionuevo/claude/operar-mas"
+  },
+  {
+   "ts": 1793852859,
+   "de": "198ab65",
+   "a": "fc9527a",
+   "resultado": "ok",
+   "titulo": "Merge pull request #43 from bbarrionuevo/claude/deslistados"
+  },
+  {
+   "ts": 1793862772,
+   "de": "fc9527a",
+   "a": "cc39ed3",
+   "resultado": "ok",
+   "titulo": "Merge pull request #44 from bbarrionuevo/claude/eventos-sec"
+  },
+  {
+   "ts": 1793874276,
+   "de": "cc39ed3",
+   "a": "97bdb84",
+   "resultado": "ok",
+   "titulo": "Merge pull request #45 from bbarrionuevo/claude/sec-reintentos"
+  },
+  {
+   "ts": 1793876681,
+   "de": "97bdb84",
+   "a": "1577676",
+   "resultado": "ok",
+   "titulo": "Merge pull request #46 from bbarrionuevo/claude/vigilancia-binance"
+  },
+  {
+   "ts": 1793877282,
+   "de": "1577676",
+   "a": "c6447ff",
+   "resultado": "ok",
+   "titulo": "Merge pull request #47 from bbarrionuevo/claude/etiqueta-vigilancia"
+  },
+  {
+   "ts": 1793892332,
+   "de": "c6447ff",
+   "a": "583e464",
+   "resultado": "ok",
+   "titulo": "Merge pull request #48 from bbarrionuevo/claude/resultados-6k"
+  },
+  {
+   "ts": 1793892935,
+   "de": "583e464",
+   "a": "eaf4c8e",
+   "resultado": "ok",
+   "titulo": "Merge pull request #49 from bbarrionuevo/claude/upbit-negativos"
+  },
+  {
+   "ts": 1793901381,
+   "de": "eaf4c8e",
+   "a": "1f4f810",
+   "resultado": "ok",
+   "titulo": "Merge pull request #50 from bbarrionuevo/claude/registro-y-peso"
+  },
+  {
+   "ts": 1793903300,
+   "de": "1f4f810",
+   "a": "1f70624",
+   "resultado": "ok",
+   "titulo": "Merge pull request #51 from bbarrionuevo/claude/pais-no-es-activo"
+  },
+  {
+   "ts": 1793914734,
+   "de": "1f70624",
+   "a": "3afeeaf",
+   "resultado": "ok",
+   "titulo": "Merge pull request #52 from bbarrionuevo/claude/rele-tokio"
+  },
+  {
+   "ts": 1793915621,
+   "de": "3afeeaf",
+   "a": "c044276",
+   "resultado": "ok",
+   "titulo": "Merge pull request #53 from bbarrionuevo/claude/tokio-motor"
+  },
+  {
+   "ts": 1793916916,
+   "de": "c044276",
+   "a": "530902e",
+   "resultado": "ok",
+   "titulo": "Merge pull request #55 from bbarrionuevo/claude/telegram-canales"
+  },
+  {
+   "ts": 1793917818,
+   "de": "530902e",
+   "a": "dd52144",
+   "resultado": "ok",
+   "titulo": "Merge pull request #56 from bbarrionuevo/claude/variante-ia"
+  },
+  {
+   "ts": 1793918719,
+   "de": "dd52144",
+   "a": "d56648b",
+   "resultado": "ok",
+   "titulo": "Merge pull request #57 from bbarrionuevo/claude/pc-solo-tablero"
+  },
+  {
+   "ts": 1793924544,
+   "de": "d56648b",
+   "a": "a6f9180",
+   "resultado": "ok",
+   "titulo": "Merge pull request #59 from bbarrionuevo/claude/tablero-unico"
+  },
+  {
+   "ts": 1793929157,
+   "de": "a6f9180",
+   "a": "15ed06f",
+   "resultado": "ok",
+   "titulo": "Merge pull request #60 from bbarrionuevo/claude/tokio-prevencion"
+  },
+  {
+   "ts": 1793931077,
+   "de": "15ed06f",
+   "a": "42f6ca3",
+   "resultado": "ok",
+   "titulo": "Merge pull request #61 from bbarrionuevo/claude/puesta-al-dia"
+  },
+  {
+   "ts": 1793932879,
+   "de": "42f6ca3",
+   "a": "79a1bd9",
+   "resultado": "ok",
+   "titulo": "Merge pull request #62 from bbarrionuevo/claude/listado-mas-rapido"
+  },
+  {
+   "ts": 1793942786,
+   "de": "79a1bd9",
+   "a": "a5ceb81",
+   "resultado": "ok",
+   "titulo": "Merge pull request #63 from bbarrionuevo/claude/p90-informe"
+  },
+  {
+   "ts": 1793960795,
+   "de": "a5ceb81",
+   "a": "f944ee3",
+   "resultado": "ok",
+   "titulo": "Merge pull request #65 from bbarrionuevo/claude/traspaso-reinicio"
+  },
+  {
+   "ts": 1793967202,
+   "de": "f944ee3",
+   "a": "4286e2d",
+   "resultado": "ok",
+   "titulo": "Merge pull request #67 from bbarrionuevo/claude/dinero-real-solo-upbit"
+  },
+  {
+   "ts": 1793968218,
+   "de": "4286e2d",
+   "a": "8ce8b31",
+   "resultado": "ok",
+   "titulo": "Merge pull request #69 from bbarrionuevo/claude/conexiones-tibias"
+  },
+  {
+   "ts": 1793969117,
+   "de": "8ce8b31",
+   "a": "a26ad6d",
+   "resultado": "ok",
+   "titulo": "Merge pull request #70 from bbarrionuevo/claude/traspaso-instalado"
+  },
+  {
+   "ts": 1793970917,
+   "de": "a26ad6d",
+   "a": "92d3771",
+   "resultado": "ok",
+   "titulo": "Merge pull request #71 from bbarrionuevo/claude/prueba-binance-stop-visible"
+  },
+  {
+   "ts": 1793971816,
+   "de": "92d3771",
+   "a": "cabbe82",
+   "resultado": "ok",
+   "titulo": "Merge pull request #72 from bbarrionuevo/claude/traspaso-armado-real"
+  },
+  {
+   "ts": 1793982623,
+   "de": "cabbe82",
+   "a": "04c66db",
+   "resultado": "ok",
+   "titulo": "Merge pull request #73 from bbarrionuevo/claude/simulacro-junto-al-real"
+  },
+  {
+   "ts": 1793983634,
+   "de": "04c66db",
+   "a": "dbb36b0",
+   "resultado": "ok",
+   "titulo": "Merge pull request #74 from bbarrionuevo/claude/traspaso-simulacro-instalado"
+  },
+  {
+   "ts": 1794003444,
+   "de": "dbb36b0",
+   "a": "eb962e0",
+   "resultado": "ok",
+   "titulo": "Merge pull request #75 from bbarrionuevo/claude/estudios-upbit-binance"
+  },
+  {
+   "ts": 1794006145,
+   "de": "eb962e0",
+   "a": "b42c9ae",
+   "resultado": "ok",
+   "titulo": "Merge pull request #76 from bbarrionuevo/claude/listados-binance-al-instante"
+  },
+  {
+   "ts": 1794010647,
+   "de": "b42c9ae",
+   "a": "8d5ea18",
+   "resultado": "ok",
+   "titulo": "Merge pull request #77 from bbarrionuevo/claude/medidor-bithumb"
+  },
+  {
+   "ts": 1794025957,
+   "de": "8d5ea18",
+   "a": "02407dd",
+   "resultado": "ok",
+   "titulo": "Merge pull request #78 from bbarrionuevo/claude/tablero-por-modulo"
+  },
+  {
+   "ts": 1794039561,
+   "de": "02407dd",
+   "a": "dea915a",
+   "resultado": "ok",
+   "titulo": "Merge pull request #79 from bbarrionuevo/claude/hipotesis-direccionales"
+  },
+  {
+   "ts": 1794043165,
+   "de": "dea915a",
+   "a": "953bb9b",
+   "resultado": "ok",
+   "titulo": "Merge pull request #80 from bbarrionuevo/claude/advertencias-coreanas"
+  },
+  {
+   "ts": 1794044177,
+   "de": "953bb9b",
+   "a": "0fada76",
+   "resultado": "ok",
+   "titulo": "Merge pull request #81 from bbarrionuevo/claude/traspaso-v37-instalado"
+  },
+  {
+   "ts": 1794045976,
+   "de": "0fada76",
+   "a": "f61079c",
+   "resultado": "ok",
+   "titulo": "Merge pull request #82 from bbarrionuevo/claude/procedimiento-y-tablero"
+  },
+  {
+   "ts": 1794060501,
+   "de": "f61079c",
+   "a": "8fdc422",
+   "resultado": "ok",
+   "titulo": "Merge pull request #83 from bbarrionuevo/claude/catalogos-y-fuentes"
+  },
+  {
+   "ts": 1794062300,
+   "de": "8fdc422",
+   "a": "e130305",
+   "resultado": "ok",
+   "titulo": "Merge pull request #84 from bbarrionuevo/claude/vigilancia-ajuste"
+  },
+  {
+   "ts": 1794065002,
+   "de": "e130305",
+   "a": "2859058",
+   "resultado": "ok",
+   "titulo": "Merge pull request #85 from bbarrionuevo/claude/fase-2-fuentes"
+  },
+  {
+   "ts": 1794067703,
+   "de": "2859058",
+   "a": "b41e857",
+   "resultado": "ok",
+   "titulo": "Merge pull request #89 from bbarrionuevo/claude/traspaso-v39"
+  }
+ ],
+ "caidas": [
+  {
+   "ts": 1793726542,
+   "codigo": 0,
+   "vivo_s": 73,
+   "motivo": ""
+  },
+  {
+   "ts": 1793823879,
+   "codigo": 0,
+   "vivo_s": 30,
+   "motivo": ""
+  },
+  {
+   "ts": 1793825400,
+   "codigo": 0,
+   "vivo_s": 1519,
+   "motivo": ""
+  },
+  {
+   "ts": 1793825532,
+   "codigo": 0,
+   "vivo_s": 131,
+   "motivo": ""
+  }
+ ],
+ "modo": "solo_tablero"
+}

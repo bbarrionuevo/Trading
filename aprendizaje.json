@@ -1,0 +1,24 @@
+{
+ "categorias": {
+  "hack:corto": {
+   "r_recv_15m": {
+    "n": 1,
+    "media": -0.000917,
+    "desvio": null,
+    "ic95": null
+   },
+   "r_recv_60m": {
+    "n": 1,
+    "media": -0.005812,
+    "desvio": null,
+    "ic95": null
+   }
+  }
+ },
+ "apagadas": [],
+ "costo": 0.002,
+ "min_n": 30,
+ "nlp": "reglas-4",
+ "meta": {},
+ "calculado": 1793917839
+}

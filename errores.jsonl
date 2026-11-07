@@ -1,0 +1,200 @@
+{"ts": 1793808273.992, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793808332.819, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793808390.712, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793808459.08, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793808510.611, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793808572.701, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793808624.491, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793808680.502, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793808744.847, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793808792.742, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793808873.802, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793808931.512, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793808960.091, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793809020.495, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793809086.793, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793809172.785, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793809236.244, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793809280.925, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793809338.506, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793809404.635, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793809460.977, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793809530.776, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793809580.867, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793809618.984, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793809680.99, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793809758.733, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793809835.674, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793809893.352, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793809937.704, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793810004.051, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793810073.194, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793810087.71, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente fed.press: HTTP 404 (falla 1 seguida)"}
+{"ts": 1793810123.424, "level": "ERROR", "logger": "asyncio", "msg": "Unclosed client session\nclient_session: <aiohttp.client.ClientSession object at 0x0000029911E7D1F0>"}
+{"ts": 1793810217.447, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793810226.901, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 2 seguida)"}
+{"ts": 1793810310.942, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793810360.932, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793810412.633, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793810484.824, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793810560.524, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793810606.689, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793810670.322, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793810732.866, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793810784.671, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793810834.057, "level": "ERROR", "logger": "asyncio", "msg": "Unclosed client session\nclient_session: <aiohttp.client.ClientSession object at 0x00000148C8BC1190>"}
+{"ts": 1793811030.651, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente fed.press: HTTP 404 (falla 1 seguida)"}
+{"ts": 1793812335.429, "level": "ERROR", "logger": "asyncio", "msg": "Unclosed client session\nclient_session: <aiohttp.client.ClientSession object at 0x000001BF3456D520>"}
+{"ts": 1793816446.464, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente fed.press: HTTP 404 (falla 1 seguida)"}
+{"ts": 1793816665.467, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente investing: HTTP 502 (falla 1 seguida)"}
+{"ts": 1793819346.414, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente theblock: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793819483.425, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente theblock: sin respuesta en 10.0 s (falla 2 seguida)"}
+{"ts": 1793819706.402, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente theblock: sin respuesta en 10.0 s (falla 3 seguida)"}
+{"ts": 1793820168.897, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente theblock: HTTP 502 (falla 4 seguida)"}
+{"ts": 1793820567.574, "level": "ERROR", "logger": "asyncio", "msg": "Unclosed client session\nclient_session: <aiohttp.client.ClientSession object at 0x0000020FBCF013D0>"}
+{"ts": 1793820619.736, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente theblock: HTTP 502 (falla 1 seguida)"}
+{"ts": 1793820793.427, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente theblock: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793820921.427, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente theblock: sin respuesta en 10.0 s (falla 2 seguida)"}
+{"ts": 1793822475.607, "level": "ERROR", "logger": "asyncio", "msg": "Unclosed client session\nclient_session: <aiohttp.client.ClientSession object at 0x000002488A910BF0>"}
+{"ts": 1793823794.085, "level": "ERROR", "logger": "asyncio", "msg": "Unclosed client session\nclient_session: <aiohttp.client.ClientSession object at 0x000001FEFBF9C200>"}
+{"ts": 1793823879.129, "level": "ERROR", "logger": "asyncio", "msg": "Unclosed client session\nclient_session: <aiohttp.client.ClientSession object at 0x000001E000DE0B00>"}
+{"ts": 1793825399.846, "level": "ERROR", "logger": "asyncio", "msg": "Unclosed client session\nclient_session: <aiohttp.client.ClientSession object at 0x000001F7D487D400>"}
+{"ts": 1793825531.125, "level": "ERROR", "logger": "asyncio", "msg": "Unclosed client session\nclient_session: <aiohttp.client.ClientSession object at 0x000002856A5A29F0>"}
+{"ts": 1793826756.459, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793826916.918, "level": "ERROR", "logger": "asyncio", "msg": "Unclosed client session\nclient_session: <aiohttp.client.ClientSession object at 0x00000246D5EFEBD0>"}
+{"ts": 1793827230.491, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793827274.676, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente fed.press: HTTP 404 (falla 1 seguida)"}
+{"ts": 1793828050.495, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793828213.659, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente fed.press: HTTP 404 (falla 1 seguida)"}
+{"ts": 1793828420.664, "level": "ERROR", "logger": "asyncio", "msg": "Unclosed client session\nclient_session: <aiohttp.client.ClientSession object at 0x0000024B48B58A10>"}
+{"ts": 1793829826.578, "level": "WARNING", "logger": "tradingagent.comandos", "msg": "órdenes por Telegram: sin respuesta de Telegram (timeout)"}
+{"ts": 1793829999.702, "level": "WARNING", "logger": "tradingagent.binance_ws", "msg": "canal de anuncios de Binance cortado (ConnectionError: Binance cerró el canal de anuncios (CLOSED)): reintento en 5 s"}
+{"ts": 1793829999.751, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente upbit.avisos: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793829999.754, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente binance.listados: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793830255.549, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente fed.press: HTTP 404 (falla 1 seguida)"}
+{"ts": 1793831985.529, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793832698.154, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente fed.press: HTTP 404 (falla 1 seguida)"}
+{"ts": 1793836357.563, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793836499.553, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 2 seguida)"}
+{"ts": 1793837589.554, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793840191.575, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793840473.43, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente fed.press: HTTP 404 (falla 1 seguida)"}
+{"ts": 1793840481.59, "level": "WARNING", "logger": "tradingagent.comandos", "msg": "órdenes por Telegram: sin respuesta de Telegram (timeout)"}
+{"ts": 1793840501.958, "level": "WARNING", "logger": "tradingagent.comandos", "msg": "órdenes por Telegram: Bad Gateway"}
+{"ts": 1793840525.515, "level": "WARNING", "logger": "tradingagent.comandos", "msg": "órdenes por Telegram: Bad Gateway"}
+{"ts": 1793840557.567, "level": "WARNING", "logger": "tradingagent.comandos", "msg": "órdenes por Telegram: Bad Gateway"}
+{"ts": 1793840606.11, "level": "WARNING", "logger": "tradingagent.comandos", "msg": "órdenes por Telegram: Bad Gateway"}
+{"ts": 1793840664.587, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793840682.528, "level": "WARNING", "logger": "tradingagent.comandos", "msg": "órdenes por Telegram: Bad Gateway"}
+{"ts": 1793840758.941, "level": "WARNING", "logger": "tradingagent.comandos", "msg": "órdenes por Telegram: Bad Gateway"}
+{"ts": 1793840796.58, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793840835.076, "level": "WARNING", "logger": "tradingagent.comandos", "msg": "órdenes por Telegram: Bad Gateway"}
+{"ts": 1793840887.575, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793840997.581, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793841174.722, "level": "WARNING", "logger": "tradingagent.comandos", "msg": "órdenes por Telegram: Bad Gateway"}
+{"ts": 1793841393.597, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793841987.597, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793843111.617, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793843275.59, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793843789.269, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente binance.listados: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793843795.226, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente binance.listados: HTTP 429 (falla 2 seguida)"}
+{"ts": 1793843806.161, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente binance.listados: HTTP 429 (falla 3 seguida)"}
+{"ts": 1793845128.665, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente fed.press: HTTP 404 (falla 1 seguida)"}
+{"ts": 1793845658.637, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793846910.632, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793847650.646, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793848111.65, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793848472.648, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793850114.654, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793850164.656, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 2 seguida)"}
+{"ts": 1793850250.65, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 3 seguida)"}
+{"ts": 1793850658.668, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793852107.091, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente fed.press: HTTP 404 (falla 1 seguida)"}
+{"ts": 1793852278.691, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793852388.941, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente fed.press: HTTP 404 (falla 1 seguida)"}
+{"ts": 1793852723.69, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793853011.684, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793853113.685, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793854098.698, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793855073.699, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793855386.709, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793856345.313, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente binance.listados: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793856345.329, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793857114.727, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793857690.73, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793857745.74, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 2 seguida)"}
+{"ts": 1793857853.74, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793857909.733, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 2 seguida)"}
+{"ts": 1793857946.936, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente fed.press: HTTP 404 (falla 1 seguida)"}
+{"ts": 1793858048.744, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793858240.733, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793859198.747, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793859241.299, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente fed.press: HTTP 404 (falla 1 seguida)"}
+{"ts": 1793859357.749, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793861502.761, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793862167.765, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793862547.764, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793863183.764, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793864641.792, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793864948.795, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793865104.789, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793865517.787, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793865591.791, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793865642.791, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 2 seguida)"}
+{"ts": 1793865734.79, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 3 seguida)"}
+{"ts": 1793865944.798, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793865994.792, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 2 seguida)"}
+{"ts": 1793866079.796, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 3 seguida)"}
+{"ts": 1793866251.781, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 4 seguida)"}
+{"ts": 1793866634.784, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793866726.804, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793866978.802, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793871733.843, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793872401.847, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793872688.848, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793872774.854, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793872852.85, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793873897.233, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente binance.listados: HTTP 429 (falla 1 seguida)"}
+{"ts": 1793873904.083, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente binance.listados: HTTP 429 (falla 2 seguida)"}
+{"ts": 1793873915.864, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente binance.listados: HTTP 429 (falla 3 seguida)"}
+{"ts": 1793874103.855, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 10.0 s (falla 1 seguida)"}
+{"ts": 1793878209.541, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente fed.press: HTTP 404 (falla 1 seguida)"}
+{"ts": 1793878412.947, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente fed.press: HTTP 404 (falla 1 seguida)"}
+{"ts": 1793878866.926, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente fed.press: HTTP 404 (falla 1 seguida)"}
+{"ts": 1793879065.273, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente fed.press: HTTP 404 (falla 1 seguida)"}
+{"ts": 1793880058.903, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 1 seguida)"}
+{"ts": 1793880602.892, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 1 seguida)"}
+{"ts": 1793880670.921, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 2 seguida)"}
+{"ts": 1793887106.974, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 1 seguida)"}
+{"ts": 1793887326.976, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 1 seguida)"}
+{"ts": 1793887442.973, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 1 seguida)"}
+{"ts": 1793887534.983, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 1 seguida)"}
+{"ts": 1793894183.02, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 1 seguida)"}
+{"ts": 1793894252.015, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 2 seguida)"}
+{"ts": 1793894390.015, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 1 seguida)"}
+{"ts": 1793894559.032, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 1 seguida)"}
+{"ts": 1793900929.078, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 1 seguida)"}
+{"ts": 1793901047.085, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 1 seguida)"}
+{"ts": 1793901211.074, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 1 seguida)"}
+{"ts": 1793901275.078, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 2 seguida)"}
+{"ts": 1793902096.089, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 1 seguida)"}
+{"ts": 1793902676.506, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente fed.press: HTTP 404 (falla 1 seguida)"}
+{"ts": 1793903160.091, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 1 seguida)"}
+{"ts": 1793905670.473, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente fed.press: HTTP 404 (falla 1 seguida)"}
+{"ts": 1793905924.124, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 1 seguida)"}
+{"ts": 1793907330.126, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 1 seguida)"}
+{"ts": 1793907648.131, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 1 seguida)"}
+{"ts": 1793907739.143, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 1 seguida)"}
+{"ts": 1793907806.142, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 2 seguida)"}
+{"ts": 1793907961.13, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 1 seguida)"}
+{"ts": 1793908163.824, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente investing: HTTP 502 (falla 1 seguida)"}
+{"ts": 1793913963.166, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 1 seguida)"}
+{"ts": 1793914149.195, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 1 seguida)"}
+{"ts": 1793914264.187, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente sec.edgar.8k: sin respuesta en 25 s (falla 1 seguida)"}
+{"ts": 1793917452.879, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente fed.press: HTTP 404 (falla 1 seguida)"}
+{"ts": 1793917568.31, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente cnbc.earnings: respuesta vacía (falla 1 seguida)"}
+{"ts": 1793917586.079, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente cnbc.top: respuesta vacía (falla 1 seguida)"}
+{"ts": 1793917654.575, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente cnbc.earnings: respuesta vacía (falla 2 seguida)"}
+{"ts": 1793917664.827, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente cnbc.top: respuesta vacía (falla 2 seguida)"}
+{"ts": 1793917761.083, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente fed.press: HTTP 404 (falla 1 seguida)"}
+{"ts": 1793918664.807, "level": "WARNING", "logger": "tradingagent.sources", "msg": "fuente fed.press: HTTP 404 (falla 1 seguida)"}

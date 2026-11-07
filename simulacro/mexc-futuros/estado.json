@@ -1,0 +1,181 @@
+{
+ "mercado": "mexc-futuros",
+ "initial": "100.0",
+ "cash": "100.0",
+ "positions": {},
+ "risk": {
+  "day": "2026-11-04",
+  "day_start": 100.0,
+  "week": "2026-W45",
+  "week_start": 100.0,
+  "peak": 100.0,
+  "losses_in_row": 0,
+  "cooldown_until": 0.0,
+  "halted": "",
+  "alerted": []
+ },
+ "clusters": [],
+ "instruments": {
+  "BTC_USDT": {
+   "symbol": "BTC_USDT",
+   "base": "BTC",
+   "quote": "USDT",
+   "contract_size": "0.0001",
+   "tick": "0.1",
+   "step": "0.0001",
+   "min_qty": "0.0001",
+   "maker": "0",
+   "taker": "0.0002",
+   "mmr": "0.001",
+   "max_leverage": 500,
+   "trading": true,
+   "ts": 1793820613
+  },
+  "ETH_USDT": {
+   "symbol": "ETH_USDT",
+   "base": "ETH",
+   "quote": "USDT",
+   "contract_size": "0.01",
+   "tick": "0.01",
+   "step": "0.01",
+   "min_qty": "0.01",
+   "maker": "0",
+   "taker": "0.0001",
+   "mmr": "0.001",
+   "max_leverage": 500,
+   "trading": true,
+   "ts": 1793820613
+  },
+  "SOL_USDT": {
+   "symbol": "SOL_USDT",
+   "base": "SOL",
+   "quote": "USDT",
+   "contract_size": "0.1",
+   "tick": "0.01",
+   "step": "0.1",
+   "min_qty": "0.1",
+   "maker": "0",
+   "taker": "0.0002",
+   "mmr": "0.0023",
+   "max_leverage": 300,
+   "trading": true,
+   "ts": 1793820613
+  },
+  "TRX_USDT": {
+   "symbol": "TRX_USDT",
+   "base": "TRX",
+   "quote": "USDT",
+   "contract_size": "10",
+   "tick": "0.00001",
+   "step": "10",
+   "min_qty": "10",
+   "maker": "0.0001",
+   "taker": "0.0004",
+   "mmr": "0.004",
+   "max_leverage": 200,
+   "trading": true,
+   "ts": 1793738233
+  },
+  "AMDSTOCK_USDT": {
+   "symbol": "AMDSTOCK_USDT",
+   "base": "AMDSTOCK",
+   "quote": "USDT",
+   "contract_size": "0.01",
+   "tick": "0.01",
+   "step": "0.01",
+   "min_qty": "0.01",
+   "maker": "0.0001",
+   "taker": "0.0004",
+   "mmr": "0.004",
+   "max_leverage": 200,
+   "trading": true,
+   "ts": 1793740848
+  },
+  "LTC_USDT": {
+   "symbol": "LTC_USDT",
+   "base": "LTC",
+   "quote": "USDT",
+   "contract_size": "0.01",
+   "tick": "0.01",
+   "step": "0.01",
+   "min_qty": "0.01",
+   "maker": "0.0001",
+   "taker": "0.0004",
+   "mmr": "0.004",
+   "max_leverage": 200,
+   "trading": true,
+   "ts": 1793745248
+  },
+  "SPX500_USDT": {
+   "symbol": "SPX500_USDT",
+   "base": "SPX500",
+   "quote": "USDT",
+   "contract_size": "0.0001",
+   "tick": "0.1",
+   "step": "0.0001",
+   "min_qty": "0.0001",
+   "maker": "0.0001",
+   "taker": "0.0004",
+   "mmr": "0.004",
+   "max_leverage": 200,
+   "trading": true,
+   "ts": 1793747108
+  },
+  "CRCLSTOCK_USDT": {
+   "symbol": "CRCLSTOCK_USDT",
+   "base": "CRCLSTOCK",
+   "quote": "USDT",
+   "contract_size": "0.01",
+   "tick": "0.01",
+   "step": "0.01",
+   "min_qty": "0.01",
+   "maker": "0.0001",
+   "taker": "0.0004",
+   "mmr": "0.005",
+   "max_leverage": 100,
+   "trading": true,
+   "ts": 1793791971
+  }
+ },
+ "spreads": {
+  "BTC_USDT": {
+   "mean": 0.020371,
+   "var": 0.002494,
+   "n": 3173,
+   "ts": 1793823850.338877
+  },
+  "ETH_USDT": {
+   "mean": 0.042788,
+   "var": 0.000291,
+   "n": 3173,
+   "ts": 1793823850.338877
+  },
+  "SOL_USDT": {
+   "mean": 1.073426,
+   "var": 0.044302,
+   "n": 3172,
+   "ts": 1793823850.338877
+  }
+ },
+ "last_check": 1793726546.5498595,
+ "created_at": 1793726547,
+ "strategy_tag": "reglas-3+riesgo-2",
+ "stats": {
+  "operaciones": 0,
+  "ganadas": 0,
+  "perdidas": 0,
+  "pnl_neto": "0"
+ },
+ "resumen_dia": "2026-11-04",
+ "fees": "0",
+ "realized": "0",
+ "updated_at": 1793823852,
+ "equity": "100.000000",
+ "marks": {},
+ "llm": {
+  "day": "2026-11-04",
+  "usd": 0.0008002,
+  "calls": 2,
+  "failures": 0
+ }
+}

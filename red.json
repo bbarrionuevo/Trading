@@ -1,0 +1,65 @@
+{
+ "ts": 1793917926,
+ "fuentes": {
+  "upbit.avisos": {
+   "codigo": 200,
+   "ms": 531,
+   "bytes": 5274,
+   "muestra": "{\"success\":true,\"data\":{\"total_pages\":41,\"total_count\":807,\"notices\":[{\"listed_at\":\"2026-11-05T15:03:03+09:00\",\"first_listed_at\":\"2026-11-05T15:03:03+09:00\",\"id\":6739,\"uuid\":\"f519b4f2-d7a9-4d8d-84c4-e9db8405829d\",\"title\":\"콜렉터크립트(CARDS) 신규 거래지원 안내 (KRW, BTC, USDT 마켓)\","
+  },
+  "upbit.mercados": {
+   "codigo": 200,
+   "ms": 1063,
+   "bytes": 68235,
+   "muestra": "[{\"market\":\"BTC-BERA\",\"korean_name\":\"베라체인\",\"english_name\":\"Berachain\"},{\"market\":\"BTC-FIL\",\"korean_name\":\"파일코인\",\"english_name\":\"Filecoin\"},{\"market\":\"BTC-SIGN\",\"korean_name\":\"사인\",\"english_name\":\"Sign\"},{\"market\":\"KRW-GEOD\",\"korean_name\":\"지오드넷\",\"english_name\":\"GEODNET\"},{\""
+  },
+  "bithumb.avisos": {
+   "codigo": 403,
+   "ms": 156,
+   "bytes": 5659,
+   "muestra": "<!DOCTYPE html>\n<!--[if lt IE 7]> <html class=\"no-js ie6 oldie\" lang=\"en-US\"> <![endif]-->\n<!--[if IE 7]>    <html class=\"no-js ie7 oldie\" lang=\"en-US\"> <![endif]-->\n<!--[if IE 8]>    <html class=\"no-js ie8 oldie\" lang=\"en-US\"> <![endif]-->\n<!--[if gt IE 8]><!--> <html class=\"no-js\" lang=\"en-US\"> <!"
+  },
+  "bybit.avisos": {
+   "codigo": 200,
+   "ms": 516,
+   "bytes": 9780,
+   "muestra": "{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"list\":[{\"title\":\"2 New Assets Available on Margin Trading, Crypto Loans, BNPL, Institutional Loan\",\"description\":\"\",\"type\":{\"key\":\"new_crypto\",\"title\":\"New Listings\"},\"tags\":[\"Institutions\",\"Loan\",\"VIP\"],\"url\":\"https://announcements.bybit.com/en-US/article/2-new"
+  },
+  "binance.api": {
+   "codigo": 200,
+   "ms": 438,
+   "bytes": 2,
+   "muestra": "{}"
+  },
+  "binance.listados": {
+   "codigo": 200,
+   "ms": 328,
+   "bytes": 1482,
+   "muestra": "{\"code\":\"000000\",\"message\":null,\"messageDetail\":null,\"data\":{\"catalogs\":[{\"catalogId\":48,\"parentCatalogId\":null,\"icon\":\"https://public.bnbstatic.com/image/cms/content/body/202505/d3201bf0be35bb246b65a767221410e0.png\",\"catalogName\":\"New Cryptocurrency Listing\",\"description\":null,\"catalogType\":1,\"tota"
+  },
+  "coinbase.productos": {
+   "codigo": 200,
+   "ms": 297,
+   "bytes": 200000,
+   "muestra": "[{\"id\":\"USDT-USD\",\"base_currency\":\"USDT\",\"quote_currency\":\"USD\",\"quote_increment\":\"0.00001\",\"base_increment\":\"0.01\",\"display_name\":\"USDT-USD\",\"min_market_funds\":\"1\",\"margin_enabled\":false,\"post_only\":false,\"limit_only\":false,\"cancel_only\":false,\"status\":\"online\",\"status_message\":\"\",\"trading_disabled"
+  },
+  "kraken.activos": {
+   "codigo": 200,
+   "ms": 375,
+   "bytes": 99172,
+   "muestra": "{\"error\":[],\"result\":{\"0G\":{\"aclass\":\"currency\",\"altname\":\"0G\",\"decimals\":6,\"display_decimals\":4,\"status\":\"enabled\",\"margin_rate\":\"0.02\"},\"1INCH\":{\"aclass\":\"currency\",\"altname\":\"1INCH\",\"decimals\":10,\"display_decimals\":5,\"status\":\"enabled\"},\"2Z\":{\"aclass\":\"currency\",\"altname\":\"2Z\",\"decimals\":4,\"displ"
+  },
+  "bls.cpi": {
+   "codigo": 403,
+   "ms": 188,
+   "bytes": 1323,
+   "muestra": "<!DOCTYPE HTML>\n<html lang=\"en-us\">      \n               <head> \n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" />\n<title>Access Denied</title>\n</head>\n  <style type=\"text/css\">\n    .centerDiv\n    {\n      width: 60%;\n      height:200px;\n      margin: 0 auto;\n      background-colo"
+  },
+  "upbit.avisos.windows": {
+   "codigo": 200,
+   "ms": 172,
+   "bytes": 5274,
+   "muestra": "{\"success\":true,\"data\":{\"total_pages\":41,\"total_count\":807,\"notices\":[{\"listed_at\":\"2026-11-05T15:03:03+09:00\",\"first_listed_at\":\"2026-11-05T15:03:03+09:00\",\"id\":6739,\"uuid\":\"f519b4f2-d7a9-4d8d-84c4-e9db8405829d\",\"title\":\"콜렉터크립트(CARDS) 신규 거래지원 안내 (KRW, BTC, USDT 마켓)\","
+  }
+ }
+}
