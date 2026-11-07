@@ -56,11 +56,8 @@ def match(events: list, msgs: list) -> list:
     return out
 
 
-def agent(hip, ev: dict, delay: float, brake, hold: int):
+def agent(tp, ev: dict, delay: float, brake, hold: int):
     """(entró, llenó, retorno) entrando a tg + delay como el agente: freno desde la apertura del minuto del mensaje."""
-    tp = hip.cached_tape(ev)
-    if tp is None:
-        return None
     tg_ms = int(ev["tg"] * 1000)
     i0, i = tp.first_at(tg_ms // 60000 * 60000), tp.first_at(tg_ms + delay * 1000)
     if i0 is None or i is None:
@@ -90,17 +87,25 @@ def main() -> None:
             offs[r["off"]] = offs.get(r["off"], 0) + 1
         print(f"\n== {kind}: {len(rs)} avisos con su mensaje · Telegram − sitio (s): "
               + " · ".join(f"{k:+d} s: {v}" for k, v in sorted(offs.items())))
-        with_tape = [r for r in rs if hip.cached_tape(r) is not None]
-        print(f"   con perpetuo y ventana en la caché: {len(with_tape)}")
-        if not with_tape:
+        res: dict[tuple, list] = {}
+        n_tape = 0
+        for r in sorted(rs, key=lambda r: r["t0"]):         # cada ventana se lee una sola vez
+            tp = hip.cached_tape(r)
+            if tp is None:
+                continue
+            n_tape += 1
+            for delay in DELAYS:
+                for hold in HOLDS:
+                    for brake in BRAKES:
+                        res.setdefault((delay, hold, brake), []).append((r, agent(tp, r, delay, brake, hold)))
+        print(f"   con perpetuo y ventana en la caché: {n_tape}", flush=True)
+        if not n_tape:
             continue
-        with_tape.sort(key=lambda r: r["t0"])
         for delay in DELAYS:
             for hold in HOLDS:
                 parts = []
                 for brake in BRAKES:
-                    got = [(r, agent(hip, r, delay, brake, hold)) for r in with_tape]
-                    got = [(r, g) for r, g in got if g is not None]
+                    got = [(r, g) for r, g in res[(delay, hold, brake)] if g is not None]
                     n = len(got)
                     entered = [(r, g) for r, g in got if g[0] and g[2] is not None]
                     rets = [g[2] for _, g in entered]
@@ -115,7 +120,7 @@ def main() -> None:
                                  f"{pct(per_notice)} (mitades {pct(h1)} / {pct(h2)})")
                 print(f"   tg + {delay:g} s, salida a los {hold // 60} min:")
                 for p in parts:
-                    print("      " + p)
+                    print("      " + p, flush=True)
 
 
 if __name__ == "__main__":

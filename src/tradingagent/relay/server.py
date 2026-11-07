@@ -18,6 +18,7 @@ Uso en el servidor:  python -m tradingagent.relay.server --clave ~/relay.key --p
 """
 import argparse
 import asyncio
+import json
 import logging
 import signal
 import time
@@ -40,6 +41,7 @@ PEER_FORGET_S = 600.0                                # y a los 10 min se olvida 
 LOCAL_HOSTS = ("127.0.0.1", "::1")
 KILL_MARK = "pausa copiada de la PC (relé)"          # el relé solo borra el KILL que creó él
 STATUS_EVERY_S = 30.0
+TELEGRAM_LOG_MAX_BYTES = 5_000_000                  # unos pocos avisos por día: años de registro
 
 
 def is_local(addr) -> bool:
@@ -47,8 +49,9 @@ def is_local(addr) -> bool:
 
 
 class RelayServer(asyncio.DatagramProtocol):
-    def __init__(self, key: bytes, clock=None, kill_file: Path | None = None):
+    def __init__(self, key: bytes, clock=None, kill_file: Path | None = None, telegram_log: Path | None = None):
         self.key, self.clock, self.kill_file = key, clock or SystemClock(), kill_file
+        self.telegram_log = telegram_log                # la demora de cada aviso de Upbit (note_telegram)
         self.peers: dict[tuple, float] = {}           # dirección → último latido
         self.seen = protocol.NonceCache()
         self.transport = None
@@ -182,8 +185,27 @@ class RelayServer(asyncio.DatagramProtocol):
         """Un aviso de trading del canal oficial de Upbit en Telegram (relay/telegram_upbit.py)."""
         sent = self.forward(item)
         self.counts["telegram"] += 1
+        now = self.clock.time()
         log.info("aviso de Telegram %s (%.2f s de publicado): %s", "mandado" if sent else "SIN NADIE",
-                 self.clock.time() - (item.published_at or item.received_at), item.title[:100])
+                 now - (item.published_at or item.received_at), item.title[:100])
+        self.note_telegram(item, now, sent)
+
+    def note_telegram(self, item, now: float, sent: bool) -> None:
+        """Una línea por aviso, DESPUÉS de reenviarlo: la hora del mensaje (Telegram la da en segundos enteros), cuándo
+        llegó al relé y cuándo salió. Es la demora real de Telegram a Tokio, la que decide si un listado de Upbit llega
+        a tiempo (7-nov: el diario del sistema se borra al reiniciar el servidor). Si no se puede escribir, sigue."""
+        f = self.telegram_log
+        if f is None:
+            return
+        try:
+            if f.exists() and f.stat().st_size > TELEGRAM_LOG_MAX_BYTES:
+                return
+            row = {"publicado": item.published_at, "recibido": round(item.received_at, 3), "mandado": round(now, 3),
+                   "a_alguien": sent, "titulo": item.title[:120]}
+            with f.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        except OSError as e:
+            log.warning("no pude anotar la demora del aviso de Telegram en %s: %s", f, e)
 
 
 async def _telegram(relay: RelayServer, stop: asyncio.Event) -> None:
@@ -201,7 +223,7 @@ async def _telegram(relay: RelayServer, stop: asyncio.Event) -> None:
         log.error("Telegram de Upbit detenido: %s", e)
 
 
-async def main(key_file: Path, port: int, kill_file: Path | None) -> None:
+async def main(key_file: Path, port: int, kill_file: Path | None, telegram_log: Path | None = None) -> None:
     key = protocol.load_key(key_file)
     loop = asyncio.get_running_loop()
     clock = SystemClock()
@@ -211,7 +233,7 @@ async def main(key_file: Path, port: int, kill_file: Path | None) -> None:
             loop.add_signal_handler(sig, stop.set)
         except NotImplementedError:                        # Windows (solo pruebas)
             pass
-    transport, relay = await loop.create_datagram_endpoint(lambda: RelayServer(key, clock, kill_file),
+    transport, relay = await loop.create_datagram_endpoint(lambda: RelayServer(key, clock, kill_file, telegram_log),
                                                            local_addr=("0.0.0.0", port))
     log.info("relé escuchando UDP %d · la pausa de la PC se copia a %s", port, kill_file or "(ningún lado)")
     async with aiohttp.ClientSession() as session:
@@ -241,9 +263,14 @@ def cli() -> None:
     ap.add_argument("--puerto", type=int, default=50005)
     ap.add_argument("--kill", default=str(Path.home() / ".trading" / "KILL"),
                     help="el KILL del agente de Tokio, donde se copia la pausa de la PC ('' para no copiarla)")
+    ap.add_argument("--demoras", default=str(Path.home() / ".trading" / "datos" / "telegram-upbit.jsonl"),
+                    help="dónde anotar la demora de cada aviso de Upbit ('' para no anotarla)")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    asyncio.run(main(Path(args.clave), args.puerto, Path(args.kill) if args.kill else None))
+    log_file = Path(args.demoras) if args.demoras else None
+    if log_file is not None and not log_file.parent.is_dir():
+        log_file = None                                  # sin la carpeta de datos del agente, no se anota
+    asyncio.run(main(Path(args.clave), args.puerto, Path(args.kill) if args.kill else None, log_file))
 
 
 if __name__ == "__main__":
