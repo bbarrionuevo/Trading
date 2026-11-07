@@ -101,3 +101,23 @@ def test_el_tablero_muestra_cada_modulo_y_no_publica_la_plata_real(tmp_path):
     html = dashboard.fragment(public)
     assert "dinero real" in html and "Listados de Upbit al instante" in html      # el estado sí (sin montos)
     assert "simulacro" in html
+
+
+def test_la_pantalla_simple_muestra_el_dinero_real_y_cada_modulo_con_su_estado(tmp_path):
+    """El dueño, 7-nov: todo en una ventana, el dinero real y cómo varía, y un rectángulo por módulo con ganancias,
+    operaciones y si es dinero real o simulacro."""
+    arming.arm(tmp_path, 3, "k", arming.phrase(3), venue="binance-futuros", strategies=("listado_upbit", "listado_binance"))
+    arming.arm(tmp_path, 3, "", "", simulacro=True, capital=100.0, venue="binance-futuros", mode="local",
+               file=arming.SIM_FILE)
+    _account(tmp_path, "real", real=True)
+    _account(tmp_path, "simulacro")
+    modulos.write_catalog(tmp_path, NOW)
+    html = dashboard.simple_fragment(dashboard.gather(tmp_path, NOW, include_real=True))
+    assert 'class="hero">103.00 <span class="unit">USDT' in html                 # el saldo real, la cifra principal
+    assert "Ganancia de las operaciones" in html and "+3.12" in html and "data-curve" in html
+    assert 'Listados de Upbit</strong><span class="badge real">DINERO REAL' in html
+    assert 'Deslistados de Binance</strong><span class="badge sim">SIMULACRO' in html
+    assert html.index("Listados de Binance") < html.index("Deslistados de Binance")   # primero los de plata real
+    assert "1 cerradas · 1 ganadas" in html and "ver el detalle" in html
+    public = dashboard.simple_fragment(dashboard.gather(tmp_path, NOW, include_real=False))
+    assert "no se publica" in public and "103.00" not in public                  # G-8

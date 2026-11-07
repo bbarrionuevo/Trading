@@ -2,11 +2,19 @@
 # Instala o actualiza el agente de Tokio (y el relé) en el servidor. Uso, en el servidor:
 #   bash ~/trading/deploy/tokio/instalar-agente.sh [rama]        (por defecto main)
 # Antes, una sola vez: ~/.trading/.env con deploy/tokio/preparar_env.py (desde la PC: enviar_claves_pc.py).
+# El procedimiento completo (docs/TRASPASO.md §3, "Instalar en Tokio"): CI de main en verde, `revisar.sh --antes`, esto
+# (que al final corre `revisar.sh` solo) y la prueba de punta a punta.
 set -euo pipefail
 BRANCH="${1:-main}"
 REPO=/home/ubuntu/trading
 HOME_T=/home/ubuntu/.trading
 cd "$REPO"
+# Con posiciones REALES abiertas no se instala (G-7): reinstalar reinicia al agente. FORZAR=1 solo si el dueño lo pide.
+OPEN=$(python3 -c "import json; print(len(json.load(open('$HOME_T/real/binance-futuros/estado.json')).get('positions') or {}))" 2>/dev/null || echo 0)
+if [ "$OPEN" != "0" ] && [ "${FORZAR:-0}" != "1" ]; then
+  echo "hay $OPEN posición(es) real(es) abierta(s): no instalo ahora (esperar a que cierren)" >&2
+  exit 1
+fi
 git fetch -q origin
 OLD=$(git rev-parse HEAD 2>/dev/null || echo ninguno)
 git checkout -q -B "$BRANCH" "origin/$BRANCH"
@@ -31,5 +39,7 @@ sudo install -m 644 deploy/tokio/agente-tokio.service /etc/systemd/system/agente
 sudo systemctl daemon-reload
 sudo systemctl enable -q rele-tokio agente-tokio
 sudo systemctl restart rele-tokio agente-tokio
-sleep 8
-systemctl is-active rele-tokio agente-tokio
+# La revisión de siempre (servicios, arranque solo, conexiones tibias, Telegram, fuentes, errores...), ya con la versión
+# nueva. Espera sola a que el agente lleve 60 s andando (lee sus fuentes y abre las conexiones tibias).
+sleep 5
+bash "$REPO/deploy/tokio/revisar.sh"
