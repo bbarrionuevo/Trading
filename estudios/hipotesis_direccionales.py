@@ -63,7 +63,11 @@ COST = 0.002
 EXITS_S = (45, 60, 120, 300, 900, 1800, 3600, 14400)
 CFG = {"deslistados": {"delays": (0.1, 1.3, 2.0, 2.7, 5.0), "real": 2.0, "stop": 0.20, "trails": (0.03, 0.05, 0.08)},
        "launchpool": {"delays": (0.1, 1.3, 2.0, 2.7, 5.0), "real": 2.0, "stop": 0.03, "trails": (0.005, 0.01, 0.02)},
-       "advertencias": {"delays": (0.1, 1.0, 2.0, 3.0, 5.0), "real": 2.0, "stop": 0.10, "trails": (0.03, 0.05, 0.08)}}
+       "advertencias": {"delays": (0.1, 1.0, 2.0, 3.0, 5.0), "real": 2.0, "stop": 0.10, "trails": (0.03, 0.05, 0.08)},
+       # 7-nov (segunda tanda del dueño), con nuestras demoras medidas: el canal de anuncios de Binance llega a 1,2 s
+       # (a 2,6 s si se publica a hora redonda) y Upbit por Telegram a ~1 s del sitio.
+       "vigilancia": {"delays": (1.2, 2.6, 5.0, 10.0, 30.0), "real": 1.2, "stop": 0.10, "trails": (0.03, 0.05)},
+       "listados_upbit": {"delays": (1.0, 2.0, 3.0, 5.0, 10.0), "real": 1.0, "stop": 0.10, "trails": (0.05, 0.10)}}
 C = CFG[HYP]
 CAPS = (0.0025, 0.005, 0.01, 0.02, 0.05)
 BEFORE_S, AFTER_S = 60, 3900
@@ -218,6 +222,50 @@ def events_advertencias() -> list[dict]:
         seen.add(_id)
         t0 = (calendar.timegm(time.strptime(kst, "%Y-%m-%d %H:%M:%S")) - 9 * 3600) * 1000
         out += korean("bithumb", t0, title)
+    return [e for e in out if e["t0"] >= 1735689600000]
+
+
+VIGILANCIA = re.compile(r"Monitoring Tag (?:to Include|to|on) (.*?)(?:\bon\b \d{4}-\d{2}-\d{2}|$)", re.I)
+TOKEN = re.compile(r"\b[A-Z0-9]{2,12}\b")
+SKIP = {"BINANCE", "USDT", "USD", "USDC", "FDUSD", "TRY", "EUR", "BTC", "ETH", "BNB", "AND", "THE", "ON", "WILL",
+        "DELIST", "SPOT", "MARGIN", "FUTURES", "PERPETUAL", "CONTRACTS", "UTC", "SOME", "PAIRS", "TRADING"}
+
+
+def events_vigilancia() -> list[dict]:
+    """Etiqueta de vigilancia de Binance (7-nov, la hipótesis del dueño: "sangría lenta pero segura", corto saliendo a
+    la hora): casi todas salen en "Latest Binance News" (49) y alguna en "Delisting" (161). Las mismas reglas de título
+    que el estudio del 5-nov (estudios/vigilancia_binance.py); las que la sacan ("Remove"), afuera."""
+    out, seen = [], set()
+    for cat in (49, 161):
+        for a in cms(cat, 1735689600000):
+            m = VIGILANCIA.search(a["title"])
+            if not m or re.search(r"remov", a["title"], re.I):
+                continue
+            for c in TOKEN.findall(m.group(1)):
+                if c not in SKIP and (a["t0"], c) not in seen:
+                    seen.add((a["t0"], c))
+                    out.append({"t0": a["t0"], "coin": c, "side": -1, "kind": "vigilancia", "title": a["title"]})
+    return out
+
+
+def events_listados_upbit() -> list[dict]:
+    """Listados de Upbit desde 2025 (7-nov, la hipótesis del dueño: ¿el alta en wones de una moneda que ya estaba en
+    BTC o USDT tiene una ventana más limpia que un listado nuevo?): el listado nuevo (신규 거래지원), el alta en wones
+    (KRW 마켓 디지털 자산 추가) y, para comparar, el alta en BTC o USDT. Largo."""
+    out = []
+    for n in upbit_notices():
+        t = n["title"]
+        if re.search(r"신규\s*거래지원", t):
+            kind = "listado_nuevo"
+        elif re.search(r"KRW[^)]*마켓\s*디지털\s*자산\s*추가", t):
+            kind = "alta_en_wones"
+        elif re.search(r"(?:BTC|USDT)[^)]*마켓\s*디지털\s*자산\s*추가", t):
+            kind = "alta_en_btc_o_usdt"
+        else:
+            continue
+        for c in dict.fromkeys(re.findall(r"\(([A-Z0-9]{1,15})\)", t)):
+            if c not in ("KRW", "BTC", "USDT"):
+                out.append({"t0": n["t0"], "coin": c, "side": 1, "kind": kind, "title": t})
     return [e for e in out if e["t0"] >= 1735689600000]
 
 
@@ -383,6 +431,22 @@ class Tape:
         t, r = max(cand, key=lambda x: x[1])
         return (t - t_from) / 1000, r
 
+    def worst(self, t_from, side, horizon_s):
+        """(segundos hasta el peor precio en contra, retorno ahí) con cada operación hasta los 65 min y las velas de
+        1 min después: lo que hay que aguantar (y dónde tendría que estar el stop)."""
+        i = self.first_at(t_from)
+        if i is None:
+            return None
+        px, end = self.p[i], self.t[i] + horizon_s * 1000
+        cand = [(self.t[j], side * (self.p[j] / px - 1)) for j in range(i, len(self.t)) if self.t[j] <= end]
+        if end > self.end:
+            cand += [(ot, side * ((lo if side > 0 else h) / px - 1)) for ot, _o, h, lo, _c in self.k1m
+                     if self.end <= ot <= end]
+        if not cand:
+            return None
+        t, r = min(cand, key=lambda x: x[1])
+        return (t - t_from) / 1000, r
+
     def sweep(self, t, side, ms=200):
         """Lo que barre una orden a mercado: el peor precio en los `ms` siguientes contra la primera operación."""
         i = self.first_at(t)
@@ -430,6 +494,7 @@ def numbers(tp: Tape, ev: dict) -> dict:
     t_in = t0 + real * 1000
     return {"mv": mv, "ret": ret,
             "pico": {h: tp.best(t_in, side, h) for h in (900, 3600, 14400)},
+            "piso": {h: tp.worst(t_in, side, h) for h in (900, 3600)},
             "barrido": tp.sweep(t_in, side), "ioc": {c: tp.ioc(t0, real, side, c) for c in CAPS},
             "vol_1m": tp.volume(t0), "antes": mv.get(2)}
 
@@ -474,6 +539,14 @@ def report(name: str, rows: list) -> None:
     buckets = ((0, 10), (10, 60), (60, 300), (300, 900), (900, 3600), (3600, 14401))
     got = [r["pico"][14400][0] for r in rows if r["pico"][14400] is not None]
     print("    cuándo (4 h):", " · ".join(f"{a}-{b} s: {sum(a <= x < b for x in got)}" for a, b in buckets))
+    for h in (900, 3600):                             # lo peor en contra: lo que hay que aguantar
+        got = [r["piso"][h] for r in rows if (r.get("piso") or {}).get(h) is not None]
+        if got:
+            ts = sorted(x[0] for x in got)
+            print(f"    lo peor en contra en {label(h):>6}: a los {statistics.median(ts):6.0f} s · tamaño mediano "
+                  f"{pct(statistics.median([x[1] for x in got]))} · el peor {pct(min(x[1] for x in got))}")
+    print(f"  resumen (entrando a {C['real']} s): " + " · ".join(
+        f"{label(h)} {summary([r['ret'][(C['real'], h)] for r in rows])}" for h in (60, 300, 3600)))
     real = C["real"]
     cands = [(h, [r["ret"][(real, h)] for r in rows]) for h in keys]
     cands = [(h, [x for x in xs if x is not None]) for h, xs in cands]
@@ -565,7 +638,8 @@ def first_notice(events: list) -> list:
 def main() -> None:
     CACHE.mkdir(parents=True, exist_ok=True)
     events = {"deslistados": events_deslistados, "launchpool": events_launchpool,
-              "advertencias": events_advertencias}[HYP]()
+              "advertencias": events_advertencias, "vigilancia": events_vigilancia,
+              "listados_upbit": events_listados_upbit}[HYP]()
     kinds: dict[str, int] = {}
     for ev in events:
         kinds[ev["kind"]] = kinds.get(ev["kind"], 0) + 1
