@@ -17,6 +17,7 @@ import json
 import os
 import re
 import socket
+import statistics
 import threading
 import time
 from collections import Counter
@@ -155,7 +156,79 @@ def account(base: Path, now: float) -> dict | None:
             "ultimas_operaciones": trades[-20:][::-1], "ultimas_decisiones": recent[-30:][::-1],
             "motivos_frecuentes": reasons.most_common(8), "decisiones_recientes": len(recent),
             "entradas_recientes": sum(d.get("decision") == "entrar" for d in recent),
-            "llm": st.get("llm"), "actualizado": st.get("updated_at")}
+            "llm": st.get("llm"), "actualizado": st.get("updated_at"),
+            "por_modulo": by_module(trades, decisions, st.get("positions") or {})}
+
+
+# Los módulos que tienen regla propia (research/modulos.py); lo demás va a "otras" (noticias generales con la IA).
+MODULES = ("listado_upbit", "listado_binance", "deslistado_corto", "vigilancia_corto", "resultados_impulso",
+           "lanzamiento_corto", "listado")
+GENERAL = "otras"
+
+
+def _module(cat) -> str:
+    return cat if cat in MODULES else GENERAL
+
+
+def _median(xs: list) -> float | None:
+    return round(statistics.median(xs), 3) if xs else None
+
+
+def by_module(trades: list, decisions: list, positions: dict) -> dict:
+    """Cada módulo de una cuenta, para la mejora continua: decisiones y entradas (los últimos 2 meses), operaciones
+    cerradas con su retorno, el pico de cada una (el camino del precio que guarda el operador), la demora del aviso
+    (de publicado a recibido) y del camino hasta la orden, por qué no entró y las últimas operaciones. Son las filas
+    que ya se leyeron: solo cuentas chicas (Tokio lo arma cada 2 min, en un hilo aparte)."""
+    acc: dict[str, dict] = {}
+
+    def slot(cat) -> dict:
+        return acc.setdefault(_module(cat), {"dec": 0, "ent": 0, "why": Counter(), "demora": [], "camino": [],
+                                             "ret": [], "pnl": 0.0, "pico": [], "t_pico": [], "ultimas": [],
+                                             "abiertas": 0})
+
+    for d in decisions:
+        m = slot((d.get("signal") or {}).get("category"))
+        m["dec"] += 1
+        if d.get("decision") == "entrar":
+            m["ent"] += 1
+            if isinstance(d.get("camino_ms"), int | float):
+                m["camino"].append(d["camino_ms"])
+        else:
+            m["why"].update(str(r).split(":")[0] for r in d.get("motivos") or [])
+        delay = (d.get("aviso") or {}).get("demora_s")
+        if isinstance(delay, int | float):
+            m["demora"].append(delay)
+    for t in trades:
+        if t.get("tipo") != "salida":
+            continue
+        m = slot(t.get("category"))
+        try:
+            ret = float(t.get("retorno_neto") or 0) * 100
+            m["pnl"] += float(t.get("pnl_neto") or 0)
+        except (TypeError, ValueError):
+            continue
+        m["ret"].append(ret)
+        tr = t.get("trayectoria") or {}
+        if isinstance(tr.get("max_pct"), int | float):
+            m["pico"].append(tr["max_pct"])
+            m["t_pico"].append(tr.get("t_max_s") or 0)
+        m["ultimas"].append({"ts": t.get("ts"), "symbol": t.get("symbol"), "lado": t.get("lado"),
+                             "ret_pct": round(ret, 2), "motivo": t.get("motivo"), "pico_pct": tr.get("max_pct"),
+                             "t_pico_s": tr.get("t_max_s"), "en_pct": tr.get("en_pct")})
+    for p in (positions or {}).values():
+        slot(p.get("category"))["abiertas"] += 1
+    out = {}
+    for cat, m in acc.items():
+        rets = m["ret"]
+        won = sum(r > 0 for r in rets)
+        out[cat] = {"decisiones": m["dec"], "entradas": m["ent"], "cerradas": len(rets), "ganadas": won,
+                    "acierto_pct": round(100 * won / len(rets)) if rets else None,
+                    "mediana_pct": _median(rets), "media_pct": round(statistics.mean(rets), 3) if rets else None,
+                    "pnl": round(m["pnl"], 4), "abiertas": m["abiertas"], "pico_mediano_pct": _median(m["pico"]),
+                    "t_pico_mediano_s": _median(m["t_pico"]), "demora_mediana_s": _median(m["demora"]),
+                    "camino_mediano_ms": _median(m["camino"]), "motivos": m["why"].most_common(3),
+                    "ultimas": m["ultimas"][-5:][::-1]}
+    return out
 
 
 def log_errors(home: Path, n: int = 12) -> list[dict]:
@@ -310,9 +383,11 @@ def gather(home: Path, now: float | None = None, repo: Path = REPO, include_real
         status = ("ok", "Funcionando: listo para operar la próxima noticia")
     learned = read_json(home / "datos" / "aprendizaje" / "estado.json", None) or {}
     trader = (hb or {}).get("trader") or {}
+    mods = read_json(home / "state" / "modulos.json", None)       # lo escribe el agente (research/modulos.py)
     return {"generado": round(now), "version": __version__, "estado": status[0], "estado_texto": status[1],
             "latido_hace_s": age, "kill": kill, "agente": hb, "cuentas": accounts, "inactivas": inactive,
-            "supervisor": sup, "tokio": tk, "solo_tablero": board_only,
+            "supervisor": sup, "tokio": tk, "solo_tablero": board_only, "publico": not include_real,
+            "modulos": (mods or {}).get("modulos") if isinstance(mods, dict) else None,
             "tests": tests_summary(home / "logs" / "tests.txt"), "errores": log_errors(home),
             "aprendizaje": {"apagadas": learned.get("apagadas", []), "meta": learned.get("meta") or {},
                             "calculado": learned.get("calculado")},
@@ -416,6 +491,8 @@ def fragment(s: dict) -> str:
              f'actualizado {e(fmt_ts(s["generado"]))}</div></div></section>']
     if s.get("tokio") and not s.get("espejo"):           # con el tablero de Tokio, todo es uno: sin sección aparte
         parts.append(tokio_fragment(s["tokio"]))
+    if s.get("modulos"):
+        parts.append(modules_fragment(s))
     hb = s.get("agente") or {}
     llm = s.get("llm") or {}
     for a in s["cuentas"]:
@@ -534,6 +611,66 @@ def fragment(s: dict) -> str:
     return "\n".join(parts)
 
 
+ESTADO_CLS = {"dinero real": "real", "simulacro": "sim", "práctica": "sim", "apagado": "off"}
+EN_ES = {"30": "30 s", "60": "1 min", "300": "5 min", "900": "15 min", "3600": "1 h", "14400": "4 h"}
+
+
+def modules_fragment(s: dict) -> str:
+    """Una tarjeta por módulo: estado, de dónde lee, sus parámetros, lo que dijo su estudio y lo que pasa en vivo en
+    cada cuenta (para comparar y mejorar)."""
+    accounts = [a for a in s.get("cuentas") or [] if a.get("por_modulo") is not None]
+    cards = []
+    for mod in s.get("modulos") or []:
+        rows, last = [], []
+        for a in accounts:
+            st = (a.get("por_modulo") or {}).get(mod["id"])
+            if not st:
+                continue
+            name = TIPO_ES.get(a.get("tipo"), a.get("tipo") or "")
+            show_pnl = not a.get("real") or not s.get("publico")
+            rows.append([e(name), str(st["decisiones"]), str(st["entradas"]), str(st["abiertas"]),
+                         str(st["cerradas"]) + (f" ({st['acierto_pct']} % ganadas)" if st["acierto_pct"] is not None
+                                               else ""),
+                         f'<span class="{_delta_cls(st["mediana_pct"])}">{fmt_num(st["mediana_pct"], 2, True)} %</span>'
+                         f' / {fmt_num(st["media_pct"], 2, True)} %',
+                         (_pnl(st["pnl"], 2) if show_pnl else "—"),
+                         (f"{fmt_num(st['pico_mediano_pct'], 1, True)} % a los {fmt_age(st['t_pico_mediano_s'])}"
+                          if st["pico_mediano_pct"] is not None else "—"),
+                         (f"{fmt_num(st['demora_mediana_s'], 2)} s" if st["demora_mediana_s"] is not None else "—"),
+                         (f"{fmt_num(st['camino_mediano_ms'], 0)} ms" if st["camino_mediano_ms"] is not None else "—"),
+                         e(", ".join(f"{k} ({n})" for k, n in st["motivos"])) or "—"])
+            for t in st["ultimas"]:
+                path = " · ".join(f"{EN_ES.get(k, k)} {fmt_num(v, 1, True)} %" for k, v in (t.get("en_pct") or {}).items())
+                last.append([e(fmt_ts(t.get("ts"))), e(name), e(str(t.get("symbol", ""))), e(str(t.get("lado", ""))),
+                             f'<span class="{_delta_cls(t.get("ret_pct"))}">{fmt_num(t.get("ret_pct"), 2, True)} %</span>',
+                             e(str(t.get("motivo", ""))),
+                             (f"{fmt_num(t.get('pico_pct'), 1, True)} % a los {fmt_age(t.get('t_pico_s'))}"
+                              if t.get("pico_pct") is not None else "—"), e(path) or "—"])
+        params = "".join(f"<tr><th>{e(k)}</th><td>{e(v)}</td></tr>" for k, v in mod.get("parametros") or [])
+        study = mod.get("estudio") or {}
+        labels = ["Decisiones", "Entradas", "Abiertas", "Cerradas", "Retorno mediano / medio", "PnL (USDT)",
+                  "Pico mediano", "Demora del aviso", "Hasta la orden", "Por qué no entró"]
+        live = ('<p class="muted">Sin actividad todavía en las cuentas que corren.</p>' if not rows else _table(
+            ["En vivo", *[r[0] for r in rows]],                      # una columna por cuenta: entra en media pantalla
+            [[e(label), *[r[i + 1] for r in rows]] for i, label in enumerate(labels)], ""))
+        recent = (f'<details data-k="ultimas-{e(mod["id"])}"><summary>Últimas operaciones ({len(last)})</summary>'
+                  + _table(["Hora", "Cuenta", "Símbolo", "Lado", "Retorno", "Salida", "Pico", "Camino del precio"],
+                           last, "") + "</details>") if last else ""
+        cards.append(
+            f'<article class="card mod"><div class="modhead"><strong>{e(mod["nombre"])}</strong> '
+            f'<span class="badge {ESTADO_CLS.get(mod.get("estado"), "off")}">{e(str(mod.get("estado", "")))}</span> '
+            f'<span class="muted">{e(str(mod.get("lado", "")))}</span></div>'
+            f'<div class="muted">Lee: {e(str(mod.get("fuente", "")))} · IA: {e(str(mod.get("ia", "")))}</div>'
+            f'<table class="kv">{params}</table>'
+            + (f'<p class="muted">Estudio: {e(study.get("texto", ""))} ({e(study.get("donde", ""))})</p>' if study else "")
+            + live + recent + "</article>")
+    if not cards:
+        return ""
+    return ('<h2>Módulos (estrategias)</h2><p class="muted">Lo que dijo cada estudio contra lo que pasa en vivo. '
+            'Decisiones de los últimos 2 meses; operaciones, todas. El pico y el camino del precio salen de lo que el '
+            'operador mira cada segundo.</p><div class="mods">' + "".join(cards) + "</div>")
+
+
 def tokio_fragment(t: dict) -> str:
     """El servidor de Tokio: si el agente de allá está vivo, sus cuentas, el relé y el canal de Upbit."""
     ag, rele, age = t["agente"], t["rele"], t["agente_hace_s"]
@@ -649,6 +786,14 @@ th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--grid);vertic
 th{color:var(--ink2);font-weight:600;font-size:12px}td{font-size:13px}
 pre{white-space:pre-wrap;font-size:11px;max-height:240px;overflow:auto}
 footer{font-size:12px;padding-bottom:28px}
+.mods{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,520px),1fr));gap:12px}
+.mods>.mod{min-width:0}
+.mod .modhead{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin-bottom:4px}
+.badge{font-size:12px;padding:1px 8px;border-radius:999px;border:1px solid var(--border)}
+.badge.real{background:var(--up);color:#fff}.badge.sim{background:var(--series);color:#fff}
+.badge.off{color:var(--muted)}
+.kv{width:100%;margin:6px 0}.kv th{font-weight:400;padding-right:14px;white-space:nowrap}
+details summary{cursor:pointer;color:var(--ink2);margin-top:6px}
 """
 
 JS = """
@@ -714,7 +859,12 @@ JS = """
   var main = document.getElementById('contenido'), every = +main.getAttribute('data-refresh') || 5000, timer = null;
   function refresh(){
     fetch('/fragmento', {cache: 'no-store'}).then(function(r){ return r.ok ? r.text() : null; })
-      .then(function(h){ if (h !== null) { main.innerHTML = h; bind(); } }).catch(function(){})
+      .then(function(h){ if (h === null) return;
+        var open = Array.prototype.map.call(main.querySelectorAll('details[open][data-k]'),
+                                            function(d){ return d.getAttribute('data-k'); });
+        main.innerHTML = h;
+        open.forEach(function(k){ var d = main.querySelector('details[data-k="' + k + '"]'); if (d) d.open = true; });
+        bind(); }).catch(function(){})
       .finally(function(){ setTimeout(refresh, every); });
   }
   window.addEventListener('resize', function(){ clearTimeout(timer); timer = setTimeout(bind, 150); });

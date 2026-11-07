@@ -68,6 +68,23 @@ class Stopwatch:
     def text(self) -> str:
         return f"esperó {self.waited_ms} ms · " + " · ".join(f"{n} a los {ms} ms" for n, ms in self.marks)
 
+    def total_ms(self) -> int:
+        """Desde que llegó el aviso hasta ahora."""
+        return self.waited_ms + round((time.perf_counter() - self.t0) * 1000)
+
+
+def notice_times(ing) -> dict:
+    """El aviso para la mejora continua: cuándo se publicó, cuándo llegó y la demora del canal."""
+    pub, rec = ing.item.published_at, ing.item.received_at
+    return {"aviso": {"publicado": None if pub is None else round(pub, 3),
+                      "recibido": None if rec is None else round(rec, 3),
+                      "demora_s": None if pub is None or rec is None else round(rec - pub, 3)}}
+
+
+def reference(base: float, book, move: float) -> dict:
+    """El precio contra el que se midió el freno (la apertura del minuto del aviso o el primero) y el de ese momento."""
+    return {"ref": {"precio_base": base, "precio": float(book.mid), "movimiento_pct": round(move * 100, 3)}}
+
 
 class _LiveRun(shadow._Run):
     """Una "corrida" instantánea: las marcas salen del libro (no de velas cerradas)."""
@@ -395,9 +412,9 @@ class LiveTrader:
                 await run.store.load({s: [(minute(now) - 130 * MIN, minute(now))] for s in syms})
             for asset in sig.assets:
                 if why or off:
-                    run.record(ev, sig, self.market.symbol(asset), "no_entrar", why + off)
+                    run.record(ev, sig, self.market.symbol(asset), "no_entrar", why + off, **notice_times(ing))
                     continue
-                await run.enter(ev, sig, asset, blocks)
+                await run.enter(ev, sig, asset, blocks, extra=notice_times(ing))
             await self.save(run)
 
     async def _cik_tickers(self) -> dict:
@@ -425,7 +442,8 @@ class LiveTrader:
                 now, ev, sym = run.now, self._event(ing), self.market.symbol(tk)
                 late = now - t0
                 if late > earnings.MAX_LATE_S:
-                    run.record(ev, earnings.signal(tk, 1), sym, "no_entrar", [f"resultados_tarde:{late:.0f}s"])
+                    run.record(ev, earnings.signal(tk, 1), sym, "no_entrar", [f"resultados_tarde:{late:.0f}s"],
+                               **notice_times(ing))
                     await self.save(run)
                     return
                 self.registry = await self.market.instruments(self.session, [sym], self.st["instruments"], now)
@@ -438,16 +456,20 @@ class LiveTrader:
                 except MarketDataError:
                     book = None
                 if not before or book is None or book.mid is None:
-                    run.record(ev, earnings.signal(tk, 1), sym, "no_entrar", ["sin_datos:precio_antes_o_libro"])
+                    run.record(ev, earnings.signal(tk, 1), sym, "no_entrar", ["sin_datos:precio_antes_o_libro"],
+                               **notice_times(ing))
                     await self.save(run)
                     return
                 move = float(book.mid) / float(before[3]) - 1                   # contra el cierre de antes del 8-K
                 side = 1 if move > 0 else -1
                 sig = earnings.signal(tk, side)
+                x = {**notice_times(ing), **reference(float(before[3]), book, move),
+                     "params": {"umbral": earnings.THRESHOLD, "max_late_s": earnings.MAX_LATE_S}}
                 if abs(move) < earnings.THRESHOLD:
-                    run.record(ev, sig, sym, "no_entrar", [f"impulso_chico:{move * 100:+.2f}%"])
+                    run.record(ev, sig, sym, "no_entrar", [f"impulso_chico:{move * 100:+.2f}%"], **x)
                 else:
-                    await run.enter(ev, sig, tk, self.risk_blocks(run), assessment=earnings.assessment(tk, side, late))
+                    await run.enter(ev, sig, tk, self.risk_blocks(run), assessment=earnings.assessment(tk, side, late),
+                                    extra=x)
                 await self.save(run)
         except Exception:                                              # una falla no tira al operador
             log.exception("falló la entrada por resultados (CIK %s)", cik)
@@ -479,8 +501,10 @@ class LiveTrader:
                 now, sym = run.now, self.market.symbol(coin)
                 ev, sig = self._event(ing), delistings.signal(coin, category)
                 late = now - t0
+                x = {**notice_times(ing), "_reloj": watch,
+                     "params": {"max_late_s": delistings.MAX_LATE_S, "max_drop": rule.max_drop}}
                 if late > delistings.MAX_LATE_S:
-                    run.record(ev, sig, sym, "no_entrar", [f"deslistado_tarde:{late:.0f}s"])
+                    run.record(ev, sig, sym, "no_entrar", [f"deslistado_tarde:{late:.0f}s"], **shadow.resolved(x))
                     await self.save(run)
                     return
                 self.registry = await self.market.instruments(self.session, [sym], self.st["instruments"], now)
@@ -493,12 +517,14 @@ class LiveTrader:
                     self._ticker_or_none(sym))
                 bar = (run.store.candles.get(sym) or {}).get(minute(t0))       # el minuto del aviso: (o, h, l, c)
                 if not bar or book is None or book.mid is None or tick is None:
-                    run.record(ev, sig, sym, "no_entrar", ["sin_datos:precio_del_aviso_o_libro"])
+                    run.record(ev, sig, sym, "no_entrar", ["sin_datos:precio_del_aviso_o_libro"], **shadow.resolved(x))
                 elif (drop := float(book.mid) / float(bar[0]) - 1) < -rule.max_drop:
-                    run.record(ev, sig, sym, "no_entrar", [f"ya_cayo:{drop * 100:+.2f}%"])
+                    run.record(ev, sig, sym, "no_entrar", [f"ya_cayo:{drop * 100:+.2f}%"],
+                               **shadow.resolved({**x, **reference(float(bar[0]), book, drop)}))
                 else:
                     await run.enter(ev, sig, coin, self.risk_blocks(run),
-                                    assessment=delistings.assessment(coin, late, category), prefetched=(book, tick))
+                                    assessment=delistings.assessment(coin, late, category), prefetched=(book, tick),
+                                    extra={**x, **reference(float(bar[0]), book, drop)})
                     watch.mark("orden")
                     log.info("%s al instante (%s): %s", category, coin, watch.text())
                     if sym in self.st["positions"] and self.llm is not None and self.llm.enabled:
@@ -551,8 +577,11 @@ class LiveTrader:
                 now, sym = run.now, self.market.symbol(coin)
                 ev, sig = self._event(ing), rule.signal(coin)
                 late = now - t0
+                x = {**notice_times(ing), "_reloj": watch,
+                     "params": {"max_late_s": rule.MAX_LATE_S, "max_rise": rule.MAX_RISE}}
                 if late > rule.MAX_LATE_S:                             # el candado tardó: ya no es "al instante"
-                    run.record(ev, sig, sym, "no_entrar", [f"{rule.CATEGORY}_tarde:{late:.1f}s"])
+                    run.record(ev, sig, sym, "no_entrar", [f"{rule.CATEGORY}_tarde:{late:.1f}s"],
+                               **shadow.resolved(x))
                     await self.save(run)
                     return
                 self.registry = await self.market.instruments(self.session, [sym], self.st["instruments"], now)
@@ -565,13 +594,14 @@ class LiveTrader:
                 watch.mark("velas, libro y precio")
                 bar = (run.store.candles.get(sym) or {}).get(minute(t0))       # el minuto del aviso: (o, h, l, c)
                 if not bar or book is None or book.mid is None or tick is None:
-                    run.record(ev, sig, sym, "no_entrar", ["sin_datos:precio_del_aviso_o_libro"])
+                    run.record(ev, sig, sym, "no_entrar", ["sin_datos:precio_del_aviso_o_libro"], **shadow.resolved(x))
                 elif (rise := float(book.mid) / float(bar[0]) - 1) > rule.MAX_RISE:
-                    run.record(ev, sig, sym, "no_entrar", [f"ya_subio:{rise * 100:+.2f}%"])
+                    run.record(ev, sig, sym, "no_entrar", [f"ya_subio:{rise * 100:+.2f}%"],
+                               **shadow.resolved({**x, **reference(float(bar[0]), book, rise)}))
                 else:
                     await run.enter(ev, sig, coin, self.risk_blocks(run),
                                     assessment=rule.assessment(coin, late), prefetched=(book, tick),
-                                    relaxed=True)
+                                    relaxed=True, extra={**x, **reference(float(bar[0]), book, rise)})
                     watch.mark("orden")
                     log.info("%s al instante (%s): %s", rule.NAME, coin, watch.text())
                     if sym in self.st["positions"] and self.llm is not None and self.llm.enabled:
@@ -682,10 +712,13 @@ class LiveTrader:
                 if not first or book is None or book.mid is None:
                     run.record(ev, sig, sym, "no_entrar", ["sin_datos:primer_precio_o_libro"])
                 elif (rise := float(book.mid) / float(first[0]) - 1) > launches.MAX_RISE:
-                    run.record(ev, sig, sym, "no_entrar", [f"no_bajo:{rise * 100:+.2f}%"])
+                    run.record(ev, sig, sym, "no_entrar", [f"no_bajo:{rise * 100:+.2f}%"],
+                               **reference(float(first[0]), book, rise))
                 else:
                     await run.enter(ev, sig, asset, self.risk_blocks(run),
-                                    assessment=launches.assessment(asset, late))
+                                    assessment=launches.assessment(asset, late),
+                                    extra={**reference(float(first[0]), book, rise),
+                                           "params": {"max_rise": launches.MAX_RISE}})
                 await self.save(run)
         except Exception:                                              # una falla no tira al operador
             log.exception("falló la entrada por lanzamiento (%s)", sym)
@@ -717,6 +750,7 @@ class LiveTrader:
                 px = book.best_bid if side > 0 else book.best_ask          # el precio al que se sale
                 if px is None:
                     continue
+                shadow.track(meta, px, side, run.now)                     # mejora continua: pico, piso y tiempos
                 stop, tp = shadow.D(meta["stop"]), shadow.D(meta["tp"])
                 trail = shadow.D(str(meta.get("trail") or 0))
                 if trail:                                              # stop que sigue al mejor precio

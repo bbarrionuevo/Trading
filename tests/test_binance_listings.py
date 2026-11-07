@@ -182,3 +182,34 @@ def test_con_plata_solo_si_el_dueno_la_arma_y_el_simulacro_la_suelta(tmp_path):
     assert not real.allows("listado_binance") and side.allows("listado_binance")
     arm(("listado_upbit", "listado_binance"))                           # el dueño la suma con su frase
     assert real.allows("listado_binance") and not side.allows("listado_binance")
+
+
+async def test_guarda_lo_que_sirve_para_mejorar(tmp_path):
+    """Mejora continua (el dueño, 6-nov): la decisión guarda el aviso (demora del canal), el camino hasta la orden, el
+    precio de referencia y los frenos; la salida, el camino del precio (pico, piso y retorno a los 30 s...)."""
+    now = {"px": 155.0}
+    clock = ManualClock(T0 + 1.2)
+
+    def price(sym, m):
+        return (now["px"] if m > minute(T0) else 150.0) if sym == "SOLUSDT" else PRICES.get(sym)
+
+    home = tmp_path / "home"
+    async with serve(FakeBinance(price=price, clock=clock).app()) as url, aiohttp.ClientSession() as s:
+        t = await trader(s, url, clock, home)
+        await t.on_news(notice("b7"))
+        await settle(t)
+        assert t.st["positions"]["SOLUSDT"]["category"] == "listado_binance"
+        now["px"] = 160.0                                        # sube: el pico
+        clock.advance(T0 + 40 - clock.time())
+        await t.watch_once()
+        now["px"] = 130.0                                        # cae al stop de 10 %: sale
+        clock.advance(T0 + 70 - clock.time())
+        await t.watch_once()
+        assert "SOLUSDT" not in t.st["positions"]
+    entry = next(r for r in rows(home) if r["decision"] == "entrar")
+    assert entry["aviso"]["demora_s"] == 1.17 and isinstance(entry["camino_ms"], int) and entry["camino_ms"] >= 0
+    assert entry["params"] == {"max_late_s": 2.2, "max_rise": 0.08} and entry["ref"]["precio_base"] == 150.0
+    out = next(r for r in rows(home, "operaciones") if r.get("tipo") == "salida")
+    tray = out["trayectoria"]
+    assert out["motivo"] == "stop_loss" and tray["max_pct"] > 2 and tray["min_pct"] < -10
+    assert "30" in tray["en_pct"] and 35 <= tray["t_max_s"] <= 45
