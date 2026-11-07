@@ -103,7 +103,7 @@ async def test_el_venue_solo_abre_las_estrategias_armadas_y_salir_siempre_se_pue
 
 
 async def test_el_operador_armado_solo_para_upbit_entra_en_el_listado_y_no_en_el_deslistado(tmp_path):
-    clock = ManualClock(T0 + 1.5)
+    clock = ManualClock(T0 + 0.6)                                       # v3.9: el listado nuevo, hasta 1 s del mensaje
     home = tmp_path / "home"
     base = home / "simulacro" / "binance-futuros"
     arming.arm(home, 3, "", "", simulacro=True, capital=100, venue="binance-futuros", mode="local",

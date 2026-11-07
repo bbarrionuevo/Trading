@@ -70,6 +70,16 @@ def notice(source: str, title: str) -> tuple[str | None, tuple[str, ...]]:
     return (kind, tuple(out)) if out else (None, ())
 
 
+def max_rise(kind: str | None) -> float:
+    """El freno de precio (el mismo para los dos tipos de aviso de Binance)."""
+    return MAX_RISE
+
+
+def max_late(kind: str | None) -> float:
+    """La demora máxima (la misma para los dos tipos de aviso de Binance)."""
+    return MAX_LATE_S
+
+
 def signal(asset: str) -> Signal:
     return Signal(CATEGORY, 0.9, HIT_RATE, (asset,), HOLD_MIN, (RULE,), version=VERSION, certainty=1.0, relevance=10,
                   importance=8, impact=8)

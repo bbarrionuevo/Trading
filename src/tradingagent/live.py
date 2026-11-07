@@ -606,8 +606,9 @@ class LiveTrader:
         return self._fast(ing, binance_listings, ing.item.published_at)
 
     async def _upbit_listing(self, ing, coin: str) -> None:
-        """Largo apenas llega un listado de Upbit (decision/upbit_listings.py), si el precio todavía no subió más que el
-        tope de Binance de los primeros segundos (+16 % desde la apertura del minuto del aviso)."""
+        """Largo apenas llega un listado de Upbit (decision/upbit_listings.py), si el precio todavía no subió más de
+        25 % desde la apertura del minuto del aviso y llegó a tiempo para su tipo (v3.9: el listado nuevo hasta 1 s del
+        mensaje, el alta en wones hasta 3 s)."""
         await self._listing_now(ing, coin, upbit_listings)
 
     async def _binance_listing(self, ing, coin: str) -> None:
@@ -623,6 +624,8 @@ class LiveTrader:
                 return
             t0 = ing.item.published_at or ing.item.received_at
             watch = Stopwatch(ing.item.received_at, self.clock)
+            kind, _ = rule.notice(ing.item.source, ing.item.title)
+            limit, max_late = rule.max_rise(kind), rule.max_late(kind)  # el freno y la demora del tipo (v3.9)
             async with self.lock:
                 watch.mark("candado")
                 run = self.run()
@@ -630,8 +633,8 @@ class LiveTrader:
                 ev, sig = self._event(ing), rule.signal(coin)
                 late = now - t0
                 x = {**notice_times(ing), "_reloj": watch,
-                     "params": {"max_late_s": rule.MAX_LATE_S, "max_rise": rule.MAX_RISE}}
-                if late > rule.MAX_LATE_S:                             # el candado tardó: ya no es "al instante"
+                     "params": {"max_late_s": max_late, "max_rise": limit, "tipo": kind}}
+                if late > max_late:                                    # llegó tarde para su tipo, o el candado tardó
                     run.record(ev, sig, sym, "no_entrar", [f"{rule.CATEGORY}_tarde:{late:.1f}s"],
                                **shadow.resolved(x))
                     await self.save(run)
@@ -647,7 +650,7 @@ class LiveTrader:
                 bar = (run.store.candles.get(sym) or {}).get(minute(t0))       # el minuto del aviso: (o, h, l, c)
                 if not bar or book is None or book.mid is None or tick is None:
                     run.record(ev, sig, sym, "no_entrar", ["sin_datos:precio_del_aviso_o_libro"], **shadow.resolved(x))
-                elif (rise := float(book.mid) / float(bar[0]) - 1) > rule.MAX_RISE:
+                elif (rise := float(book.mid) / float(bar[0]) - 1) > limit:
                     run.record(ev, sig, sym, "no_entrar", [f"ya_subio:{rise * 100:+.2f}%"],
                                **shadow.resolved({**x, **reference(float(bar[0]), book, rise)}))
                 else:
