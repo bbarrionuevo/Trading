@@ -101,7 +101,7 @@ async def test_en_la_caida_no_frenan_las_alarmas_del_libro_quedan_anotadas_y_el_
     assert any(a.startswith("spread:") for a in got["analisis"]["alarmas_del_libro"])  # se ve cuáles saltaron
     lim = limits_mod.load()
     assert entry_slippage(PolicyConfig(), "deslistado_corto", lim) == 200                # 2 % (7-nov)
-    assert entry_slippage(PolicyConfig(), "vigilancia_corto", lim) == 50
+    assert entry_slippage(PolicyConfig(), "vigilancia_corto", lim) == 200                # también 2 % (7-nov)
     assert entry_slippage(PolicyConfig(), "listado_upbit", lim) == 50
 
 
@@ -130,7 +130,7 @@ def test_la_etiqueta_de_vigilancia_es_otro_aviso_con_su_regla():
     assert delistings.coins("binance.ws", TAG) == ()                               # coins(): solo deslistados
 
 
-async def test_etiqueta_de_vigilancia_corto_con_stop_de_10_si_todavia_no_cayo_2(tmp_path):
+async def test_etiqueta_de_vigilancia_corto_con_stop_de_10_si_todavia_no_cayo_4(tmp_path):
     clock = ManualClock(T0 + 3)
     fake = FakeBinance(price=market(149.0), clock=clock)                # −0,7 %: todavía no cayó
     home = tmp_path / "home"
@@ -142,7 +142,7 @@ async def test_etiqueta_de_vigilancia_corto_con_stop_de_10_si_todavia_no_cayo_2(
         assert pos["side"] == "corto" and pos["category"] == "vigilancia_corto"
         assert 1.09 < float(pos["stop"]) / float(pos["avg_price"]) < 1.11      # stop fijo de 10 %
         assert float(pos["avg_price"]) * float(pos["qty"]) <= 0.10 * 120 + 0.5  # 1 % del saldo al stop
-    fake2 = FakeBinance(price=market(146.0), clock=clock)               # −2,7 %: ya cayó más de 2 %
+    fake2 = FakeBinance(price=market(143.0), clock=clock)               # −4,7 %: ya cayó más de 4 %
     home2 = tmp_path / "home2"
     async with serve(fake2.app()) as url, aiohttp.ClientSession() as s:
         t = await trader(s, url, clock, home2)
@@ -150,7 +150,14 @@ async def test_etiqueta_de_vigilancia_corto_con_stop_de_10_si_todavia_no_cayo_2(
         await asyncio.gather(*t.pending)
         assert t.st["positions"] == {}
     why = [r["motivos"] for r in decisions(home2) if r["signal"].get("category") == "vigilancia_corto"]
-    assert why and why[0][0].startswith("ya_cayo:-2.67")
+    assert why and why[0][0].startswith("ya_cayo:-4.67")
+    fake3 = FakeBinance(price=market(146.0), clock=clock)               # −2,7 %: con el freno de 4 % (7-nov), entra
+    home3 = tmp_path / "home3"
+    async with serve(fake3.app()) as url, aiohttp.ClientSession() as s:
+        t = await trader(s, url, clock, home3)
+        await t.on_news(notice("v3", title=TAG))
+        await asyncio.gather(*t.pending)
+        assert "SOLUSDT" in t.st["positions"]
 
 
 class FakeLlm:

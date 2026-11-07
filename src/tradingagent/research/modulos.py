@@ -104,8 +104,9 @@ def catalog(home: Path, now: float | None = None) -> list[dict]:
          "ia": "lee después de entrar; si no confirma, cierra",
          "parametros": [["Llega a tiempo", f"hasta {_num(dl.MAX_LATE_S)} s de publicado"],
                         ["Freno de precio", f"no entra si ya cayó más de {_num(vig.max_drop * 100)} %"], *_exits(vig.category)],
-         "estudio": {"texto": "31 monedas de 14 avisos desde 2025: a los 2 s, si no cayó 2 %, mediana +3,6 %, 85 % "
-                              "positivas", "mediana_pct": 3.6, "acierto_pct": 85, "donde": "docs/ESTUDIO-DESLISTADOS.md"}},
+         "estudio": {"texto": "53 monedas de 16 avisos desde mar-2025, entrando a 1,2 s y saliendo a las 4 h: mediana "
+                              "+6,58 %, media +6,84 %, 87 % positivas; a los 2,6 s, +4,28 %",
+                     "mediana_pct": 6.58, "acierto_pct": 87, "donde": "estudios/hipotesis_direccionales.py"}},
         {"id": adv.category, "nombre": "Advertencia de Upbit (corto)", "lado": "corto",
          "fuente": "canal oficial de Upbit en Telegram (@upbit_news), por el relé de Tokio",
          "ia": "lee después de entrar; si no confirma, cierra",

@@ -259,10 +259,11 @@ EXITS = {"listado": ExitProfile(max_age_s=120, stop=0.10, hold_s=900, target=Fal
          # 43 (+12,3 %). Más de 2 % casi no suma.
          "deslistado_corto": ExitProfile(max_age_s=60, stop=0.20, hold_s=4 * 3600, target=False, b_kelly=1.0,
                                          max_slippage_bps=200, max_x=0.10),
-         # Etiqueta de vigilancia de Binance (mismo estudio): cae menos (−4 % a los 5 s): stop FIJO de 10 %, salida a
-         # las 4 h y 0,10 veces el saldo = 1 % al stop (muestra chica y muy sensible a la demora).
+         # Etiqueta de vigilancia de Binance: cae entre los 2 y 3 s y sigue de a poco; stop FIJO de 10 %, salida a las
+         # 4 h y 0,10 veces el saldo = 1 % al stop. Tope de la orden de 2 % (7-nov, 53 monedas: con 0,5 % se llenaban
+         # 33 de 53 y las que faltaban eran las mejores; por aviso, +4,3 % contra +6,2 %).
          "vigilancia_corto": ExitProfile(max_age_s=60, stop=0.10, hold_s=4 * 3600, target=False, b_kelly=1.0,
-                                         max_slippage_bps=50, max_x=0.10),
+                                         max_slippage_bps=200, max_x=0.10),
          # Listados de Upbit al instante (decision/upbit_listings.py, estudios/upbit_segundos.py): largo apenas llega
          # por Telegram, stop FIJO de 10 % y salida a los 15 min (A-5). 0,30 veces = el 3 % del sobre al stop (el
          # dueño, 5-nov: "arriesga el 3%"; estudios/upbit_tamano.py: 31 listados, 100 USDT → 297, peor 5 % → 185).

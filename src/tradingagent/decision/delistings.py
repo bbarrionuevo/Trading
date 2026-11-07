@@ -6,15 +6,18 @@ fusionar sus PR). Dos avisos, cada uno con su estudio:
   con el archivo público de Binance: el precio cae entre los 2 y los 5 s (mediana −8 % a los 5 s). Corto a los 2 s con
   stop de 20 % y salida a las 4 h: mediana +18 %, media +13 %, 79 % positivas; a los 5 s sin filtro, media +2,6 % (y en
   2025, −3 %). Entrando solo si todavía no cayó más de 4 %, +7 a +12 % aunque se llegue a los 3-10 s.
-- **Etiqueta de vigilancia** ("Binance Will Extend the Monitoring Tag to Include ABC, DEF on ..."), 31 monedas de 14
-  avisos desde 2025: cae menos y más rápido (mediana −0,7 % a los 2 s y −4 % a los 5 s). Corto a los 2 s si todavía no
-  cayó más de 2 %, stop de 10 % y salida a las 4 h: mediana +3,6 %, media +3,6 %, 85 % positivas (2026: 18 de 18;
-  2025: media −1,2 %). A los 3 s casi todo ya cayó: si llegamos tarde, el filtro no deja entrar.
+- **Etiqueta de vigilancia** ("Binance Will Extend the Monitoring Tag to Include ABC, DEF on ..."): el 7-nov, con 53
+  monedas de 16 avisos desde mar-2025 (`estudios/hipotesis_direccionales.py vigilancia`, operación por operación), cae
+  entre el segundo 2 y el 3 (−0,7 % a los 2 s, −4,1 % a los 3 s) y sigue bajando de a poco (−6,7 % a los 15 min).
+  Corto a 1,2 s (el canal de anuncios a hora cualquiera), stop de 10 % y salida a las 4 h: mediana +6,58 %, media
+  +6,84 %, 87 % positivas (mitades +5,6 y +8,1 %); a los 2,6 s (hora redonda), +4,28 % y 75 %. Freno de 4 % desde la
+  apertura del minuto (con 2 % quedaban afuera 21 de 53 a los 2,6 s) y tope de la orden de 2 % (con 0,5 % se llenaban
+  33 de 53 y las que faltaban eran las mejores: por aviso, +4,3 % contra +6,2 %).
 
 Los títulos de Binance son inequívocos: no hace falta la IA, que tarda ~2 s y en esos 2 s pasa todo. La probabilidad es
 el acierto medido. Muestras chicas: los deslistados arriesgan 2 % del saldo y la etiqueta de vigilancia 1 % (no 3 %).
 El precio cae en segundos: como en los listados al instante, no se miran las alarmas del libro (B-4; quedan anotadas
-en la decisión) y protege el tope de la orden. El del deslistado es de 2 % (estudio del 7-nov,
+en la decisión) y protege el tope de la orden. El del deslistado y el de la vigilancia es de 2 % (estudio del 7-nov,
 `estudios/hipotesis_direccionales.py`: con 0,5 % se llenaban 33 de 45 y las que quedaban afuera eran las caídas más
 rápidas, las mejores; con 2 %, 43, y por aviso +12,3 % en vez de +7,2 %).
 """
@@ -46,7 +49,7 @@ NOTICES = (
            max_drop=0.04, hit_rate=0.74, hold_h=4, version="deslistado-1", rule="deslistado_binance"),
     Notice("vigilancia_corto",
            re.compile(r"^Binance Will Extend the Monitoring Tag to (?:Include )?(?P<coins>.+?)(?: on \d{4}-\d{2}-\d{2}.*)?$"),
-           max_drop=0.02, hit_rate=0.85, hold_h=4, version="vigilancia-1", rule="etiqueta_vigilancia_binance"),
+           max_drop=0.04, hit_rate=0.87, hold_h=4, version="vigilancia-2", rule="etiqueta_vigilancia_binance"),
 )
 BY_CATEGORY = {n.category: n for n in NOTICES}
 CATEGORY = "deslistado_corto"                      # compatibilidad: el aviso de deslistado
