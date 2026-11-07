@@ -41,6 +41,8 @@ VERIFY_FILE = "verificacion_real.json"                   # MEXC
 VERIFY_FILES = {"mexc-futuros": VERIFY_FILE, "binance-futuros": "verificacion_binance.json"}
 VERIFY_MAX_AGE_S = 30 * 86400
 MAX_DAYS = 30                                     # A-2
+NEVER = "nunca"                                   # A-2 (v3.10): armado sin vencimiento, con su propia frase
+NO_EXPIRY_DAYS = 0                                # --sin-vencimiento
 ALL = "todo_el_saldo"                             # capital del armado real: todo el saldo de la cuenta
 VENUES = ("binance-futuros", "mexc-futuros")
 DEFAULT_VENUE = "binance-futuros"
@@ -55,8 +57,19 @@ def fingerprint(access_key: str) -> str:
 
 
 def phrase(days: int) -> str:
-    """La frase exacta que el dueño tiene que escribir para armar (A-2)."""
+    """La frase exacta que el dueño tiene que escribir para armar (A-2). Sin vencimiento (0 días) la frase lo dice con
+    todas las letras: un error de tipeo nunca arma para siempre."""
+    if int(days) == NO_EXPIRY_DAYS:
+        return "ARMO DINERO REAL CON TODO EL SALDO SIN VENCIMIENTO"
     return f"ARMO DINERO REAL CON TODO EL SALDO POR {days} DIAS"
+
+
+def days_left(data: dict, now: float | None = None) -> float | None:
+    """Días hasta que vence el armado; None si no vence (v3.10)."""
+    if data.get("vence") == NEVER:
+        return None
+    now = time.time() if now is None else now
+    return (float(data.get("vence") or 0) - now) / 86400
 
 
 def venue_of(data: dict) -> str:
@@ -76,8 +89,8 @@ def arm(home: Path, days: int, access_key: str, typed: str, *, assets: tuple = D
         raise ValueError(f"archivo de armado desconocido: {file}")
     if file == SIM_FILE and not (simulacro and venue == "binance-futuros" and mode == "local"):
         raise ValueError("junto al dinero real solo va el simulacro local de Binance (plata de mentira)")
-    if not 1 <= int(days) <= MAX_DAYS:
-        raise ValueError(f"el armado vence en 1 a {MAX_DAYS} días")
+    if not (int(days) == NO_EXPIRY_DAYS or 1 <= int(days) <= MAX_DAYS):
+        raise ValueError(f"el armado vence en 1 a {MAX_DAYS} días (o no vence: --sin-vencimiento)")
     if venue not in VENUES:
         raise ValueError(f"exchange desconocido: {venue}")
     if mode not in (None, "local", "demo") or (mode and not simulacro):
@@ -93,7 +106,8 @@ def arm(home: Path, days: int, access_key: str, typed: str, *, assets: tuple = D
     now = now if now is not None else time.time()
     data = {"capital_usdt": float(capital) if simulacro else ALL, "activos": sorted(a.upper() for a in assets),
             "venues": [venue], "simulacro": bool(simulacro), "clave": fingerprint(access_key),
-            "armado_en": round(now), "vence": round(now + int(days) * 86400), **({"modo": mode} if mode else {}),
+            "armado_en": round(now),
+            "vence": NEVER if int(days) == NO_EXPIRY_DAYS else round(now + int(days) * 86400), **({"modo": mode} if mode else {}),
             **({"estrategias": only} if only is not None else {})}
     paths.write_json_atomic(Path(home) / file, data)
     return data
@@ -144,16 +158,21 @@ def status(home: Path, access_key: str | None, now: float | None = None,
         return False, "otro_ejecutor", data
     if not sim and capital != ALL:                    # un armado viejo, con tope: hay que volver a armar
         return False, "volver_a_armar", data
-    if now >= float(data.get("vence", 0)) or float(data.get("vence", 0)) - float(data.get("armado_en", 0)) > \
-            MAX_DAYS * 86400 + 60:
-        return False, "vencido", data
+    never = data.get("vence") == NEVER                # v3.10: el dueño lo armó sin vencimiento, con esa frase
+    if not never:
+        try:
+            until = float(data.get("vence") or 0)
+        except (TypeError, ValueError):
+            return False, "vencido", data
+        if now >= until or until - float(data.get("armado_en", 0)) > MAX_DAYS * 86400 + 60:
+            return False, "vencido", data
     if sim:
         return True, "", data                         # sin órdenes reales: no hace falta la prueba con órdenes
     ver = paths.read_json(home / "state" / VERIFY_FILES.get(venue_of(data), VERIFY_FILE), None) or {}
     if not ver.get("ok") or ver.get("clave") != data["clave"]:
         return False, "sin_verificar", data
-    if now - float(ver.get("ts", 0)) > VERIFY_MAX_AGE_S:
-        return False, "verificacion_vieja", data
+    if not never and now - float(ver.get("ts", 0)) > VERIFY_MAX_AGE_S:   # sin vencimiento, la prueba tampoco vence
+        return False, "verificacion_vieja", data                           # (con otra clave, hace falta otra prueba)
     return True, "", data
 
 

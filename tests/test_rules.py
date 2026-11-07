@@ -71,6 +71,11 @@ def test_a2_dinero_real_solo_con_el_armado_del_dueno(tmp_path):
         with pytest.raises(ValueError):                          # frase exacta, A-2 (30 días), simulacro con saldo
             arming.arm(home, days, "k", typed or arming.phrase(days), simulacro=sim, capital=capital)
     assert arming.status(home, "k")[1] == "no_armado"
+    # v3.10: sin vencimiento solo con la frase que lo dice ("... SIN VENCIMIENTO"); con la de N días, nada.
+    assert arming.phrase(0) == "ARMO DINERO REAL CON TODO EL SALDO SIN VENCIMIENTO"
+    with pytest.raises(ValueError):
+        arming.arm(home, 0, "k", arming.phrase(30))
+    assert arming.arm(home, 0, "k", arming.phrase(0))["vence"] == arming.NEVER
     callers = sorted(f.name for f in code_files() if "arming.arm(" in f.read_text(encoding="utf-8"))
     assert callers == ["__main__.py"]                             # solo el comando del dueño arma
 

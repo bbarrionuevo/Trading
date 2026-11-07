@@ -122,6 +122,31 @@ def test_armado_frase_exacta_todo_el_saldo_vencimiento_y_verificacion(tmp_path):
     assert arming.disarm(home) and arming.status(home, ACCESS)[1] == "no_armado"
 
 
+def test_armado_sin_vencimiento_v310(tmp_path):
+    """El dueño, 7-nov: "configuralo para no tener fecha de vencimiento". Con su propia frase (un error de tipeo nunca
+    arma para siempre); la prueba sin riesgo tampoco vence, pero otra clave, la pausa o desarmar frenan igual."""
+    home = tmp_path / "home"
+    with pytest.raises(ValueError, match="frase"):
+        arming.arm(home, 0, ACCESS, arming.phrase(30))                        # la frase de 30 días no sirve
+    data = arming.arm(home, 0, ACCESS, "ARMO DINERO REAL CON TODO EL SALDO SIN VENCIMIENTO", now=T0)
+    assert data["vence"] == arming.NEVER and arming.days_left(data) is None
+    assert arming.status(home, ACCESS, now=T0 + 60)[1] == "sin_verificar"   # la prueba sigue haciendo falta
+    arming.save_verification(home, {"ok": True}, ACCESS, now=T0)
+    later = T0 + 400 * 86400                                                  # más de un año después
+    assert arming.status(home, ACCESS, now=later)[0]
+    assert arming.status(home, "otra-clave", now=later)[1] == "clave_distinta"
+    (home / "KILL").write_text("")
+    assert arming.status(home, ACCESS, now=later)[1] == "kill"
+    (home / "KILL").unlink()
+    paths.write_json_atomic(home / "ARMADO.json", {**data, "vence": "jamás"})    # algo raro en el archivo: vencido
+    assert arming.status(home, ACCESS, now=later)[1] == "vencido"
+    paths.write_json_atomic(home / "ARMADO.json", {k: v for k, v in data.items() if k != "vence"})
+    assert arming.status(home, ACCESS, now=T0 + 60)[1] == "vencido"          # sin la fecha: vencido, como siempre
+    assert arming.disarm(home) and arming.status(home, ACCESS)[1] == "no_armado"
+    sim = arming.arm(home, 0, "", "", simulacro=True, capital=100)           # el simulacro también puede no vencer
+    assert sim["vence"] == arming.NEVER and arming.status(home, None, now=later)[0]
+
+
 def _intent(cid, side, *, notional=None, qty=None, reduce=False, **tags):
     return OrderIntent(client_id=cid, symbol="BTC_USDT", side=side, type=OrderType.MARKET, notional=notional, qty=qty,
                        max_slippage_bps=D("30"), reduce_only=reduce, ref_price=D("100000"), tags=tags)

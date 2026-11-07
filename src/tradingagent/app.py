@@ -145,10 +145,11 @@ class OwnerActions:
         current = paths.read_json(home / arming.ARM_FILE, None) or {}
         ok, why, data = arming.status(home, arm_key(a.env, current))
         if data:
-            left = (float(data.get("vence", 0)) - time.time()) / 86400
+            left = arming.days_left(data)
+            when = "sin vencimiento" if left is None else f"vence en {left:.0f} días"
             lines.append(f"Armado en {VENUE_ES.get(arming.venue_of(data), arming.venue_of(data))} "
                          f"({'simulacro' if data.get('simulacro') else 'dinero real'}): "
-                         + (f"opera, vence en {left:.0f} días" if ok else f"no abre nada nuevo ({why})"))
+                         + (f"opera, {when}" if ok else f"no abre nada nuevo ({why})"))
             if data.get("estrategias"):
                 from .alerts.model import STRATEGY_ES
                 lines.append("  solo " + ", ".join(STRATEGY_ES.get(s, s) for s in data["estrategias"])
@@ -157,9 +158,10 @@ class OwnerActions:
             lines.append("Dinero real: no armado")
         sok, swhy, side = arming.status(home, None, file=arming.SIM_FILE)
         if side:
-            left = (float(side.get("vence", 0)) - time.time()) / 86400
+            left = arming.days_left(side)
+            when = "sin vencimiento" if left is None else f"vence en {left:.0f} días"
             lines.append("Simulacro junto al dinero real (plata de mentira, nunca lo que opera la plata): "
-                         + (f"opera, vence en {left:.0f} días" if sok else f"no abre nada nuevo ({swhy})"))
+                         + (f"opera, {when}" if sok else f"no abre nada nuevo ({swhy})"))
         if (home / "KILL").exists():
             lines.append("⏸ En pausa (/seguir para volver)")
         return "\n".join(lines)
