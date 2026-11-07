@@ -128,8 +128,8 @@ def test_l_lineamientos_medidos_trabados_en_el_codigo():
     adv, fin = korean_notices.BY_CATEGORY["advertencia_upbit"], korean_notices.BY_CATEGORY["fin_soporte_corto"]
     assert adv.max_late_s <= 30 and adv.max_drop <= 0.03 and not adv.jump and "bithumb.avisos" not in adv.sources
     assert fin.max_late_s <= 5 and fin.max_drop <= 0.06 and fin.jump
-    # L-11: el tope de la orden, por estrategia y medido. 2 % solo en el deslistado de Binance; lo demás ≤ 0,5 %; una
-    # orden sin tope pedido, 0,5 % (el del sobre es solo el techo).
+    # L-11: el tope de la orden, por estrategia y medido. 2 % en el deslistado y la vigilancia de Binance; lo demás
+    # ≤ 0,5 %; una orden sin tope pedido, 0,5 % (el del sobre es solo el techo).
     for name, p in policy.EXITS.items():                   # 2 %: deslistado y vigilancia de Binance (7-nov)
         assert p.max_slippage_bps <= (200 if name in ("deslistado_corto", "vigilancia_corto") else 50), name
     assert delistings_mod.BY_CATEGORY["vigilancia_corto"].max_drop <= 0.04

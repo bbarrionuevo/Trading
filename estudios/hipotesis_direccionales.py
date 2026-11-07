@@ -680,6 +680,9 @@ def main() -> None:
                    (1.0, 2.0, 3.0, 5.0, 10.0, 30.0), 14400, 0.10, 0.03)
         agent_view("fin del soporte, el primer aviso", first_notice(
             [e for e in events if e["kind"].endswith("fin_del_soporte")]), (1.0, 2.0, 3.0, 5.0, 10.0), 300, 0.10, 0.06)
+    elif HYP == "vigilancia":                         # 5. la regla de decision/delistings.py: freno de 2 % (v3.7) y 4 %
+        for brake in (0.02, 0.04):
+            agent_view("etiqueta de vigilancia", events, C["delays"], 14400, C["stop"], brake)
 
 
 if __name__ == "__main__":
