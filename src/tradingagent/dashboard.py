@@ -38,7 +38,7 @@ EXPORT_FILE = "tablero-exportado.json"
 MIRROR_FILE = "tablero-tokio.json"
 TOKIO_EVENTS = 12
 F3_TRADES = 60                      # REGLAS F-3: evidencia que se mide (no frena, decisión del dueño)
-REFRESH_MS = 5000
+REFRESH_MS = 15_000                 # el detalle (7-nov: antes 5 s; los datos de Tokio cambian cada 1-2 min)
 REPO = Path(__file__).resolve().parents[2]
 
 
@@ -138,6 +138,8 @@ def account(base: Path, now: float) -> dict | None:
         run += _d(t.get("pnl_neto"), Decimal(0))
         curve.append([t.get("ts", 0), float(round(run, 4))])
     curve.append([now, float(round(equity, 4))])                 # el último punto incluye las abiertas
+    day = sum((_d(t.get("pnl_neto"), Decimal(0)) for t in exits if float(t.get("ts") or 0) >= now - 86400), Decimal(0))
+    open_pnl = sum(p["pnl_abierto"] for p in positions if p["pnl_abierto"] is not None)
     stats = st.get("stats") or {}
     ev = evaluation.by_version(trades).get(st.get("strategy_tag", "")) or {}
     decisions = _rows(sorted((base / "decisiones").glob("*.jsonl"))[-2:])
@@ -147,6 +149,7 @@ def account(base: Path, now: float) -> dict | None:
     won, lost = int(stats.get("ganadas", 0)), int(stats.get("perdidas", 0))
     return {"mercado": st.get("mercado", base.name), "inicial": float(initial), "equity": float(equity),
             "caja": float(_d(st.get("cash"), Decimal(0))), "pnl_neto": float(_d(stats.get("pnl_neto"), Decimal(0))),
+            "pnl_24h": float(round(day, 4)), "pnl_abierto": round(float(open_pnl), 4),
             "retorno_pct": float(round((equity / initial - 1) * 100, 3)) if initial else 0.0,
             "comisiones": float(_d(st.get("fees"), Decimal(0))), "operaciones": int(stats.get("operaciones", 0)),
             "ganadas": won, "perdidas": lost, "acierto_pct": round(100 * won / (won + lost), 1) if won + lost else None,
@@ -450,15 +453,16 @@ def tile(label: str, value: str, sub: str = "", delta: str = "", delta_cls: str 
     return f'<div class="tile"><div class="label">{e(label)}</div><div class="value">{value}</div>{d}{s}</div>'
 
 
-def chart(curve: list, initial: float) -> str:
+def chart(curve: list, initial: float, label: str = "Equity de la cuenta paper", fill: bool = False) -> str:
     """Curva de equity: una sola serie (sin leyenda; el título la nombra). La dibuja app.js al ancho real de la
-    pantalla (texto nítido en la PC y en el celular); la tabla de operaciones es su versión en texto."""
+    pantalla (texto nítido en la PC y en el celular); la tabla de operaciones es su versión en texto. `fill`: ocupa el
+    alto de su caja (la pantalla simple, sin scroll)."""
     if len(curve) < 2:
         return '<p class="muted">La curva aparece con la primera operación cerrada.</p>'
     data = json.dumps({"base": initial, "pts": [[x, y, fmt_ts(x)] for x, y in curve]})
-    label = f"Equity de la cuenta paper: de {fmt_num(curve[0][1])} a {fmt_num(curve[-1][1])} USDT"
-    return (f'<div class="chart" data-curve="{e(data)}"><svg role="img" aria-label="{e(label)}"></svg>'
-            f'<div class="tip" hidden></div></div>')
+    label = f"{label}: de {fmt_num(curve[0][1])} a {fmt_num(curve[-1][1])} USDT"
+    return (f'<div class="chart{" fill" if fill else ""}" data-curve="{e(data)}"><svg role="img" '
+            f'aria-label="{e(label)}"></svg><div class="tip" hidden></div></div>')
 
 
 def _table(head: list[str], rows: list[list[str]], empty: str) -> str:
@@ -671,6 +675,104 @@ def modules_fragment(s: dict) -> str:
             'operador mira cada segundo.</p><div class="mods">' + "".join(cards) + "</div>")
 
 
+# -- la pantalla simple (el dueño, 7-nov: "que todo se vea en la misma ventana sin scrolear, que tenga una sección donde
+# me muestre el dinero real y cómo varía [...] y cuadrados que muestren cada módulo con ganancias o pérdidas y
+# operaciones y solo la info que me pueda interesar a mí; que cada módulo especifique si es dinero real o simulacro") --
+SIMPLE_REFRESH_MS = 30_000          # los datos de Tokio cambian cada 1-2 min: más seguido solo gasta memoria
+SHORT = {"listado_upbit": "Listados de Upbit", "listado_binance": "Listados de Binance",
+         "deslistado_corto": "Deslistados de Binance", "vigilancia_corto": "Vigilancia de Binance",
+         "advertencia_upbit": "Advertencia de Upbit", "fin_soporte_corto": "Fin del soporte (Corea)",
+         "resultados_impulso": "Resultados de empresas", "lanzamiento_corto": "Perpetuos nuevos",
+         "listado": "Listados con la IA", "otras": "Noticias generales"}
+ESTADO_TIPOS = {"dinero real": ("real",), "simulacro": ("simulacro", "demo"), "práctica": ("practica",)}
+
+
+def _account_of(s: dict, estado: str) -> dict | None:
+    """La cuenta donde corre un módulo según su estado (dinero real, simulacro o práctica)."""
+    kinds = ESTADO_TIPOS.get(estado, ())
+    return next((a for a in s.get("cuentas") or [] if a.get("tipo") in kinds), None)
+
+
+def status_bar(s: dict) -> str:
+    tk = s.get("tokio") or {}
+    fresh = (f"Tokio informó hace {fmt_age(tk['agente_hace_s'])}" if tk.get("agente_hace_s") is not None
+             else f"actualizado {fmt_ts(s.get('generado'))}")
+    return (f'<div class="bar {e(s["estado"])}" role="status"><span class="icon">{STATUS_ICON.get(s["estado"], "?")}'
+            f'</span><strong>{e(s["estado_texto"])}</strong><span class="muted">{e(fresh)} · se actualiza cada '
+            f'{SIMPLE_REFRESH_MS // 1000} s</span><a href="/detalle">ver el detalle</a></div>')
+
+
+def money_fragment(s: dict) -> str:
+    """El dinero real: el saldo de la cuenta de futuros (la cifra principal), lo que ganaron las operaciones, las
+    últimas 24 h, cuántas hubo y lo abierto, y la curva del saldo."""
+    if s.get("publico"):
+        return '<section class="money"><div class="figs"><p class="muted">La cuenta de dinero real no se publica.</p></div></section>'
+    a = _account_of(s, "dinero real")
+    if a is None:
+        return ('<section class="money"><div class="figs"><div class="label">Dinero real</div><p class="muted">No hay '
+                'dinero real armado: lo arma el dueño con su frase (armar-real).</p></div></section>')
+    curve, opened = a.get("curva") or [], a.get("posiciones") or []
+    since = fmt_ts(curve[0][0]).split(" ")[0] if curve else "—"
+    won = f"{a['ganadas']} ganadas" + (f" · {a['acierto_pct']:g} % aciertos" if a.get("acierto_pct") is not None else "")
+    row = "".join([
+        tile("Ganancia de las operaciones", f"{_pnl(a['pnl_neto'], 2)} USDT", sub=f"desde el {since}"),
+        tile("Últimas 24 h", f"{_pnl(a.get('pnl_24h'), 2)} USDT"),
+        tile("Operaciones cerradas", str(a["operaciones"]), sub=won),
+        tile("Abiertas ahora", str(len(opened)),
+             sub=f"van {fmt_num(a.get('pnl_abierto'), 2, True)} USDT" if opened else "ninguna")])
+    lines = "".join(
+        f'<li><strong>{e(str(p["symbol"]))}</strong> {e(str(p.get("lado") or ""))} · '
+        f'{e(SHORT.get(str(p.get("categoria")), str(p.get("categoria") or "")))} · {_pnl(p.get("pnl_abierto"), 2)} USDT · '
+        f'sale en {e(fmt_age(p.get("vence_en_s")))}</li>' for p in opened[:4])
+    return (f'<section class="money"><div class="figs"><div class="label">Dinero real · saldo de la cuenta de futuros de '
+            f'Binance</div><div class="hero">{fmt_num(a["equity"], 2)} <span class="unit">USDT</span></div>'
+            f'<div class="krow">{row}</div>' + (f'<ul class="open">{lines}</ul>' if lines else "") +
+            f'</div><div class="chartbox"><div class="label">Cómo varió el saldo (cada operación cerrada y ahora)</div>'
+            f'{chart(curve, a["inicial"], "Saldo de la cuenta de dinero real", fill=True)}</div></section>')
+
+
+def module_tiles(s: dict) -> str:
+    """Un rectángulo por módulo: si es dinero real o simulacro, cuánto ganó o perdió, sus operaciones, la última y lo
+    que esperaba su estudio. Primero los de dinero real."""
+    mods = sorted(enumerate(s.get("modulos") or []), key=lambda im: (im[1].get("estado") != "dinero real", im[0]))
+    out = []
+    for _, m in mods:
+        estado = str(m.get("estado") or "")
+        real = estado == "dinero real"
+        st = ((_account_of(s, estado) or {}).get("por_modulo") or {}).get(m["id"]) or {}
+        closed, opened = st.get("cerradas", 0), st.get("abiertas", 0)
+        value = (f"{_pnl(st.get('pnl'), 2)} USDT" + ("" if real else ' <span class="fake">de mentira</span>')
+                 if closed or opened else '<span class="muted">sin operaciones</span>')
+        ops = (f"{closed} cerradas · {st.get('ganadas', 0)} ganadas" + (f" · {opened} abiertas" if opened else "")
+               if closed or opened else (f"vio {st['decisiones']} avisos" if st.get("decisiones") else
+                                         "esperando su primer aviso"))
+        last = (st.get("ultimas") or [None])[0]
+        recent = (f"última: {last.get('symbol')} {fmt_num(last.get('ret_pct'), 2, True)} % · hace "
+                  f"{fmt_age(time.time() - float(last['ts']))}" if last and last.get("ts") else "")
+        study = m.get("estudio") or {}
+        expect = (f"estudio: mediana {fmt_num(study['mediana_pct'], 2, True)} %, {study.get('acierto_pct')} % ganan"
+                  if study.get("mediana_pct") is not None else "")
+        badge = "real" if real else "sim" if estado in ESTADO_TIPOS else "off"
+        out.append(f'<article class="mtile{" is-real" if real else ""}"><div class="mhead"><strong>'
+                   f'{e(SHORT.get(m["id"], str(m.get("nombre") or m["id"])))}</strong><span class="badge {badge}">'
+                   f'{e(estado.upper())}</span></div><div class="mval">{value}</div><div class="msub">{e(ops)}</div>'
+                   + (f'<div class="msub">{e(recent)}</div>' if recent else "")
+                   + (f'<div class="mexp">{e(expect)}</div>' if expect else "") + "</article>")
+    return f'<section class="mgrid">{"".join(out)}</section>'
+
+
+def simple_fragment(s: dict) -> str:
+    """La pantalla simple, entera: se recarga cada 30 s."""
+    return status_bar(s) + money_fragment(s) + module_tiles(s)
+
+
+def simple_page(s: dict) -> str:
+    return (f'<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" '
+            f'content="width=device-width,initial-scale=1"><title>TRADING</title><link rel="stylesheet" href="/app.css">'
+            f'</head><body><main id="contenido" class="simple" data-refresh="{SIMPLE_REFRESH_MS}" data-src="/resumen">'
+            f'{simple_fragment(s)}</main><script src="/app.js"></script></body></html>')
+
+
 def tokio_fragment(t: dict) -> str:
     """El servidor de Tokio: si el agente de allá está vivo, sus cuentas, el relé y el canal de Upbit."""
     ag, rele, age = t["agente"], t["rele"], t["agente_hace_s"]
@@ -739,11 +841,13 @@ def tokio_fragment(t: dict) -> str:
 
 
 def page(s: dict) -> str:
+    """El detalle de todo (para revisar y mejorar): la pantalla simple está en "/"."""
     return (f'<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" '
-            f'content="width=device-width,initial-scale=1"><title>TRADING · tablero</title>'
+            f'content="width=device-width,initial-scale=1"><title>TRADING · detalle</title>'
             f'<link rel="stylesheet" href="/app.css"></head><body><header><h1>TRADING</h1><span class="muted">'
-            f'tablero local · solo lectura · paper</span></header><main id="contenido" data-refresh="{REFRESH_MS}">'
-            f'{fragment(s)}</main><footer class="muted">Se actualiza cada 5 s. Datos: TRADING_HOME (esta PC). '
+            f'detalle · solo lectura</span><a href="/">volver a la pantalla simple</a></header>'
+            f'<main id="contenido" data-refresh="{REFRESH_MS}" data-src="/fragmento">{fragment(s)}</main>'
+            f'<footer class="muted">Se actualiza cada {REFRESH_MS // 1000} s. Datos: TRADING_HOME (esta PC). '
             f'Pausa de emergencia: crear el archivo KILL en TRADING_HOME (salir siempre se puede).</footer>'
             f'<script src="/app.js"></script></body></html>')
 
@@ -789,9 +893,40 @@ footer{font-size:12px;padding-bottom:28px}
 .mods{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,520px),1fr));gap:12px}
 .mods>.mod{min-width:0}
 .mod .modhead{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin-bottom:4px}
-.badge{font-size:12px;padding:1px 8px;border-radius:999px;border:1px solid var(--border)}
-.badge.real{background:var(--up);color:#fff}.badge.sim{background:var(--series);color:#fff}
-.badge.off{color:var(--muted)}
+.badge{font-size:11px;font-weight:600;letter-spacing:.02em;padding:1px 8px;border-radius:999px;
+border:1px solid var(--border);white-space:nowrap}
+.badge.real{background:var(--ink);color:var(--page);border-color:var(--ink)}
+.badge.sim{color:var(--ink2)}.badge.off{color:var(--muted)}
+header a{margin-left:auto;color:var(--ink2)}
+main.simple{max-width:1600px;height:100vh;display:grid;grid-template-rows:auto minmax(200px,38vh) minmax(0,1fr);
+gap:10px;padding:10px 16px}
+.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 12px;border:1px solid var(--border);
+border-left:6px solid var(--muted);border-radius:8px;background:var(--surface)}
+.bar .icon{font-size:18px}.bar a{margin-left:auto;color:var(--ink2);font-size:13px}
+.bar.ok{border-left-color:var(--good)}.bar.pausado{border-left-color:var(--warning)}
+.bar.halt,.bar.caido{border-left-color:var(--critical)}
+.money{display:grid;grid-template-columns:minmax(300px,2fr) 3fr;gap:10px;min-height:0}
+.money>div{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;min-height:0;
+overflow:hidden}
+.money .label{color:var(--ink2);font-size:12px}
+.hero{font-size:48px;font-weight:600;line-height:1.1;margin:2px 0 8px}
+.hero .unit{font-size:18px;font-weight:400;color:var(--ink2)}
+.krow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.krow .tile{padding:6px 10px}.krow .tile .value{font-size:18px}
+.open{margin:8px 0 0;padding-left:18px;font-size:12px;color:var(--ink2)}
+.chartbox{display:flex;flex-direction:column}.chart.fill{flex:1;min-height:0}
+.mgrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));grid-auto-rows:minmax(0,1fr);gap:10px;min-height:0}
+.mtile{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;min-width:0;
+overflow:hidden;display:flex;flex-direction:column;gap:3px}
+.mtile.is-real{border:1px solid var(--ink2)}
+.mhead{display:flex;justify-content:space-between;gap:6px;align-items:flex-start}
+.mhead strong{font-size:13px;line-height:1.25}
+.mval{font-size:20px;font-weight:600}.mval .fake{font-size:11px;font-weight:400;color:var(--muted)}
+.msub{font-size:12px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mexp{font-size:11px;color:var(--muted);margin-top:auto}
+@media (max-width:1100px){main.simple{height:auto}.mgrid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.money{grid-template-columns:1fr}.chartbox{height:240px}}
+@media (max-width:640px){.mgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.hero{font-size:40px}}
 .kv{width:100%;margin:6px 0}.kv th{font-weight:400;padding-right:14px;white-space:nowrap}
 details summary{cursor:pointer;color:var(--ink2);margin-top:6px}
 """
@@ -811,14 +946,17 @@ JS = """
   }
   function draw(box){
     var d = JSON.parse(box.getAttribute('data-curve')), svg = box.querySelector('svg'), tip = box.querySelector('.tip');
-    var W = Math.max(box.clientWidth, 240), H = 220, pl = 48, pr = 52, pt = 12, pb = 26, pts = d.pts;
+    var fill = box.classList.contains('fill');            // la pantalla simple: el alto de su caja, sin scroll
+    var W = Math.max(box.clientWidth, 240), H = fill ? Math.max(box.clientHeight, 120) : 220;
+    var pl = 48, pr = 52, pt = 12, pb = 26, pts = d.pts;
     while (svg.firstChild) svg.removeChild(svg.firstChild);
     svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H); svg.setAttribute('width', W); svg.setAttribute('height', H);
     var xs = pts.map(function(p){ return p[0]; }), ys = pts.map(function(p){ return p[1]; });
     var x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs);
     if (x1 <= x0) x1 = x0 + 1;
     var lo = Math.min(d.base, Math.min.apply(null, ys)), hi = Math.max(d.base, Math.max.apply(null, ys));
-    if (hi - lo < 1e-9) { lo -= 1; hi += 1; }
+    var span = Math.max(1, 0.01 * Math.abs(hi));          // centavos sobre 100 USDT: que no repita la misma marca
+    if (hi - lo < span) { var mid = (hi + lo) / 2; lo = mid - span / 2; hi = mid + span / 2; }
     var step = nice(hi - lo), dec = step >= 1 ? 0 : step >= 0.1 ? 1 : 2;
     lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
     function sx(x){ return pl + (x - x0) / (x1 - x0) * (W - pl - pr); }
@@ -856,9 +994,10 @@ JS = """
     };
   }
   function bind(){ document.querySelectorAll('.chart[data-curve]').forEach(draw); }
-  var main = document.getElementById('contenido'), every = +main.getAttribute('data-refresh') || 5000, timer = null;
+  var main = document.getElementById('contenido'), every = +main.getAttribute('data-refresh') || 15000, timer = null;
+  var src = main.getAttribute('data-src') || '/fragmento';
   function refresh(){
-    fetch('/fragmento', {cache: 'no-store'}).then(function(r){ return r.ok ? r.text() : null; })
+    fetch(src, {cache: 'no-store'}).then(function(r){ return r.ok ? r.text() : null; })
       .then(function(h){ if (h === null) return;
         var open = Array.prototype.map.call(main.querySelectorAll('details[open][data-k]'),
                                             function(d){ return d.getAttribute('data-k'); });
@@ -902,6 +1041,10 @@ class _Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         try:
             if path == "/":
+                return self._send(200, simple_page(gather(self.server.home)).encode(), "text/html; charset=utf-8")
+            if path == "/resumen":
+                return self._send(200, simple_fragment(gather(self.server.home)).encode(), "text/html; charset=utf-8")
+            if path == "/detalle":
                 return self._send(200, page(gather(self.server.home)).encode(), "text/html; charset=utf-8")
             if path == "/fragmento":
                 return self._send(200, fragment(gather(self.server.home)).encode(), "text/html; charset=utf-8")

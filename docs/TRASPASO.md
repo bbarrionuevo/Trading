@@ -109,7 +109,7 @@ con los dos listados hasta que el dueño las sume (sección 6). Prueba de punta 
 | Cada cuenta tiene | `estado.json`, `operaciones\AAAA-MM.jsonl`, `decisiones\AAAA-MM.jsonl` |
 | Otros | `datos\universo-mexc.json`, `datos\aprendizaje\`, `datos\estudios\`; diario firmado en `journal\` |
 | Tarea de Windows | `trading-agente` (corre `python -m tradingagent supervisar` y la relanza cada minuto si se cae) |
-| Tablero local | http://127.0.0.1:18765 o el siguiente puerto libre (el 8765 lo usa otro programa del dueño). Acceso directo **TRADING tablero** |
+| Tablero local | http://127.0.0.1:18765 o el siguiente puerto libre (el 8765 lo usa otro programa del dueño). Acceso directo **TRADING tablero**. Desde el 7-nov (pedido del dueño: "que todo se vea en la misma ventana sin scrolear [...] el dinero real y cómo varía [...] cuadrados que muestren cada módulo [...] si es dinero real o simulacro"), "/" es la **pantalla simple**: el saldo real de la cuenta de futuros y su curva, lo ganado, las últimas 24 h, las operaciones y lo abierto, y un rectángulo por módulo con su ganancia, operaciones y la etiqueta DINERO REAL o SIMULACRO; entra en 1366×768 sin scroll y se recarga cada 30 s (antes, todo cada 5 s). El detalle de siempre quedó en `/detalle` (cada 15 s) |
 | Telegram | bot @StarkLedger_bot, solo para el chat del dueño |
 
 **Muy importante:** el supervisor actualiza el código con `git checkout -f -B main <sha>`. **Todo cambio local en
@@ -166,6 +166,38 @@ del dueño.
 - **Desde el 5-nov a la noche, todo corre en Tokio** (pedido del dueño): la PC está en "solo tablero" (archivo `%LOCALAPPDATA%\TRADING\SOLO-TABLERO`): el supervisor no corre al agente, sirve el tablero, publica y late al relé (`relay/monitor.py`). El bot de Telegram está en Tokio. Volver atrás: borrar `SOLO-TABLERO` (y sacar `TELEGRAM_*` del `.env` del agente de Tokio, `docs/RELE-TOKIO.md`).
 - Actualizar los dos servicios (con el CI de `main` en verde): `ssh -i C:\Users\Brian\.ssh\lightsail-tokio.pem ubuntu@<IP> "bash ~/trading/deploy/tokio/instalar-agente.sh"`. Logs: `sudo journalctl -u agente-tokio -n 50` y `-u rele-tokio`.
 
+### Instalar, parar, arrancar y reiniciar Tokio (procedimiento, 7-nov)
+
+Pedido del dueño: "anotate algún procedimiento de instalación para que siempre revises las conexiones tibias y etc antes
+de instalar" y "si algún día tengo que parar el programa o reiniciar la pc de tokio me gustaría que todo arranque solo y
+perfecto". La revisión es `bash ~/trading/deploy/tokio/revisar.sh` (solo lee; cada línea dice OK, OJO o FALLA): los
+tres servicios andando y habilitados para arrancar solos, el código contra `main`, la memoria, el armado y cuándo vence,
+la prueba sin riesgo, las posiciones abiertas, el latido y las fuentes, el canal de anuncios de Binance, el bucle, **las
+conexiones tibias con Binance** (4 por grupo: 8 con el dinero real y el simulacro), Telegram del relé, la charla con la
+PC, los errores de los últimos 15 min y la pausa.
+
+**Instalar** (siempre en este orden):
+1. En la PC: el CI de `main` en verde en Linux y Windows (`gh run list --branch main --limit 1`).
+2. En Tokio: `bash ~/trading/deploy/tokio/revisar.sh --antes`. Con posiciones REALES abiertas da FALLA: no se instala
+   hasta que cierren (G-7; el instalador también se niega).
+3. `bash ~/trading/deploy/tokio/instalar-agente.sh`: instala, reinicia los dos servicios y a los 30 s corre la revisión
+   sola. Todo tiene que dar OK (el "relé habla con la PC" puede tardar 5 min en aparecer).
+4. La prueba de punta a punta: en la PC siempre (`prueba_listado.py --pc`); en Tokio cuando cambia el servidor, Python o
+   las dependencias, o antes de armar dinero real.
+5. Anotarlo en §12 (versión, hora, la revisión y la prueba).
+
+**Parar, arrancar y reiniciar** (por SSH en el servidor):
+- **Pausa** (no abre nada nuevo; lo abierto sale normal): /pausa por Telegram o el KILL de la PC (se copia en ~1 s);
+  en el servidor, `touch ~/.trading/KILL` (se saca con `rm ~/.trading/KILL`).
+- **Parar el programa**: `sudo systemctl stop agente-tokio rele-tokio`. Las posiciones abiertas quedan solo con su stop
+  de emergencia en Binance (1,5 veces el stop): sin el agente no hay salida por tiempo ni segunda lectura de la IA.
+- **Arrancar**: `sudo systemctl start rele-tokio agente-tokio` y después `revisar.sh`.
+- **Reiniciar el servidor**: `sudo reboot`. En 1 a 2 minutos todo arranca solo: los servicios están habilitados,
+  esperan a la red y, si se caen, systemd los relanza cada 5-10 s sin límite. Con el armado en disco, el dinero real
+  sigue armado; el agente concilia las posiciones con Binance al arrancar y cierra las que vencieron mientras estuvo
+  apagado. Después, `revisar.sh`. Comprobado el 6-nov (el dueño reinició por el kernel nuevo y todo volvió solo).
+  Lo que no vuelve solo: un estudio o medidor lanzado a mano en `~/diag` (no es producción).
+
 ### Vigilancia (qué revisar en cada pasada, también la vigilancia programada de cada 3 h)
 
 La tarea programada "Vigilancia del simulacro de TRADING" corre **cada 2 h, las 24 h** (desde el 6-nov, pedido del
@@ -176,9 +208,11 @@ a Tokio como motor. Lee este archivo primero, y lo que manda es esta lista:
    - `state\supervisor.json`: modo `solo_tablero`, versión = `origin/main`, publicación `ok`.
    - `state\tokio.json`: "agente" de menos de 2 min; "rele" con `telegram.conectado`.
    - `state\tablero-tokio.json`: de menos de 5 min.
-   - El tablero (http://127.0.0.1:18765) dice que funciona y muestra las cuentas de Tokio.
+   - El tablero (http://127.0.0.1:18765) dice que funciona y muestra el dinero real y los módulos; el detalle de las
+     cuentas de Tokio, en `/detalle`.
    - Que el agente de la PC no corra es lo normal.
 2. **Tokio** (por SSH, con el ssh de Git):
+   - Primero `bash ~/trading/deploy/tokio/revisar.sh`: todo OK (si algo da FALLA, eso manda). Lo de abajo es el detalle.
    - `systemctl is-active rele-tokio agente-tokio vigia-red.timer`.
    - `free -m`: más de 200 MB libres.
    - `cd ~/trading && git log --oneline -1` = `origin/main`. Si quedó atrás y el CI está verde:
@@ -861,6 +895,7 @@ sección 11). Un estudio nuevo va con su línea acá.
 | 7-nov | **¿Cuánto ensanchar el tope de la orden?** (el dueño: "tenes autorizacion para ensanchar") | Con la límite IOC y la orden a los 2 s, por aviso (las no llenadas, 0): deslistado de Binance con su freno de 4 %, tope 0,5 % → 33 de 45 (+7,23 %), 1 % → 40 (+10,77 %), 2 % → 43 (+12,27 %), 3 % → 44 (+12,48 %): las que solo entran con más tope son las caídas más rápidas (+15 a +36 %). A 1,3 s: 0,5 % → 38, 2 % → 43. Fin del soporte: 0,5 % → 21 de 24 (+4,54 %), 2 % → 23 (+4,47 %): no suma. Advertencia: 0,5 % → 42 de 42 | deslistado 2 % (`policy.EXITS`); lo demás 0,5 %; el sobre pasa a 200 pb de techo y una orden sin tope pedido va con 0,5 % (`safety.DEFAULT_SLIPPAGE_BPS`); REGLAS L-11 | `estudios/hipotesis_direccionales.py` (bloque 5) |
 | 7-nov | **Las alarmas del libro en las caídas al instante** | No hay datos para medirlas: el archivo público de Binance dejó de guardar el mejor precio de los perpetuos en mar-2024 (`bookTicker`) y no hubo ningún deslistado desde que existe la regla (4-nov). El estudio mide entrar EN la caída (la primera operación después de la orden), así que mirarlas era apartarse de lo medido | sin alarmas en el deslistado, la vigilancia y el fin del soporte (como los listados al instante); quedan anotadas en `alarmas_del_libro` para medirlas en vivo (REGLAS B-4) | `research/shadow.py` |
 | 7-nov | **El candado del operador con posiciones abiertas** | Prueba de la PC: con 4 posiciones abiertas, un listado de Upbit esperó 156 ms el candado: la vigilancia de cada segundo pedía los 4 libros de a uno con el candado tomado. Ahora los pide juntos y antes del candado: 5-6 ms | arreglado (`live.watch_once`); importa más ahora que los cortos de 4 h dejan posiciones abiertas | `deploy/tokio/prueba_listado.py --pc` |
+| 7-nov | **Revisión de Tokio y tablero simple** (pedidos del dueño: un procedimiento que siempre revise las conexiones tibias antes de instalar; que todo arranque solo; el tablero en una pantalla) | `deploy/tokio/revisar.sh` (solo lee) dio todo OK en Tokio con el dinero real recién armado (las 5 estrategias): 8 conexiones tibias, Telegram escuchando, 14 fuentes, 0 errores. El arranque solo ya estaba (servicios habilitados, esperan la red, se relanzan cada 5-10 s sin límite; probado en el reinicio del 6-nov). El tablero: la página son 34 KB armados en 12 ms y el supervisor usa ~27 MB; lo que sobraba era recargarla entera cada 5 s cuando Tokio manda datos cada 1-2 min. La lista de anuncios de Binance del relé devuelve HTTP 429 unas 6 veces por día (dos fallas y vuelve sola; el canal principal es el WebSocket): conocido, sin efecto | el instalador se niega con posiciones reales abiertas y corre la revisión al final; pantalla simple en "/" (30 s), detalle en `/detalle` (15 s) | `deploy/tokio/revisar.sh`, `dashboard.simple_page` |
 | 7-nov | **¿Los cortos de 4 h le quitan lugar a los listados?** (el sobre deja 4 posiciones) | Con los avisos del estudio desde 2025 (49 deslistados, 43 advertencias y 25 fines del soporte con perpetuo; 291 avisos de listado de Upbit y Binance): al llegar cada listado había 0 posiciones abiertas en 267, 1 en 20, 2 en 1, 3 en 2 y 4 en 1 (13-may-2026, un deslistado de 4 monedas). Limitar los cortos a 3 a la vez lo evitaba, pero dejaba afuera 18 de 117 cortos (a 2, 42) | sin límite aparte: el cupo de 4 alcanza | cálculo con la caché del estudio |
 | 7-nov | **Instalado v3.7 en Tokio** (#80, 09:13 UTC) | Sin posiciones reales. 14 fuentes funcionando (Bithumb registró sus 5 avisos como historia); módulos: los dos listados en dinero real, el resto en simulacro. Prueba de punta a punta en Tokio con el Binance real: SOL 69 ms (en frío), DOGE 27 ms, XRP 24 ms, ADA 23 ms de recibido (350 ms de publicado, por el lector de Bithumb), ETH y PEPE frenados solo por el sobre; IA 0,97-1,5 s; sin errores; memoria libre igual antes y después (403 MB). Conexiones tibias: 8 abiertas con Binance (AWS Tokio), 4 del dinero real y 4 del simulacro (`ss -tnp state established`, el pid de `agente-tokio`). Memoria del agente antes de reinstalar: 181 MB a las 4,8 h (157 a las 0,7 h: ~6 MB/h); después, 151 MB; bucle p99 2 ms | falta que el dueño arme las estrategias nuevas (sección 6) | `deploy/tokio/prueba_listado.py` |
 | 7-nov | **Pruebas para el dinero real de los cortos** | (1) Prueba de punta a punta en la PC (Binance falso a ~3 ms y un Bithumb falso leído por el lector de verdad): DOGE 35 ms, XRP (advertencia) 44 ms, ADA (fin del soporte, leído a <1 s de publicado) 48 ms; la IA confirmó los títulos coreanos en 1,1-1,2 s; ETH y PEPE frenaron solo por el sobre; sin errores. (2) Ida y vuelta de un corto en la DEMO de Binance con el venue del dinero real (XRPUSDT, 20 USDT ficticios): venta IOC con límite exacto −2,00 % bajo el mejor comprador, llenada al mejor comprador; posición −16,9; stop de emergencia STOP_MARKET de compra al +30,0 % de cierre total; salida "solo reducir" llenada a los 6,5 s; sin posición ni stop al final. (3) `binance-real-check --demo`: todo OK, con el paso nuevo de la venta en corto con tope de 2 % | listo para que el dueño arme (sección 6); falta `binance-real-check` en Tokio con la clave real (lo corre el dueño) | `deploy/tokio/prueba_listado.py --pc`, `deploy/demo_corto.py` |

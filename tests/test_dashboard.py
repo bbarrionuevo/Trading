@@ -144,6 +144,10 @@ def test_servidor_solo_lectura_y_solo_esta_pc(tmp_path):
         assert code == 200 and json.loads(body)["cuentas"][0]["mercado"] == "mexc-futuros"
         code, _, body = get(base + "/fragmento")
         assert code == 200 and "Salud del agente" in body and "<html" not in body
+        code, _, body = get(base + "/detalle")                                         # el detalle de todo
+        assert code == 200 and "Salud del agente" in body and 'data-src="/fragmento"' in body
+        code, _, body = get(base + "/resumen")                                         # la pantalla simple, sin <html>
+        assert code == 200 and "ver el detalle" in body and "<html" not in body
         assert get(base + "/app.js")[0] == 200 and get(base + "/app.css")[0] == 200
         assert get(base + "/", host=f"localhost:{srv.server_address[1]}")[0] == 200
         assert get(base + "/", host="evil.example")[0] == 403                          # DNS rebinding: afuera
