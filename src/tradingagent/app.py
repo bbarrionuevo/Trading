@@ -355,9 +355,15 @@ class Agent:
         """Agente de Tokio: su tablero completo cada 2 min (armarlo cuesta ~3 s de CPU: el servidor es chico), para la PC
         "solo tablero" (relay/espejo.py lo trae por SSH). El estado rápido llega cada 15 s por la telemetría."""
         from . import dashboard
+        from .research import modulos
+
+        def once(home):
+            modulos.write_catalog(home)            # los módulos (estado, fuente, parámetros, estudio): unos KB
+            dashboard.export_board(home)
+
         while not self.stop_event.is_set():
             try:
-                await asyncio.to_thread(dashboard.export_board, paths.home())
+                await asyncio.to_thread(once, paths.home())
             except Exception:                                        # el tablero nunca frena al agente
                 log.warning("no pude exportar el tablero", exc_info=True)
             try:

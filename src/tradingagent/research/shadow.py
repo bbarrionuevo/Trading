@@ -283,7 +283,8 @@ class _Run:
             "entry_price": meta["avg_price"], "notional_entrada": str(round(entry_notional, 8)),
             "deslizamiento_bps": None if slip is None else round(slip, 2), "entry_ts": meta["entry_ts"],
             "ts": round(ts or self.now, 3), "event_id": meta["event_id"], "category": meta["category"],
-            "strategy_tag": meta.get("strategy_tag", STRATEGY_TAG), "mercado": self.market.name, "modo": "paper"})
+            "strategy_tag": meta.get("strategy_tag", STRATEGY_TAG), "mercado": self.market.name, "modo": "paper",
+            **({"trayectoria": tray} if (tray := trajectory(meta)) else {})})
         self.counts[reason] += 1
         if left > 0:                                                   # cierre parcial (tope de precio): sigue abierta
             meta["qty"] = str(left * side)
@@ -379,11 +380,12 @@ class _Run:
     excluded: frozenset = frozenset()           # las opera el dinero real: el simulacro de al lado no ("*": todas)
 
     async def enter(self, ev: dict, sig, asset: str, blocks: list, assessment=None, prefetched=None,
-                    relaxed: bool = False) -> None:
+                    relaxed: bool = False, extra: dict | None = None) -> None:
         """Entrada con el núcleo de riesgo de siempre. `assessment`: una evaluación ya hecha (resultados con impulso,
         decision/earnings.py: la dirección la da el precio y la probabilidad es el acierto medido). `relaxed`: sin las
         alarmas del libro de B-4 (listados de Upbit al instante, decision/upbit_listings.py: el salto vacía el libro y
-        las dispara todas); queda que haya libro y el tope de precio de la orden (D-2)."""
+        las dispara todas); queda que haya libro y el tope de precio de la orden (D-2). `extra`: datos para la mejora
+        continua que van en la fila de la decisión (el aviso, el precio de referencia, los frenos; `resolved`)."""
         sym = self.market.symbol(asset)
         a = assessment or assess(ev, sig, asset, self.now, self.cfg, self.meta, allows_short=self.market.allows_short)
         reasons = list(a.reasons) + [why for _, why in blocks]           # primero lo del evento, después el resto
@@ -399,7 +401,7 @@ class _Run:
         if inst is None and not reasons:              # sin datos del contrato solo importa si podía entrar
             reasons.append("par_sin_filtros")
         if reasons:
-            self.record(ev, sig, sym, "no_entrar", reasons, analisis=a.as_dict())
+            self.record(ev, sig, sym, "no_entrar", reasons, analisis=a.as_dict(), **resolved(extra))
             return
         candles = self.store.candles.get(sym) or {}
         t0 = ev.get("published_at") if a.dt_basis == "publicada" else None
@@ -413,7 +415,8 @@ class _Run:
             else:
                 book, tick = await asyncio.gather(self.books.book(sym), self.market.ticker(self.session, sym))
         except MarketDataError as e:
-            self.record(ev, sig, sym, "no_entrar", [f"sin_datos:{str(e)[:80]}"], analisis=a.as_dict())
+            self.record(ev, sig, sym, "no_entrar", [f"sin_datos:{str(e)[:80]}"], analisis=a.as_dict(),
+                        **resolved(extra))
             return
         z = self.sample_spread(sym, book)
         gross, net = self.exposure()
@@ -443,7 +446,7 @@ class _Run:
                                                                  self.market.mmr_for(sym), self.cfg):
                 why.append("liquidacion_cerca_del_stop")
         if why:
-            self.record(ev, sig, sym, "no_entrar", why, analisis=analysis)
+            self.record(ev, sig, sym, "no_entrar", why, analisis=analysis, **resolved(extra))
             return
         entry_side = Side.BUY if p.side > 0 else Side.SELL
         ref_px = book.best_ask if p.side > 0 else book.best_bid
@@ -455,7 +458,8 @@ class _Run:
                   "emergency_stop": str(emergency)}))
         if order is None or not order.filled_qty:
             self.counts["entrada_fallida"] += 1
-            self.record(ev, sig, sym, "rechazada", [block or (order.reason if order else "sin_orden")], analisis=analysis)
+            self.record(ev, sig, sym, "rechazada", [block or (order.reason if order else "sin_orden")], analisis=analysis,
+                        **resolved(extra))
             return
         avg = order.avg_price
         stop_px, tp_px = bar.prices(float(avg), p.side, p.sl_frac, p.tp_frac)
@@ -480,11 +484,58 @@ class _Run:
                             "ts": round(self.now, 3), "event_id": ev["id"], "category": sig.category,
                             "stop": str(stop), "tp": str(tp), "plan": p.as_dict(), "order_id": order.order_id,
                             "strategy_tag": STRATEGY_TAG, "mercado": self.market.name, "modo": "paper"})
-        self.record(ev, sig, sym, "entrar", analisis=analysis)
+        self.record(ev, sig, sym, "entrar", analisis=analysis, **resolved(extra))
         await self._alert(entry_alert(sym, p.side, order.filled_qty, avg, notional, stop=stop, tp=tp, p=p.p,
                                       alpha=p.alpha, category=sig.category, title=ev["title"], source=ev["source"],
                                       order_id=order.order_id, mode=self.market.label,
                                       expiry_min=p.horizon_s // 60, trail=p.trail, target=p.target))
+
+
+# -- mejora continua (el dueño, 6-nov: "el programa en producción debe guardar la info que nos sirva para aplicar mejora
+# continua [...] siempre todo cuidando la memoria y performance"): pocos números por operación, sin pedidos extra --------
+TRACK_AT_S = (30, 60, 300, 900, 3600, 14400)     # el retorno a estos segundos de la entrada
+
+
+def resolved(extra: dict | None) -> dict:
+    """Los datos extra de una decisión (el aviso, el precio de referencia, los frenos usados). `_reloj` (el cronómetro
+    del aviso) pasa a `camino_ms`: los milisegundos desde que llegó el aviso hasta este registro."""
+    if not extra:
+        return {}
+    out = dict(extra)
+    watch = out.pop("_reloj", None)
+    if watch is not None:
+        out["camino_ms"] = watch.total_ms()
+    return out
+
+
+def track(meta: dict, px, side: int, now: float) -> None:
+    """El camino del precio de una posición abierta, con el libro que el operador ya mira cada segundo: el mejor y el
+    peor retorno, cuándo fue el mejor y el retorno a los 30 s, 1, 5 y 15 min, 1 y 4 h de la entrada. Queda en la
+    posición (se guarda con ella) y sale en la fila de la salida."""
+    try:
+        r = (float(px) / float(meta["avg_price"]) - 1) * side
+    except (KeyError, TypeError, ValueError, ZeroDivisionError):
+        return
+    t = max(0.0, now - float(meta.get("entry_ts") or now))
+    tr = meta.get("tray")
+    if tr is None:
+        tr = meta["tray"] = {"max": r, "min": r, "t_max": t, "en": {}}
+    if r > tr["max"]:
+        tr["max"], tr["t_max"] = r, t
+    if r < tr["min"]:
+        tr["min"] = r
+    for at in TRACK_AT_S:
+        if t >= at and str(at) not in tr["en"]:
+            tr["en"][str(at)] = r
+
+
+def trajectory(meta: dict) -> dict | None:
+    """El camino del precio para la fila de la salida, en %."""
+    tr = meta.get("tray")
+    if not tr:
+        return None
+    return {"max_pct": round(tr["max"] * 100, 3), "min_pct": round(tr["min"] * 100, 3),
+            "t_max_s": round(tr["t_max"], 1), "en_pct": {k: round(v * 100, 3) for k, v in tr["en"].items()}}
 
 
 def entry_slippage(cfg: PolicyConfig, category: str, limits: dict) -> float:
