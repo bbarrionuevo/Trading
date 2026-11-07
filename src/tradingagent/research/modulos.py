@@ -23,7 +23,9 @@ def _num(x: float) -> str:
 
 def _armed(home: Path, name: str, now: float) -> dict | None:
     data = paths.read_json(Path(home) / name, None)
-    if not isinstance(data, dict) or float(data.get("vence") or 0) < now:
+    if not isinstance(data, dict):
+        return None
+    if data.get("vence") != "nunca" and float(data.get("vence") or 0) < now:   # "nunca": sin vencimiento (v3.10)
         return None
     return data
 

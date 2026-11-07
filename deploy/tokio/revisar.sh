@@ -107,21 +107,24 @@ except ValueError:
 # 4. Armado y posiciones
 now = time.time()
 arm, sim = read(HOME / "ARMADO.json"), read(HOME / "SIMULACRO.json")
-real = bool(arm) and not arm.get("simulacro") and float(arm.get("vence") or 0) > now
+NUNCA = "nunca"                                  # armado sin vencimiento (REGLAS A-2, v3.10)
+real = bool(arm) and not arm.get("simulacro") and (arm.get("vence") == NUNCA or float(arm.get("vence") or 0) > now)
 if arm:
-    dias = (float(arm.get("vence") or 0) - now) / 86400
+    dias = 1e9 if arm.get("vence") == NUNCA else (float(arm.get("vence") or 0) - now) / 86400
     que = "DINERO REAL" if not arm.get("simulacro") else "simulacro"
     est = ", ".join(arm.get("estrategias") or ["todas"])
     if dias <= 0:
         ojo(f"el armado ({que}) venció: no abre nada nuevo (armar es del dueño)")
     else:
-        (ojo if dias < 3 else ok)(f"armado: {que} · {est} · vence en {dias:.1f} días")
+        (ojo if dias < 3 else ok)(f"armado: {que} · {est} · "
+                                  + ("sin vencimiento" if dias >= 1e9 else f"vence en {dias:.1f} días"))
 else:
     ok("sin armado de dinero real")
-side = bool(sim) and float(sim.get("vence") or 0) > now
+side = bool(sim) and (sim.get("vence") == NUNCA or float(sim.get("vence") or 0) > now)
 if sim:
-    dias = (float(sim.get("vence") or 0) - now) / 86400
-    (ojo if dias < 3 else ok)(f"simulacro junto al real: vence en {dias:.1f} días" if dias > 0 else
+    dias = 1e9 if sim.get("vence") == NUNCA else (float(sim.get("vence") or 0) - now) / 86400
+    (ojo if dias < 3 else ok)(("simulacro junto al real: sin vencimiento" if dias >= 1e9 else
+                               f"simulacro junto al real: vence en {dias:.1f} días") if dias > 0 else
                               "simulacro junto al real: venció (armar-real --simulacro --dias 30)")
 check = read(HOME / "state" / "verificacion_binance.json")
 if real:
