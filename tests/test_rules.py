@@ -105,6 +105,7 @@ def test_g9_un_solo_ejecutor_del_dinero_real(tmp_path):
 def test_l_lineamientos_medidos_trabados_en_el_codigo():
     """REGLAS L-1, L-3, L-7, L-9, L-10 y L-11: lo aprendido con datos no se cambia por error."""
     from tradingagent.decision import binance_listings, korean_notices, policy, upbit_listings
+    from tradingagent.decision import delistings as delistings_mod
     from tradingagent.research import shadow
     assert upbit_listings.MAX_LATE_S <= 3.0                                  # L-1: al instante, por Telegram
     assert binance_listings.MAX_LATE_S <= 2.5 and binance_listings.MAX_RISE <= 0.08   # L-10: a los 3,5 s ya es tarde
@@ -127,10 +128,11 @@ def test_l_lineamientos_medidos_trabados_en_el_codigo():
     adv, fin = korean_notices.BY_CATEGORY["advertencia_upbit"], korean_notices.BY_CATEGORY["fin_soporte_corto"]
     assert adv.max_late_s <= 30 and adv.max_drop <= 0.03 and not adv.jump and "bithumb.avisos" not in adv.sources
     assert fin.max_late_s <= 5 and fin.max_drop <= 0.06 and fin.jump
-    # L-11: el tope de la orden, por estrategia y medido. 2 % solo en el deslistado de Binance; lo demás ≤ 0,5 %; una
-    # orden sin tope pedido, 0,5 % (el del sobre es solo el techo).
-    for name, p in policy.EXITS.items():
-        assert p.max_slippage_bps <= (200 if name == "deslistado_corto" else 50), name
+    # L-11: el tope de la orden, por estrategia y medido. 2 % en el deslistado y la vigilancia de Binance; lo demás
+    # ≤ 0,5 %; una orden sin tope pedido, 0,5 % (el del sobre es solo el techo).
+    for name, p in policy.EXITS.items():                   # 2 %: deslistado y vigilancia de Binance (7-nov)
+        assert p.max_slippage_bps <= (200 if name in ("deslistado_corto", "vigilancia_corto") else 50), name
+    assert delistings_mod.BY_CATEGORY["vigilancia_corto"].max_drop <= 0.04
     assert policy.PolicyConfig().max_slippage_bps <= 50 and shadow.EXIT_SLIPPAGE_BPS <= 50
     assert safety.DEFAULT_SLIPPAGE_BPS == 50 and int(lim["per_trade"]["max_slippage_bps"]) <= 200
     venue = (SRC / "execution" / "live" / "binance_venue.py").read_text(encoding="utf-8")   # L-7: nunca antes de 5 s
