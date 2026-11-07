@@ -20,7 +20,8 @@ BASELINE = {
     ("per_trade", "max_risk_pct"): ("max", 3.0),          # el dueño, 4-nov-2026 (antes 1,0)
     ("per_trade", "max_position_pct"): ("max", 60),       # el dueño, 4-nov-2026 (antes 40)
     ("per_trade", "max_leverage"): ("max", 1),
-    ("per_trade", "max_slippage_bps"): ("max", 50),
+    ("per_trade", "max_slippage_bps"): ("max", 200),      # el dueño, 7-nov-2026 (antes 50): techo; cada estrategia
+                                                          # tiene su tope medido (policy.EXITS, REGLAS L-11)
     ("per_trade", "require_stop"): ("eq", True),
     ("portfolio", "max_gross_exposure_pct"): ("max", 100),  # el dueño, 4-nov-2026 (antes 80)
     ("portfolio", "max_net_exposure_pct"): ("max", 60),   # el dueño, 4-nov-2026 (antes 30)

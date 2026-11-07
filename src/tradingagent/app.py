@@ -58,7 +58,9 @@ def build_sources(cfg: dict, env, limits: dict | None = None) -> tuple[list[Sour
     for spec in specs:
         o = (ing.get("sources") or {}).get(spec.id) or {}
         spec = with_overrides(spec, enabled=o.get("enabled"), interval_s=o.get("interval_s"),
-                              max_age_s=o.get("max_age_s"))
+                              max_age_s=o.get("max_age_s"), url=o.get("url"))   # url: la prueba de punta a punta
+        if o.get("url"):
+            spec = with_overrides(spec, url_variants=())           # con otra dirección, sin las variantes del CDN
         spec = with_overrides(spec, max_age_s=safety.news_max_age(spec.max_age_s, limits))
         spec, why = resolve(spec, env)
         if why:

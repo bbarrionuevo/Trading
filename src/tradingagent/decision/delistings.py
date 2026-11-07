@@ -13,6 +13,10 @@ fusionar sus PR). Dos avisos, cada uno con su estudio:
 
 Los títulos de Binance son inequívocos: no hace falta la IA, que tarda ~2 s y en esos 2 s pasa todo. La probabilidad es
 el acierto medido. Muestras chicas: los deslistados arriesgan 2 % del saldo y la etiqueta de vigilancia 1 % (no 3 %).
+El precio cae en segundos: como en los listados al instante, no se miran las alarmas del libro (B-4; quedan anotadas
+en la decisión) y protege el tope de la orden. El del deslistado es de 2 % (estudio del 7-nov,
+`estudios/hipotesis_direccionales.py`: con 0,5 % se llenaban 33 de 45 y las que quedaban afuera eran las caídas más
+rápidas, las mejores; con 2 %, 43, y por aviso +12,3 % en vez de +7,2 %).
 """
 import re
 from dataclasses import dataclass

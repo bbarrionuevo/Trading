@@ -12,7 +12,9 @@ per_trade:
   max_position_pct: 60          # nocional por activo ≤ 60% del equity (4-nov-2026: los resultados arriesgan el 3 %
                                 # al stop de 5 %; cada estrategia tiene además su tope medido, policy.EXITS)
   max_leverage: 1               # sin apalancamiento (los perpetuos 1x permiten corto)
-  max_slippage_bps: 50          # tope de precio de toda orden: nunca a mercado sin tope
+  max_slippage_bps: 200         # techo del tope de precio de toda orden (nunca a mercado sin tope). Cada estrategia
+                                # usa el suyo, medido (policy.EXITS): los deslistados de Binance 2 % (el dueño, 7-nov:
+                                # "tenes autorizacion para ensanchar"; con 0,5 % se llenaban 33 de 45), lo demás ≤ 0,5 %
   require_stop: true            # ninguna posición sin stop-loss
 portfolio:
   max_gross_exposure_pct: 100   # suma de nocionales ≤ 100% del equity (1x: sin margen prestado)

@@ -96,6 +96,9 @@ def validate(cfg: dict) -> list[str]:
     for i, s in enumerate(cfg["ingestion"].get("extra_sources") or []):
         if not isinstance(s, dict) or not s.get("id") or not str(s.get("url", "")).startswith(("http://", "https://")):
             errs.append(f"ingestion.extra_sources[{i}]: necesita id y url http(s)")
+    for sid, o in (cfg["ingestion"].get("sources") or {}).items():
+        if isinstance(o, dict) and o.get("url") is not None and not str(o["url"]).startswith(("http://", "https://")):
+            errs.append(f"ingestion.sources.{sid}.url: tiene que ser http(s)")
     if not cfg["paper"].get("symbols"):
         errs.append("paper.symbols: vacío")
     cap = cfg["trader"].get("llm_usd_dia")

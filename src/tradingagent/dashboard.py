@@ -161,8 +161,8 @@ def account(base: Path, now: float) -> dict | None:
 
 
 # Los módulos que tienen regla propia (research/modulos.py); lo demás va a "otras" (noticias generales con la IA).
-MODULES = ("listado_upbit", "listado_binance", "deslistado_corto", "vigilancia_corto", "resultados_impulso",
-           "lanzamiento_corto", "listado")
+MODULES = ("listado_upbit", "listado_binance", "deslistado_corto", "vigilancia_corto", "advertencia_upbit",
+           "fin_soporte_corto", "resultados_impulso", "lanzamiento_corto", "listado")
 GENERAL = "otras"
 
 

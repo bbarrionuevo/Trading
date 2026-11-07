@@ -69,6 +69,15 @@ def test_configuracion_valida_y_rechaza_lo_fuera_de_rango(tmp_path):
     enabled, off = build_sources(config.load(None), {"SEC_USER_AGENT": "Nombre contacto@example.org"})
     sec = next(s for s in enabled if s.id == "sec.press")
     assert sec.headers["User-Agent"] == "Nombre contacto@example.org"
+    # otra dirección para una fuente (la prueba de punta a punta usa un Bithumb falso local): sin variantes del CDN
+    p.write_text("ingestion: {sources: {bithumb.avisos: {url: 'http://127.0.0.1:9/b'}, "
+                 "binance.listados: {url: 'http://127.0.0.1:9/l'}}}\n")
+    specs = {s.id: s for s in build_sources(config.load(p), {})[0]}
+    assert specs["bithumb.avisos"].url == "http://127.0.0.1:9/b" and specs["bithumb.avisos"].format == "bithumb"
+    assert specs["binance.listados"].url_variants == ()
+    p.write_text("ingestion: {sources: {bithumb.avisos: {url: 'file:///etc/passwd'}}}\n")
+    with pytest.raises(ValueError):
+        config.load(p)
 
 
 class FreshBooks:

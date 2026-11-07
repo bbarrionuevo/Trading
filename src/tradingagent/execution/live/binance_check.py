@@ -6,7 +6,8 @@ programa las pide, sin abrir ninguna posición:
 1. Lee la cuenta (el saldo no se muestra ni se publica) y el estado de las reglas cuantitativas (ningún bloqueo).
 2. Modo unidireccional y "un solo activo" (con el multi-activo Binance obliga a margen cruzado; acá va aislado).
 3. Pone el contrato de prueba en margen aislado y 1x.
-4. Valida con la ruta oficial de prueba de órdenes (no llega al mercado) la entrada IOC con tope de precio.
+4. Valida con la ruta oficial de prueba de órdenes (no llega al mercado) la entrada IOC con tope de precio, de compra
+   (los listados) y de venta en corto con el tope de los deslistados (2 %, 7-nov).
 5. Pone UNA orden "solo maker" (GTX) un 3 % debajo del mejor comprador: no puede ejecutarse (si cruzara, Binance la
    rechaza). Y UN stop STOP_MARKET por el servicio de órdenes Algo (el del stop de emergencia: la ruta común lo
    rechaza desde dic-2025) que solo compraría si el precio subiera 50 %. Verifica cómo los entendió Binance,
@@ -24,11 +25,12 @@ import time
 from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 
 from ...core.redact import redact
-from .binance_futures import BUY, GTX, IOC, STOP_MARKET, BinanceClient, BinanceError
+from .binance_futures import BUY, GTX, IOC, SELL, STOP_MARKET, BinanceClient, BinanceError
 
 SYMBOL = "XRPUSDT"                    # mínimo de 5 USDT por orden (en BTC es de 100)
 DISTANCE = Decimal("0.03")
 CAP = Decimal("0.003")                # tope de precio de la entrada validada
+SHORT_CAP = Decimal("0.02")           # el corto, con el tope de los deslistados (policy.EXITS)
 ALGO_DISTANCE = Decimal("0.5")      # el stop de prueba: compra solo si sube 50 % (no puede en 6 s)
 WAIT_BEFORE_CANCEL_S = 6.0
 CANCELED = ("CANCELED", "CANCELLED")
@@ -132,6 +134,9 @@ async def real_check(client: BinanceClient, symbol: str = SYMBOL, *, pause_s: fl
         await client.test_order(symbol=symbol, side=BUY, qty=qty, price=_round(ask * (1 + CAP), tick, up=True), tif=IOC,
                                 client_id=f"chk{ms}t")
         step("Binance valida la entrada IOC (sin ejecutar)", True)
+        await client.test_order(symbol=symbol, side=SELL, qty=qty, price=_round(bid * (1 - SHORT_CAP), tick, up=False),
+                                tif=IOC, client_id=f"chk{ms}v")
+        step("Binance valida la entrada en corto IOC con tope de 2 % (sin ejecutar)", True)
         need = qty * far * Decimal("1.1")
         if Decimal(str(money["available"])) < need:
             step("orden de prueba", False, f"falta saldo en futuros (hace falta ≥ {need:.2f} USDT): se hace cuando "

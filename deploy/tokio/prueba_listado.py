@@ -3,12 +3,15 @@ simulacro), SIN tocar nada de verdad:
 - un agente aparte (otra carpeta TRADING_HOME): simulacro de 100 USDT de mentira, sin bot de Telegram, sin fuentes y
   sin aprendizaje;
 - un relé de prueba en otro puerto, sin Telegram (la sesión de Upbit sigue siendo solo del relé de verdad).
-Le manda dos avisos de listado armados a mano (SOL y, 15 s después, ETH: la misma plantilla de Upbit), como si
-Telegram los trajera 1 s después del sitio, un deslistado de Binance (DOGE, por la lista de anuncios: entra corto) y un
-listado de Binance (PEPE, publicado 1,17 s antes, como llegó el canal de anuncios a Tokio el 6-nov: entra largo en
-1000PEPEUSDT, la regla al instante de decision/binance_listings.py).
+Le manda, armados a mano: un listado de Upbit (SOL, como si Telegram lo trajera 1 s después del sitio), un deslistado de
+Binance (DOGE, por la lista de anuncios: entra corto), una advertencia de Upbit (XRP, por Telegram: entra corto), un fin
+del soporte de Bithumb (ADA: lo publica un Bithumb falso local y lo lee el lector de verdad del agente de prueba,
+`bithumb.avisos`, cada 1 s, así se mide también la demora del sondeo), otro listado de Upbit con la misma plantilla
+(ETH: no tiene que tomarse por el mismo aviso) y un listado de Binance (PEPE, publicado 1,17 s antes, como llegó el
+canal de anuncios a Tokio el 6-nov: largo en 1000PEPEUSDT). El sobre deja 4 posiciones: las 4 primeras entran y las 2
+últimas tienen que llegar a su regla y frenar solo por el sobre (`maximo_de_posiciones`).
 Mide cuánto tarda en entrar (orden simulada contra el libro) e imprime la línea de tiempo y la segunda lectura de la IA
-(unas pocas consultas: centavos de dólar). Al final borra todo. Nunca imprime claves.
+(unas pocas consultas: centavos de dólar; también de los títulos coreanos). Al final borra todo. Nunca imprime claves.
 
 Dos formas:
 - **En la PC, sin cargar Tokio** (pedido del dueño, 6-nov): `python deploy/tokio/prueba_listado.py --pc`, desde el repo.
@@ -49,7 +52,16 @@ AGENT_ENV = (Path(os.environ.get("LOCALAPPDATA", "")) / "TRADING" / ".env") if P
 NOTICES = (("SOL", "솔라나"), ("ETH", "이더리움"))
 DELIST = "Binance Will Delist DOGE on 2026-12-20"                # la otra regla al instante: corto en el perpetuo
 LISTING = "Binance Will List Pepe (PEPE) with Seed Tag Applied"  # listado de Binance al instante: largo en 1000PEPEUSDT
-TEST_SYMBOLS = ("SOLUSDT", "ETHUSDT", "DOGEUSDT", "1000PEPEUSDT")
+WARNING = "리플(XRP) 거래 유의 종목 지정 안내"                      # advertencia de Upbit: corto, salida a las 4 h
+END_SUPPORT = "에이다(ADA) 거래지원 종료"                          # fin del soporte de Bithumb: corto, salida a los 5 min
+# Cada aviso y la regla que lo tiene que operar. El sobre deja 4 posiciones: las primeras 4 entran y las 2 últimas
+# tienen que llegar a su regla y frenar por el sobre (`maximo_de_posiciones`), no por otra cosa.
+EXPECTED = {"SOLUSDT": "listado_upbit", "DOGEUSDT": "deslistado_corto", "XRPUSDT": "advertencia_upbit",
+            "ADAUSDT": "fin_soporte_corto", "ETHUSDT": "listado_upbit", "1000PEPEUSDT": "listado_binance"}
+TEST_SYMBOLS = tuple(EXPECTED)
+RUN_S = 100                                                      # lo que corre el agente de prueba
+BITHUMB = {"data": [{"id": 1, "categoryName1": "안내", "title": "점검 안내 (prueba)",
+                     "publicationDateTime": "2026-01-01 09:00:00"}]}   # lo que ya estaba: historia
 BASE = HOME / "simulacro" / "binance-futuros"
 TOKIO_MS = 3.0                                                  # Binance desde Tokio: 2-5 ms por pedido
 # El Binance falso de los tests, en otro proceso (no comparte el bucle del agente), con la demora de Tokio por pedido.
@@ -59,7 +71,8 @@ sys.path.insert(0, sys.argv[1])
 from aiohttp import web
 import fake_binance as fb
 fb.SPECS["DOGEUSDT"] = ("0.00001", "1", "1", "5", "PERPETUAL", "COIN", "DOGE")
-fb.PRICES["DOGEUSDT"] = 0.2
+fb.SPECS["ADAUSDT"] = ("0.0001", "1", "1", "5", "PERPETUAL", "COIN", "ADA")
+fb.PRICES.update({"DOGEUSDT": 0.2, "XRPUSDT": 2.0, "ADAUSDT": 0.5})
 ms = float(sys.argv[3])
 
 @web.middleware
@@ -84,15 +97,17 @@ def rows(path: Path) -> list[dict]:
     return out
 
 
-def prepare() -> tuple[bytes, dict]:
-    """La carpeta de prueba: clave del relé de prueba, configuración sin fuentes ni Telegram, solo la IA (y en Tokio la
-    clave de solo lectura), copiadas sin mostrarlas, y el simulacro armado con 100 USDT de mentira."""
+def prepare(bithumb_url: str) -> tuple[bytes, dict]:
+    """La carpeta de prueba: clave del relé de prueba, configuración sin fuentes ni Telegram (salvo el Bithumb falso
+    local), solo la IA (y en Tokio la clave de solo lectura), copiadas sin mostrarlas, y el simulacro armado con 100 USDT
+    de mentira."""
     shutil.rmtree(HOME, ignore_errors=True)
     HOME.mkdir(parents=True, mode=0o700)
     key = secrets.token_bytes(32)
     (HOME / "relay.key").write_text(key.hex(), encoding="utf-8")
     (HOME / "relay.json").write_text(json.dumps({"host": "127.0.0.1", "port": PORT, "telemetria": False}))
-    off = {s.id: {"enabled": False} for s in DEFAULT_SOURCES} | {"binance.ws": {"enabled": False}}
+    off = {s.id: {"enabled": False} for s in DEFAULT_SOURCES} | {"binance.ws": {"enabled": False},
+                                                                 "bithumb.avisos": {"url": bithumb_url}}
     (HOME / "config.yaml").write_text(yaml.safe_dump({"alerts": {"telegram": False}, "ingestion": {"sources": off},
                                                       "trader": {"aprender": False}}), encoding="utf-8")
     want = ("ANTHROPIC_API_KEY",) if PC else ("ANTHROPIC_API_KEY", "BINANCE_LECTURA_KEY", "BINANCE_LECTURA_SECRET")
@@ -114,13 +129,6 @@ def ready(relay) -> bool:
     hb_file = HOME / "state" / "heartbeat.json"
     hb = json.loads(hb_file.read_text(encoding="utf-8")) if hb_file.exists() else {}
     return bool(relay.live()) and bool((hb.get("real") or {}).get("simulacro"))
-
-
-def notice(coin: str, name: str, now: float) -> NewsItem:
-    return NewsItem(id="prueba-" + secrets.token_hex(4), source="upbit.avisos", tier=1, kind="telegram",
-                    title=f"{name}({coin}) 신규 거래지원 안내 (KRW, BTC, USDT 마켓)",
-                    url=f"https://upbit.com/service_center/notice?id=prueba-{coin}", published_at=now - 1.0,
-                    received_at=now)
 
 
 def report(first_sent: float) -> int:
@@ -145,7 +153,16 @@ def report(first_sent: float) -> int:
     errors = [json.loads(x) for x in (HOME / "logs" / "agent.log").read_text(encoding="utf-8").splitlines()
               if '"ERROR"' in x]
     print("errores del agente de prueba:", [e.get("msg") for e in errors][-3:] or "ninguno")
-    return 0 if len(entries) >= len(NOTICES) + 2 else 1
+    cap = int(yaml.safe_load((REPO / "config" / "limits.yaml").read_text(encoding="utf-8"))["portfolio"]["max_positions"])
+    fired = {}                                                  # cada aviso, decidido por SU regla
+    for d in rows(BASE / "decisiones"):
+        if (d.get("signal") or {}).get("category") == EXPECTED.get(d.get("symbol")):
+            ok = d.get("decision") == "entrar" or "maximo_de_posiciones" in (d.get("motivos") or [])
+            fired[d["symbol"]] = fired.get(d["symbol"], False) or ok
+    missing = [s for s in EXPECTED if not fired.get(s)]
+    print(f"entradas: {len(entries)} de {min(cap, len(EXPECTED))} posibles (el sobre deja {cap}); "
+          f"avisos sin su regla: {missing or 'ninguno'}")
+    return 0 if len(entries) >= min(cap, len(EXPECTED)) and not missing and not errors else 1
 
 
 def free_port() -> int:
@@ -158,8 +175,8 @@ async def start_agent(env: dict):
     """(cómo pararlo, cómo esperarlo). En Tokio, un proceso aparte con el Binance real. En la PC, en este mismo proceso
     contra el Binance falso local (otro proceso), porque el Binance de la prueba solo se elige por código."""
     if not PC:
-        agent = await asyncio.create_subprocess_exec(sys.executable, "-m", "tradingagent", "run", "--seconds", "75",
-                                                     env=env, stdout=asyncio.subprocess.DEVNULL,
+        agent = await asyncio.create_subprocess_exec(sys.executable, "-m", "tradingagent", "run", "--seconds",
+                                                     str(RUN_S), env=env, stdout=asyncio.subprocess.DEVNULL,
                                                      stderr=asyncio.subprocess.DEVNULL)
         return agent, None
     port = free_port()
@@ -182,8 +199,25 @@ async def start_agent(env: dict):
     agent = Agent(config.load(HOME / "config.yaml"), os.environ, printer=lambda *_: None,
                   binance_base=f"http://127.0.0.1:{port}")
     task = asyncio.create_task(agent.run())
-    asyncio.get_running_loop().call_later(75, agent.stop)
+    asyncio.get_running_loop().call_later(RUN_S, agent.stop)
     return task, (agent, fake)
+
+
+async def bithumb_server():
+    """(cómo pararlo, su dirección): un Bithumb falso local con la lista de avisos de su web (los últimos, con la hora
+    de Corea al segundo, como la de verdad). El agente de prueba la lee con su lector de siempre, cada 1 s."""
+    from aiohttp import web
+
+    async def notices(request):
+        return web.json_response({"status": 200, "code": "00000", "message": "success", "data": BITHUMB["data"]})
+
+    app = web.Application()
+    app.router.add_get("/feed/v2/customer-support/articles/notices/recent", notices)
+    runner = web.AppRunner(app, access_log=None)
+    await runner.setup()
+    port = free_port()
+    await web.TCPSite(runner, "127.0.0.1", port).start()
+    return runner, f"http://127.0.0.1:{port}/feed/v2/customer-support/articles/notices/recent"
 
 
 async def stop_agent(handle, extra) -> None:
@@ -205,7 +239,8 @@ async def stop_agent(handle, extra) -> None:
 
 
 async def main() -> int:
-    key, env = prepare()
+    bithumb, bithumb_url = await bithumb_server()
+    key, env = prepare(bithumb_url)
     loop = asyncio.get_running_loop()
     transport, relay = await loop.create_datagram_endpoint(lambda: server.RelayServer(key),
                                                            local_addr=("127.0.0.1", PORT))
@@ -221,28 +256,48 @@ async def main() -> int:
             return 1
         print("en la PC, contra un Binance falso con los tiempos de Tokio (~3 ms)" if PC else "en Tokio, Binance real")
         await asyncio.sleep(2)
-        for coin, name in NOTICES:
+
+        def upbit(title: str, tag: str) -> str:                # como Telegram: 1 s después del sitio
+            now = time.time()
+            assert relay.forward(NewsItem(id="prueba-" + secrets.token_hex(4), source="upbit.avisos", tier=1,
+                                          kind="telegram", title=title, published_at=now - 1.0, received_at=now,
+                                          url=f"https://upbit.com/service_center/notice?id=prueba-{tag}")), \
+                "el relé de prueba no tenía a quién mandar"
+            return "por Telegram (1 s después del sitio)"
+
+        def binance(title: str, tag: str, lag: float) -> str:  # otro enlace: con el mismo, es "el mismo aviso"
+            now = time.time()
+            assert relay.forward(NewsItem(id="prueba-" + secrets.token_hex(4), source="binance.listados", tier=1,
+                                          kind="api", title=title, published_at=now - lag, received_at=now,
+                                          url=f"https://www.binance.com/en/support/announcement/prueba-{tag}"))
+            return f"por la lista de anuncios (publicado {lag} s antes)"
+
+        def bithumb_publish(title: str) -> str:                # lo lee el lector de verdad, cada 1 s
+            BITHUMB["data"] = [{"id": len(BITHUMB["data"]) + 1, "categoryName1": "거래지원종료", "title": title,
+                                "publicationDateTime": time.strftime("%Y-%m-%d %H:%M:%S",
+                                                                     time.gmtime(time.time() + 9 * 3600))},
+                               *BITHUMB["data"]]
+            return "en el Bithumb falso (hora de Corea, al segundo)"
+
+        (sol, sol_name), (eth, eth_name) = NOTICES
+        steps = ((f"listado de Upbit ({sol})", lambda: upbit(f"{sol_name}({sol}) 신규 거래지원 안내 (KRW, BTC, USDT 마켓)",
+                                                             sol), 8),
+                 ("deslistado de Binance (DOGE)", lambda: binance(DELIST, "deslistado", 1.5), 6),
+                 ("advertencia de Upbit (XRP)", lambda: upbit(WARNING, "xrp"), 6),
+                 ("fin del soporte de Bithumb (ADA)", lambda: bithumb_publish(END_SUPPORT), 8),
+                 (f"listado de Upbit ({eth}, la misma plantilla)",
+                  lambda: upbit(f"{eth_name}({eth}) 신규 거래지원 안내 (KRW, BTC, USDT 마켓)", eth), 6),
+                 ("listado de Binance (PEPE)", lambda: binance(LISTING, "listado", 1.17), 8))
+        for what, send, wait in steps:
             now = time.time()
             first_sent = first_sent or now
-            assert relay.forward(notice(coin, name, now)), "el relé de prueba no tenía a quién mandar"
-            print(f"aviso de {coin} mandado a los {(now - first_sent) * 1000:.0f} ms")
-            await asyncio.sleep(15)
-        now = time.time()
-        assert relay.forward(NewsItem(id="prueba-" + secrets.token_hex(4), source="binance.listados", tier=1,
-                                      kind="api", title=DELIST, url="https://www.binance.com/en/support/announcement/prueba",
-                                      published_at=now - 1.5, received_at=now))
-        print(f"deslistado de DOGE mandado a los {(now - first_sent) * 1000:.0f} ms")
-        await asyncio.sleep(8)
-        now = time.time()
-        assert relay.forward(NewsItem(id="prueba-" + secrets.token_hex(4), source="binance.listados", tier=1,
-                                      kind="api", title=LISTING,     # otro enlace: con el mismo, es "el mismo aviso"
-                                      url="https://www.binance.com/en/support/announcement/prueba-listado",
-                                      published_at=now - 1.17, received_at=now))
-        print(f"listado de PEPE en Binance mandado a los {(now - first_sent) * 1000:.0f} ms (publicado 1,17 s antes)")
-        await asyncio.sleep(8)
+            how = send()
+            print(f"{what} mandado {how} a los {(now - first_sent) * 1000:.0f} ms")
+            await asyncio.sleep(wait)
         return report(first_sent)
     finally:
         await stop_agent(handle, extra)
+        await bithumb.cleanup()
         transport.close()
         if PC:
             import logging

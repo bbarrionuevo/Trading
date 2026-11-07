@@ -21,10 +21,15 @@ def intent_block_reasons(intent, *, killed: bool, orders_last_min: int, limits: 
     return r
 
 
+# Tope de una orden que no pidió ninguno: el general (0,5 %). El del sobre es el techo de las estrategias que midieron
+# que necesitan más (los deslistados de Binance, 2 %: policy.EXITS), no lo que recibe cualquier orden.
+DEFAULT_SLIPPAGE_BPS = Decimal("50")
+
+
 def slippage_cap(requested_bps, limits: dict) -> Decimal:
-    """Tope efectivo: el pedido, recortado por el sobre (y el del sobre si no se pidió ninguno)."""
+    """Tope efectivo: el pedido (o el general si no se pidió ninguno), recortado por el sobre."""
     cap = Decimal(str(limits["per_trade"]["max_slippage_bps"]))
-    return cap if requested_bps is None else min(Decimal(str(requested_bps)), cap)
+    return min(DEFAULT_SLIPPAGE_BPS if requested_bps is None else Decimal(str(requested_bps)), cap)
 
 
 def news_max_age(source_max_age_s: float, limits: dict) -> float:

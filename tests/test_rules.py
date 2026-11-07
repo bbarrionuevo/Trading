@@ -103,8 +103,9 @@ def test_g9_un_solo_ejecutor_del_dinero_real(tmp_path):
 
 
 def test_l_lineamientos_medidos_trabados_en_el_codigo():
-    """REGLAS L-1, L-3, L-7 y L-10: lo aprendido con datos no se cambia por error."""
-    from tradingagent.decision import binance_listings, policy, upbit_listings
+    """REGLAS L-1, L-3, L-7, L-9, L-10 y L-11: lo aprendido con datos no se cambia por error."""
+    from tradingagent.decision import binance_listings, korean_notices, policy, upbit_listings
+    from tradingagent.research import shadow
     assert upbit_listings.MAX_LATE_S <= 3.0                                  # L-1: al instante, por Telegram
     assert binance_listings.MAX_LATE_S <= 2.5 and binance_listings.MAX_RISE <= 0.08   # L-10: a los 3,5 s ya es tarde
     live_src = (SRC / "live.py").read_text(encoding="utf-8")
@@ -112,11 +113,26 @@ def test_l_lineamientos_medidos_trabados_en_el_codigo():
     on_news = live_src[start:live_src.index("\n    async def ", start + 10)]
     assert on_news.index("self._upbit_listing(") < on_news.index("self.llm.classify(")   # primero entra, después la IA
     assert on_news.index("self._binance_listing(") < on_news.index("self.llm.classify(")
+    assert on_news.index("self._korean(") < on_news.index("self.llm.classify(")
     lim = limits.load()                                                         # L-3: 3 % y sin apalancamiento
     assert float(lim["per_trade"]["max_risk_pct"]) <= 3 and int(lim["per_trade"]["max_leverage"]) == 1
     for name in ("listado_upbit", "listado_binance"):
         p = policy.EXITS[name]
         assert p.stop == 0.10 and p.max_x * p.stop <= 0.03 + 1e-9
+    for name, risk in (("deslistado_corto", 0.02), ("advertencia_upbit", 0.02), ("fin_soporte_corto", 0.01)):
+        p = policy.EXITS[name]                                                  # L-3: muestras chicas, menos
+        assert p.max_x * p.stop <= risk + 1e-9, name
+    # L-9: avisos coreanos. La advertencia baja de a poco (hasta 30 s, si no cayó 3 %); el fin del soporte cae en
+    # segundos (hasta 5 s, si no cayó 6 %). La advertencia de Bithumb no se opera.
+    adv, fin = korean_notices.BY_CATEGORY["advertencia_upbit"], korean_notices.BY_CATEGORY["fin_soporte_corto"]
+    assert adv.max_late_s <= 30 and adv.max_drop <= 0.03 and not adv.jump and "bithumb.avisos" not in adv.sources
+    assert fin.max_late_s <= 5 and fin.max_drop <= 0.06 and fin.jump
+    # L-11: el tope de la orden, por estrategia y medido. 2 % solo en el deslistado de Binance; lo demás ≤ 0,5 %; una
+    # orden sin tope pedido, 0,5 % (el del sobre es solo el techo).
+    for name, p in policy.EXITS.items():
+        assert p.max_slippage_bps <= (200 if name == "deslistado_corto" else 50), name
+    assert policy.PolicyConfig().max_slippage_bps <= 50 and shadow.EXIT_SLIPPAGE_BPS <= 50
+    assert safety.DEFAULT_SLIPPAGE_BPS == 50 and int(lim["per_trade"]["max_slippage_bps"]) <= 200
     venue = (SRC / "execution" / "live" / "binance_venue.py").read_text(encoding="utf-8")   # L-7: nunca antes de 5 s
     assert float(re.search(r"^MIN_CANCEL_AGE_S = ([\d.]+)", venue, re.M).group(1)) >= 5
 
@@ -193,9 +209,10 @@ def test_e1_d2_d6_el_nucleo_frena_lo_que_tiene_que_frenar():
     assert safety.intent_block_reasons(_intent(reduce_only=True), killed=True, orders_last_min=0, limits=lim) == []
     assert "tope_de_ordenes_por_minuto" in safety.intent_block_reasons(_intent(), killed=False, orders_last_min=30,
                                                                        limits=lim)
-    assert safety.intent_block_reasons(_intent(max_slippage_bps=D("80")), killed=False, orders_last_min=0,
+    assert safety.intent_block_reasons(_intent(max_slippage_bps=D("250")), killed=False, orders_last_min=0,
                                        limits=lim)[0].startswith("tope_de_precio_mayor_al_sobre")
     assert safety.slippage_cap(None, lim) == D("50") and safety.slippage_cap(D("20"), lim) == D("20")
+    assert safety.slippage_cap(D("200"), lim) == D("200") and safety.slippage_cap(D("900"), lim) == D("200")
     assert safety.news_max_age(900, lim) == 600 and safety.news_max_age(120, lim) == 120
 
 
