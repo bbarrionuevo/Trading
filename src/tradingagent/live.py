@@ -19,12 +19,14 @@ import json
 import logging
 import os
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from . import paths
 from .alerts.model import asset_es, circuit_breaker_alert, daily_alert, system_alert, usdt_es
 from .core.bus import EventBus
-from .decision import binance_listings, delistings, earnings, launches, upbit_listings
+from .decision import binance_listings, delistings, earnings, korean_notices, launches, upbit_listings
 from .decision.binance_listings import coin_key
 from .decision.policy import PolicyConfig, assess, news_blocks
 from .decision.risk import RiskState
@@ -45,7 +47,7 @@ log = logging.getLogger("tradingagent.live")
 # Las estrategias con camino propio (no pasan por la lectura general de la noticia): si el armado es solo de estas y no
 # hay nada abierto, el operador no lee las demás noticias (el de dinero real solo para Upbit no gasta IA ni candado).
 OWN_PATH = frozenset({upbit_listings.CATEGORY, binance_listings.CATEGORY, earnings.CATEGORY, launches.CATEGORY,
-                      *delistings.BY_CATEGORY})
+                      *delistings.BY_CATEGORY, *korean_notices.BY_CATEGORY})
 WATCH_S, HOUSEKEEP_S, LEARN_EVERY_S = 1.0, 30.0, 900.0
 LAUNCH_POLL_S = 60.0                      # catálogo de Binance: contratos nuevos (peso 1 por pedido)
 # La caché del universo dura 6 h. Releerla en cada vuelta (30 s, por cuenta) costaba ~17 ms del bucle (leer 140 KB
@@ -84,6 +86,35 @@ def notice_times(ing) -> dict:
 def reference(base: float, book, move: float) -> dict:
     """El precio contra el que se midió el freno (la apertura del minuto del aviso o el primero) y el de ese momento."""
     return {"ref": {"precio_base": base, "precio": float(book.mid), "movimiento_pct": round(move * 100, 3)}}
+
+
+@dataclass(frozen=True)
+class Short:
+    """Un corto al instante por un aviso negativo (decision/delistings.py o decision/korean_notices.py): sus frenos, su
+    señal y el motivo que queda cuando llega tarde."""
+    category: str
+    max_late_s: float                      # de publicado a la orden
+    max_drop: float                        # desde la apertura del minuto del aviso
+    late: str                              # el motivo si llega tarde (con la demora)
+    name: str
+    signal: Callable                       # moneda → Signal
+    assessment: Callable                   # (moneda, demora) → Assessment
+    relaxed: bool                          # cae en segundos: sin las alarmas del libro (B-4), como los listados
+
+
+def delisting_short(category: str) -> Short:
+    """Deslistado o etiqueta de vigilancia de Binance: el precio cae entre los 2 y los 5 s del aviso."""
+    rule = delistings.BY_CATEGORY[category]
+    return Short(category, delistings.MAX_LATE_S, rule.max_drop, "deslistado_tarde:{:.0f}s", category,
+                 lambda coin: delistings.signal(coin, category),
+                 lambda coin, dt: delistings.assessment(coin, dt, category), relaxed=True)
+
+
+def korean_short(rule) -> Short:
+    """Advertencia de Upbit (baja de a poco: mira el libro) o fin del soporte de Upbit o Bithumb (cae en segundos)."""
+    return Short(rule.category, rule.max_late_s, rule.max_drop, rule.category + "_tarde:{:.1f}s", rule.name,
+                 lambda coin: korean_notices.signal(coin, rule.category),
+                 lambda coin, dt: korean_notices.assessment(coin, dt, rule.category), relaxed=rule.jump)
 
 
 class _LiveRun(shadow._Run):
@@ -348,6 +379,15 @@ class LiveTrader:
                                        name=f"{kind.category}-{coin}")
             self.pending.add(task)
             task.add_done_callback(self.pending.discard)
+        korean = (korean_notices.notice(ing.item.source, ing.item.title)
+                  if getattr(self.market, "name", "") == "binance-futuros" else [])
+        for rule, coin in korean:                                  # advertencia de Upbit o fin del soporte: ya
+            if self.allows(rule.category):
+                task = asyncio.create_task(self._korean(ing, coin, rule), name=f"{rule.category}-{coin}")
+                self.pending.add(task)
+                task.add_done_callback(self.pending.discard)
+        if ing.item.source in korean_notices.ONLY_RULES:
+            return               # Bithumb: solo su regla medida; lo demás de Bithumb no se lee (ni IA ni candado)
         listed = self.upbit_fast(ing)
         for coin in listed if self.allows(upbit_listings.CATEGORY) else ():   # listado de Upbit a tiempo: ya, sin la IA
             task = asyncio.create_task(self._upbit_listing(ing, coin), name=f"listado-upbit-{coin}")
@@ -394,6 +434,8 @@ class LiveTrader:
                 off.append("sin_confirmacion_ia")
             if delisted:                                               # lo opera su regla medida, no la general
                 off.append("lo_opera_la_regla_de_deslistados")
+            if korean:
+                off.append("lo_opera_la_regla_de_avisos_coreanos")
             if listed:
                 off.append("lo_opera_la_regla_de_listados_de_upbit")
             if quick:
@@ -487,9 +529,17 @@ class LiveTrader:
             return None
 
     async def _delisting(self, ing, coin: str, category: str = delistings.CATEGORY) -> None:
-        """Corto apenas llega un aviso negativo de Binance (deslistado o etiqueta de vigilancia), si el precio todavía
-        no cayó (decision/delistings.py): si ya cayó más que lo medido desde el aviso, llegamos tarde y no se entra."""
-        rule = delistings.BY_CATEGORY[category]
+        """Corto apenas llega un aviso negativo de Binance (deslistado o etiqueta de vigilancia, decision/delistings.py)."""
+        await self._short_now(ing, coin, delisting_short(category))
+
+    async def _korean(self, ing, coin: str, rule) -> None:
+        """Corto apenas llega una advertencia de Upbit o un fin del soporte de Upbit o Bithumb
+        (decision/korean_notices.py)."""
+        await self._short_now(ing, coin, korean_short(rule))
+
+    async def _short_now(self, ing, coin: str, short: Short) -> None:
+        """Corto al instante si el aviso llegó a tiempo y el precio todavía no cayó: si ya cayó más que lo medido desde la
+        apertura del minuto del aviso, llegamos tarde y no se entra. La IA lee después y, si no confirma, cierra."""
         try:
             if self.market.universe.kind(coin) != CRYPTO:              # sin perpetuo de cripto en Binance: nada
                 return
@@ -499,12 +549,12 @@ class LiveTrader:
                 watch.mark("candado")
                 run = self.run()
                 now, sym = run.now, self.market.symbol(coin)
-                ev, sig = self._event(ing), delistings.signal(coin, category)
+                ev, sig = self._event(ing), short.signal(coin)
                 late = now - t0
                 x = {**notice_times(ing), "_reloj": watch,
-                     "params": {"max_late_s": delistings.MAX_LATE_S, "max_drop": rule.max_drop}}
-                if late > delistings.MAX_LATE_S:
-                    run.record(ev, sig, sym, "no_entrar", [f"deslistado_tarde:{late:.0f}s"], **shadow.resolved(x))
+                     "params": {"max_late_s": short.max_late_s, "max_drop": short.max_drop}}
+                if late > short.max_late_s:
+                    run.record(ev, sig, sym, "no_entrar", [short.late.format(late)], **shadow.resolved(x))
                     await self.save(run)
                     return
                 self.registry = await self.market.instruments(self.session, [sym], self.st["instruments"], now)
@@ -518,23 +568,25 @@ class LiveTrader:
                 bar = (run.store.candles.get(sym) or {}).get(minute(t0))       # el minuto del aviso: (o, h, l, c)
                 if not bar or book is None or book.mid is None or tick is None:
                     run.record(ev, sig, sym, "no_entrar", ["sin_datos:precio_del_aviso_o_libro"], **shadow.resolved(x))
-                elif (drop := float(book.mid) / float(bar[0]) - 1) < -rule.max_drop:
+                elif (drop := float(book.mid) / float(bar[0]) - 1) < -short.max_drop:
                     run.record(ev, sig, sym, "no_entrar", [f"ya_cayo:{drop * 100:+.2f}%"],
                                **shadow.resolved({**x, **reference(float(bar[0]), book, drop)}))
                 else:
-                    await run.enter(ev, sig, coin, self.risk_blocks(run),
-                                    assessment=delistings.assessment(coin, late, category), prefetched=(book, tick),
+                    await run.enter(ev, sig, coin, self.risk_blocks(run), assessment=short.assessment(coin, late),
+                                    prefetched=(book, tick), relaxed=short.relaxed,
                                     extra={**x, **reference(float(bar[0]), book, drop)})
                     watch.mark("orden")
-                    log.info("%s al instante (%s): %s", category, coin, watch.text())
-                    if sym in self.st["positions"] and self.llm is not None and self.llm.enabled:
-                        task = asyncio.create_task(self._ai_second_read(ing, coin, sym, category),
+                    log.info("%s al instante (%s): %s", short.category, coin, watch.text())
+                    # Solo si la abrió ESTE aviso: el mismo fin del soporte de Upbit y de Bithumb no cierra lo del otro.
+                    mine = (self.st["positions"].get(sym) or {}).get("event_id") == ev["id"]
+                    if mine and self.llm is not None and self.llm.enabled:
+                        task = asyncio.create_task(self._ai_second_read(ing, coin, sym, short.category, sig),
                                                    name=f"segunda-lectura-{coin}")
                         self.pending.add(task)
                         task.add_done_callback(self.pending.discard)
                 await self.save(run)
         except Exception:                                              # una falla no tira al operador
-            log.exception("falló la entrada por deslistado (%s)", coin)
+            log.exception("falló la entrada por %s (%s)", short.name, coin)
 
     def _fast(self, ing, rule, t0: float | None) -> tuple[str, ...]:
         if getattr(self.market, "name", "") != "binance-futuros" or t0 is None:
@@ -733,7 +785,13 @@ class LiveTrader:
 
     # -- vigilancia -------------------------------------------------------------------------------------
     async def watch_once(self) -> None:
-        """Barreras contra el libro real: stop, take-profit cruzado y expiración. Sale a mercado con tope."""
+        """Barreras contra el libro real: stop, take-profit cruzado y expiración. Sale a mercado con tope. Los libros se
+        piden juntos y ANTES de tomar el candado: de a uno y con el candado tomado, con 4 posiciones abiertas un listado
+        al instante esperó 156 ms el candado (prueba de la PC del 7-nov); las entradas al instante no esperan a esto."""
+        syms = list(self.st["positions"])
+        if not syms:
+            return
+        books = dict(zip(syms, await asyncio.gather(*(self._book_or_none(s) for s in syms)), strict=True))
         async with self.lock:
             if not self.st["positions"]:
                 return
@@ -741,9 +799,8 @@ class LiveTrader:
             changed = moved_any = False
             for sym, meta in list(self.st["positions"].items()):
                 side = 1 if meta["side"] == "largo" else -1
-                try:
-                    book = await self.books.book(sym)
-                except MarketDataError:
+                book = books.get(sym)                                  # una recién abierta: la próxima vuelta
+                if book is None:
                     continue
                 if book.mid is not None:
                     self.venue.marks[sym] = book.mid                       # el equity se marca con el libro

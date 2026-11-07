@@ -16,6 +16,9 @@ BINANCE_LISTINGS = ("https://www.binance.com/bapi/composite/v1/public/cms/articl
 OKX_LISTINGS = "https://www.okx.com/api/v5/support/announcements?annType=announcements-new-listings"
 BITGET_LISTINGS = "https://api.bitget.com/api/v2/public/annoucements?language=en_US&annType=coin_listings"
 UPBIT_NOTICES = "https://api-manager.upbit.com/api/v1/announcements?os=web&page=1&per_page=20&category=trade"
+# La lista de avisos de la web de trading de Bithumb: sin caché y a ~100 ms de Tokio (6 y 7-nov). Su API pública
+# (api.bithumb.com/v1/notices → feed-api) pasa por Cloudflare con una copia de 4 h: no sirve.
+BITHUMB_NOTICES = "https://gw.bithumb.com/feed/v2/customer-support/articles/notices/recent"
 
 
 def _iso(ms) -> str:
@@ -82,4 +85,21 @@ def parse_upbit(body: bytes) -> list[FeedEntry]:
     return out
 
 
-PARSERS = {"binance": parse_binance, "okx": parse_okx, "bitget": parse_bitget, "upbit": parse_upbit}
+def parse_bithumb(body: bytes) -> list[FeedEntry]:
+    """Avisos de Bithumb (en coreano): `data[]` con `id`, `title`, `categoryName1` y `publicationDateTime` (hora de
+    Corea, al segundo; los programados salen a la hora redonda). Son los últimos 5. Formato verificado desde Tokio el
+    7-nov-2026. El enlace se arma con el número del aviso (no con el que trae la respuesta)."""
+    data = _load(body).get("data")
+    out = []
+    for a in data if isinstance(data, list) else []:
+        if not isinstance(a, dict) or not a.get("title") or not str(a.get("id") or "").isdigit():
+            continue
+        nid, when = str(a["id"]), str(a.get("publicationDateTime") or "").strip()
+        out.append(FeedEntry(title=str(a["title"]), link=f"https://feed.bithumb.com/notice/{nid}",
+                             guid=f"bithumb:{nid}", published=f"{when.replace(' ', 'T', 1)}+09:00" if when else "",
+                             categories=(str(a["categoryName1"]),) if a.get("categoryName1") else ()))
+    return out
+
+
+PARSERS = {"binance": parse_binance, "okx": parse_okx, "bitget": parse_bitget, "upbit": parse_upbit,
+           "bithumb": parse_bithumb}

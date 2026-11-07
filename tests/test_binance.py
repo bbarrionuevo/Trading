@@ -74,7 +74,10 @@ async def test_prueba_sin_riesgo_espera_antes_de_cancelar_y_valida_el_stop():
         rep = await real_check(BinanceClient(s, KEY, SECRET, base=url), pause_s=0.2)
     assert rep["ok"], rep["pasos"]
     assert fake.margin["XRPUSDT"] == "ISOLATED" and fake.leverage["XRPUSDT"] == 1
-    assert [(t["type"], t.get("timeInForce")) for t in fake.tests] == [("LIMIT", IOC)]    # la entrada, sin ejecutar
+    assert [(t["type"], t.get("timeInForce"), t["side"]) for t in fake.tests] == [("LIMIT", IOC, BUY),
+                                                                                   ("LIMIT", IOC, "SELL")]  # sin ejecutar
+    short = fake.tests[1]                                                          # el corto, con el tope de 2 %
+    assert 0.979 < float(short["price"]) / float(fake.bid) < 0.981
     assert [o["status"] for o in fake.orders.values()] == ["CANCELED"]
     stop = next(iter(fake.algos.values()))                                         # el stop, por el servicio Algo
     assert stop["orderType"] == "STOP_MARKET" and stop["algoStatus"] == "CANCELED" and stop["side"] == BUY

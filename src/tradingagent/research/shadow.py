@@ -383,8 +383,9 @@ class _Run:
                     relaxed: bool = False, extra: dict | None = None) -> None:
         """Entrada con el núcleo de riesgo de siempre. `assessment`: una evaluación ya hecha (resultados con impulso,
         decision/earnings.py: la dirección la da el precio y la probabilidad es el acierto medido). `relaxed`: sin las
-        alarmas del libro de B-4 (listados de Upbit al instante, decision/upbit_listings.py: el salto vacía el libro y
-        las dispara todas); queda que haya libro y el tope de precio de la orden (D-2). `extra`: datos para la mejora
+        alarmas del libro de B-4 (los listados al instante: el salto vacía el libro y las dispara todas; los cortos por
+        avisos que hacen caer el precio en segundos); queda que haya libro y el tope de precio de la orden (D-2), y las
+        alarmas que habrían saltado quedan anotadas en la decisión (`alarmas_del_libro`). `extra`: datos para la mejora
         continua que van en la fila de la decisión (el aviso, el precio de referencia, los frenos; `resolved`)."""
         sym = self.market.symbol(asset)
         a = assessment or assess(ev, sig, asset, self.now, self.cfg, self.meta, allows_short=self.market.allows_short)
@@ -438,10 +439,12 @@ class _Run:
             analysis["plan"] = p.as_dict()
             moved = news_move(candles, t0, price, p.side)
             analysis["movido_desde_la_noticia"] = None if moved is None else round(moved, 5)
+            alarms = market_blocks(book, p.notional, self.limits, self.cfg, p.side, spread_z=z, last=tick["last"],
+                                   kyle_ratio=kyle_ratio(candles, minute(self.now)), fair=tick.get("fair") or None)
+            if relaxed:                               # no frenan (el salto o la caída las dispara): se anotan para
+                analysis["alarmas_del_libro"] = alarms   # medir en vivo cuáles saltan de verdad
             why = chase_blocks(moved, p.sl_frac, p.tp_frac, sig.category) + (
-                ([] if book.spread_bps is not None else ["libro_vacio"]) if relaxed else market_blocks(
-                    book, p.notional, self.limits, self.cfg, p.side, spread_z=z, last=tick["last"],
-                    kyle_ratio=kyle_ratio(candles, minute(self.now)), fair=tick.get("fair") or None))
+                ([] if book.spread_bps is not None else ["libro_vacio"]) if relaxed else alarms)
             if self.market.kind != "spot" and not liquidation_ok(1.0, p.side, p.sl_frac, float(inst.max_leverage),
                                                                  self.market.mmr_for(sym), self.cfg):
                 why.append("liquidacion_cerca_del_stop")

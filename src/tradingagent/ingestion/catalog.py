@@ -13,7 +13,7 @@ import os
 from dataclasses import replace
 
 from ..core.events import TIER_MEDIA, TIER_OFFICIAL
-from .announcements import BINANCE_LISTINGS, BITGET_LISTINGS, OKX_LISTINGS, UPBIT_NOTICES
+from .announcements import BINANCE_LISTINGS, BITGET_LISTINGS, BITHUMB_NOTICES, OKX_LISTINGS, UPBIT_NOTICES
 from .sources import SourceSpec
 
 # 100 por página (en el pico de los resultados se presentan decenas de 8-K por minuto) y cada 20 s: el 8-K de
@@ -80,6 +80,12 @@ DEFAULT_SOURCES = (
     # primer pico se devuelve). Desde la PC solo anda con el almacén de certificados de Windows (red del 3-nov).
     SourceSpec("upbit.avisos", UPBIT_NOTICES, tier=TIER_OFFICIAL, interval_s=8, max_age_s=600, category="listado",
                format="upbit", os_trust=True),
+    # Avisos de Bithumb (en coreano): su fin del soporte cae en los primeros segundos (decision/korean_notices.py) y
+    # en los avisos conjuntos con Upbit, Bithumb publica primero o junto. Cada 1 s (~2 KB, los últimos 5); una caída
+    # no es un bloqueo: se reintenta como mucho a los 30 s. Solo alimenta su regla (live.on_news).
+    SourceSpec("bithumb.avisos", BITHUMB_NOTICES, tier=TIER_OFFICIAL, interval_s=1.0, timeout_s=5, max_age_s=600,
+               category="listado", format="bithumb", headers={"Accept": "application/json"}, max_bytes=200_000,
+               max_backoff_s=30, open_after=20, cooldown_s=120),
     # OKX y Bitget quedan apagadas: en el mismo estudio, los listados de OKX no movieron la moneda en MEXC (mediana
     # ≈ 0 % a 5, 15 y 60 min) y los de Bitget son casi todos de acciones. Se prenden en config.yaml si cambia.
     SourceSpec("okx.listados", OKX_LISTINGS, tier=TIER_OFFICIAL, interval_s=20, max_age_s=600, category="listado",

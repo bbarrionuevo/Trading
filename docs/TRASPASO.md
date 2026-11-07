@@ -30,6 +30,19 @@ Lo que pidió, en sus palabras:
 
 ## 2. Estado al 4-nov-2026 (y lo nuevo del 5-nov arriba)
 
+**7-nov: avisos coreanos al instante y los deslistados listos para dinero real** (REGLAS v3.7,
+`decision/korean_notices.py`; pedidos del dueño: "Sí, armalas" y "a Deslistados preparemos todo y hagamos las pruebas q
+tengamos q hacer y pasmos a dinero real. Tope de la orden: tenes autorizacion para ensanchar. si fin de soporte o corto
+por advertencia upbit es bueno preparemos todo tambien para ya entrar en real"). Dos reglas nuevas: la **advertencia de
+Upbit** (corto, hasta 30 s del mensaje, si no cayó 3 %; stop 10 %, 4 h, 2 % al stop) y el **fin del soporte** de Upbit o
+Bithumb, el primer aviso que llega (corto, hasta 5 s, si no cayó 6 %; stop 10 %, 5 min, 1 % al stop). Bithumb entra como
+fuente (`bithumb.avisos`, la lista de avisos de su web, cada 1 s; solo alimenta esa regla). El **deslistado de Binance**
+pasa a tope de orden de 2 % (el sobre: techo de 200 pb; lo demás sigue ≤ 0,5 %) y, como las caídas al instante, no mira
+las alarmas del libro (B-4; quedan anotadas en `alarmas_del_libro`). Probado: la prueba de punta a punta en la PC (con
+el lector de Bithumb de verdad contra un Bithumb falso), una ida y vuelta de un corto de verdad en la DEMO de Binance con
+el venue del dinero real y `binance-real-check --demo` con el paso nuevo del corto. Las tres corren en el simulacro de
+Tokio al instalar; con dinero real, las arma el dueño (sección 6).
+
 **6-nov a la tarde: listados de Binance al instante** (REGLAS v3.6, `decision/binance_listings.py`): apenas llega "Binance Will List …" o un HODLer Airdrop de una moneda con perpetuo, si la orden sale a ≤ 2,2 s de publicado y el precio no subió más de 8 %, largo sin esperar a la IA (stop 10 %, 15 min, 3 % al stop, como Upbit). El dueño pidió armarla ya con dinero real ("siendo tan pocos los avisos [...] quizá sea bueno armarlo ya para dinero real"): la arma él sumándola al armado (sección 6). Hasta entonces corre en el simulacro de Tokio.
 
 **5-nov a la noche: TODO corre en el servidor de Tokio** (pedido del dueño: "queda ya todo en Tokio"):
@@ -203,9 +216,13 @@ a Tokio como motor. Lee este archivo primero, y lo que manda es esta lista:
      escribe solo `SIMULACRO.json` y nunca toca el armado real (reinicia al agente: hacerlo sin posiciones reales).
    - El simulacro nunca opera lo del dinero real: en `simulacro/.../decisiones`, los listados de Upbit dicen
      `la_opera_el_dinero_real`. Si aparece una entrada del simulacro en una estrategia del dinero real, avisar.
-   - **Dinero real solo para los listados de Upbit** (sección 6): cada entrada real tiene que ser `listado_upbit`; las
-     demás estrategias dicen `estrategia_no_armada` en `real/.../decisiones`. Si aparece otra estrategia operando con
-     dinero real, frenar primero (`touch ~/.trading/KILL`) y avisar al dueño.
+   - **Dinero real solo para las estrategias del armado** (sección 6; `cat ~/.trading/ARMADO.json` → `estrategias`;
+     el 7-nov: `listado_upbit` y `listado_binance`): cada entrada real tiene que ser de una de esas; las demás dicen
+     `estrategia_no_armada` en `real/.../decisiones`. Si aparece otra estrategia operando con dinero real, frenar primero
+     (`touch ~/.trading/KILL`) y avisar al dueño.
+   - **Cortos al instante** (deslistado, etiqueta de vigilancia, fin del soporte): en la decisión de entrada,
+     `analisis.alarmas_del_libro` dice qué alarmas del libro habrían frenado (no frenan: REGLAS B-4). Anotar en §12 cuáles
+     aparecen en cada caso real: con ~10 se revisa si la excepción se sostiene.
 4. **Avisos oficiales:** medir la demora de punta a punta en Tokio (publicado, recibido, decisión y entrada).
    - En los listados de Upbit al instante, mirar `variante-ia.jsonl`: es la prueba A/B que pidió el dueño (entrar al
      instante contra esperar a la IA).
@@ -215,16 +232,24 @@ a Tokio como motor. Lee este archivo primero, y lo que manda es esta lista:
      publicación, si es redonda, y la demora, hasta tener ~10. Se ven con
      `grep -h '"source":"binance.ws"' ~/.trading/journal/*.jsonl | grep '"kind":"news"'` (`published_at`, `age_s`).
    - En el registro del agente, cada entrada al instante deja sus tiempos por etapa: "listado de Upbit al instante
-     (X): esperó N ms · candado · contrato · velas, libro y precio · orden a los M ms". Lo mismo para los deslistados
-     y la etiqueta de vigilancia.
+     (X): esperó N ms · candado · contrato · velas, libro y precio · orden a los M ms". Lo mismo para los deslistados,
+     la etiqueta de vigilancia, la advertencia de Upbit y el fin del soporte.
+   - **Bithumb** (`bithumb.avisos`, desde el 7-nov): la demora de cada aviso, de publicado a recibido, tiene que ser
+     ~1 s (`grep -h '"source":"bithumb.avisos"' ~/.trading/journal/*.jsonl | grep '"kind":"news"'`: `age_s`). Si da
+     minutos, su lista dejó de ser fresca: el freno de 5 s del fin del soporte no deja entrar, pero hay que buscar otra
+     fuente. Si la fuente aparece "abierta" o con HTTP 403 en el latido, Bithumb nos bloqueó: avisar al dueño.
 5. **Después de cada cambio**, la prueba de punta a punta **en la PC** (pedido del dueño, 6-nov: "para aliviar la
    carga de Tokio todas las pruebas ... desde mi PC pero simulando los tiempos de Tokio"):
    `python deploy/tokio/prueba_listado.py --pc`, desde el worktree con su `.venv` (`PYTHONPATH=src`).
    - Corre un agente y un relé aparte en la PC, contra un Binance falso local que contesta en ~3 ms (como Binance desde
      Tokio). No toca el simulacro, Telegram ni la cuenta real; solo usa la clave de la IA de la PC (centavos).
-   - Tiene que terminar con las tres entradas (SOL, ETH y el corto de DOGE), la IA confirmando y sin errores.
+   - Tiene que terminar con 4 entradas (SOL, el corto de DOGE, el de XRP por la advertencia de Upbit y el de ADA por
+     el fin del soporte de Bithumb, que lee el lector de verdad contra un Bithumb falso local), las 2 últimas (ETH y
+     PEPE) frenadas solo por el sobre (`maximo_de_posiciones`: deja 4), la IA confirmando y sin errores ("entradas: 4
+     de 4 posibles ... avisos sin su regla: ninguno").
    - Medido el 6-nov en la PC: orden a los 148 ms en la primera (conexiones en frío), 48 ms y 33 ms en las otras; IA
-     1,3-2,6 s.
+     1,3-2,6 s. El 7-nov: SOL 95 ms (en frío), DOGE 35 ms, XRP 44 ms, ADA 48 ms (leído a <1 s de publicado); la IA
+     confirmó los títulos coreanos en 1,1-1,2 s; con 4 posiciones abiertas, el candado 5-6 ms (antes 156 ms, ver §12).
    - En Tokio (`~/trading/.venv/bin/python ~/trading/deploy/tokio/prueba_listado.py`, Binance real, suma ~150 MB
      mientras corre) solo cuando cambia el servidor, Python o las dependencias, o antes de armar dinero real.
 
@@ -326,6 +351,7 @@ Siempre así: `cd $env:USERPROFILE\TRADING; .\.venv\Scripts\python -m tradingage
 |---|---|
 | `binance-real-check` | Prueba sin riesgo de la clave real de Binance: una orden que no se puede ejecutar y un stop lejísimos, verificación y cancelación. Hace falta antes de armar. **La corre el dueño** (pone órdenes reales) |
 | `binance-real-check --demo` | La misma prueba en la DEMO de Binance (plata ficticia, claves `*_TEST`). No cuenta para armar. La puede correr Claude |
+| `python deploy/demo_corto.py` | Una ida y vuelta de un CORTO de verdad en la DEMO con el venue del dinero real (como un deslistado: tope de 2 %, stop de emergencia al +30 %, salida a los 6,5 s). Plata ficticia, carpeta temporal. La puede correr Claude |
 | `armar-real` | Arma el dinero real en Binance con todo el saldo. **Solo lo corre el dueño:** pide la frase exacta (REGLAS A-2). `--exchange mexc` para MEXC |
 | `armar-real --simulacro --dias 7` | El simulacro local: el operador real con el libro real de Binance y órdenes simuladas en la PC, con 100 USDT de mentira (nunca el saldo real: se publica). `--capital N` para otro capital, `--demo` contra la demo de Binance, `--exchange mexc` en MEXC |
 | `informe-simulacro` | Calibración: llegada de las noticias por fuente, de la noticia a la entrada, acierto, ganancia neta por categoría, deslizamiento. `--cuenta practica|demo|real`, `--dias N` |
@@ -392,6 +418,30 @@ la semana (4 %) y el halt por caída (8 %). La IA lee el aviso después de entra
    canal llegó tarde (más de 2,2 s: no entra, la opera la regla general con la IA solo en el simulacro) o
    `ya_subio:+X%`; en el diario, la demora del canal (`binance.ws`, de publicado a recibido). Con ~10 listados se
    revisa el freno (2,2 s) con lo medido.
+
+### Sumar los deslistados de Binance y los avisos coreanos al dinero real (REGLAS v3.7, 7-nov)
+
+Pedido del dueño (7-nov): "a Deslistados preparemos todo y hagamos las pruebas q tengamos q hacer y pasmos a dinero
+real [...] si fin de soporte o corto por advertencia upbit es bueno preparemos todo tambien para ya entrar en real".
+
+| Estrategia | Qué hace | Tamaño | Evidencia |
+|---|---|---|---|
+| `deslistado_corto` | corto apenas llega "Binance Will Delist …" (hasta 60 s, si no cayó 4 %), tope de orden 2 %, stop 20 %, 4 h | 0,10 veces el saldo: 2 % al stop | 49 monedas: mediana +17,96 %, 84 %; con tope de 2 % se llena 43 de 45 |
+| `advertencia_upbit` | corto apenas llega la advertencia de Upbit por Telegram (hasta 30 s, si no cayó 3 %), stop 10 %, 4 h | 0,20 veces: 2 % al stop | 42 monedas: mediana +2,02 %, 69 %, las dos mitades positivas |
+| `fin_soporte_corto` | corto con el primer fin del soporte de Upbit (Telegram) o Bithumb (su web, cada 1 s), hasta 5 s si no cayó 6 %, stop 10 %, 5 min | 0,10 veces: 1 % al stop | 25 monedas: mediana +3,73 %, 80 %; Bithumb sin probar en vivo |
+
+1. Fusionar el PR (protegido: lo fusiona el dueño). Claude lo instala en Tokio **sin posiciones reales abiertas** y
+   corre la prueba de punta a punta allá (`prueba_listado.py`).
+2. En el servidor, por SSH (los corre el dueño), con `TRADING_HOME=/home/ubuntu/.trading` y desde `~/trading`:
+   - `.venv/bin/python -m tradingagent binance-real-check`: la prueba sin riesgo; desde el 7-nov valida también la venta
+     en corto IOC con el tope de 2 % (en la demo ya pasó).
+   - Con ninguna posición real abierta, su frase: `.venv/bin/python -m tradingagent armar-real --estrategias
+     listado_upbit,listado_binance,deslistado_corto,advertencia_upbit,fin_soporte_corto` (o solo las que quiera).
+     Telegram tiene que nombrar las cinco. El simulacro de al lado las suelta solo (nunca opera lo de la plata).
+3. Qué mirar en cada caso real: en `real/binance-futuros/decisiones/`, los frenos (`*_tarde:Xs`, `ya_cayo:-X%`), la
+   demora del canal (`aviso.demora_s`), las alarmas del libro que no frenaron (`analisis.alarmas_del_libro`) y la
+   segunda lectura de la IA (`variante-ia.jsonl`). Con 4 posiciones abiertas el sobre no deja abrir otra: un aviso de
+   varias monedas puede llenar el cupo.
 
 
 Qué mirar, en orden:
@@ -460,11 +510,18 @@ dueño qué hiciste y por qué.
 - **Deslistados de Binance** (4-nov, `docs/ESTUDIO-DESLISTADOS.md`, segundo a segundo con el archivo público de
   Binance): el precio cae entre los 2 y 5 s del aviso (mediana −8 % a los 5 s). Corto a los 2 s, stop 20 %, 4 h:
   mediana +18 %, media +13 %, 79 % positivas (34 monedas de 17 avisos desde 2025); a los 5 s sin filtro +2,6 % (2025:
-  −3 %). Si todavía no cayó más de 4 %, +7 a +12 % de media aunque se llegue a los 3-5 s.
+  −3 %). Si todavía no cayó más de 4 %, +7 a +12 % de media aunque se llegue a los 3-5 s. El 7-nov, con 49 monedas
+  (`estudios/hipotesis_direccionales.py`): mediana +17,96 %, 84 %; entrar a 0,1, 1,3 o 2 s da lo mismo; el tope de la
+  orden de 0,5 % dejaba afuera las mejores (con 2 %, 43 de 45 y +12,3 % por aviso: REGLAS L-11).
 - **Resultados y el control de liquidez** (5-nov, las 60 operaciones del estudio): el freno de Kyle (> 4 veces el impacto de precio de la hora previa) deja afuera 14 (23 %). Esas dieron mediana +0,34 % y 8 de 14 positivas; las que entran, mediana +1,41 % y 31 de 46. El freno se queda: saca las más flojas.
 - **6-K de empresas extranjeras** (5-nov, `estudios/eventos_6k.py`, 473 avisos de 15 empresas con perpetuo: TSMC, Alibaba, SK Hynix, Novo Nordisk, Sony, ARM, ASML...): solo 4 % mueve el perpetuo a los 2 min (al azar 2,5 %) y seguirlo no rinde (n 12, media +0,25 %). Publican los resultados en su país antes del 6-K: cuando llega a la SEC, el mercado ya reaccionó. No se opera. **Coinbase:** su página de estado solo trae incidentes técnicos, no listados (no sirve de fuente).
 - **Otros 8-K de la SEC** (5-nov, `estudios/eventos_sec.py`, 1.136 8-K sin resultados de 141 empresas con perpetuo desde febrero): mueven el precio (impulso ≥ 0,5 % a los 2 min en 9 % de los casos, contra 1,5 % en horas al azar), pero seguirlo no rinde (n = 44, media +0,6 %, 52 % positivas; por ítem, muestras de 8 a 23). No se opera.
 - **Etiqueta de vigilancia de Binance** (5-nov, `docs/ESTUDIO-DESLISTADOS.md`, 31 monedas de 14 avisos desde 2025): cae −0,7 % a los 2 s y −4 % a los 5 s; corto a los 2 s si no cayó más de 2 %, stop 10 %, 4 h: mediana +3,6 %, 85 % positivas (2025 flojo, 2026 18 de 18). A los 3-5 s ya no hay ventaja.
+- **Upbit y Bithumb, avisos negativos, operación por operación** (7-nov, `estudios/hipotesis_direccionales.py
+  advertencias`; reemplaza al del 5-nov de abajo, que tenía 13 y 6 casos): advertencia de Upbit (42 monedas) sin salto,
+  baja de a poco: corto a los 2 s, 4 h, mediana +2,02 %, 69 %; la de Bithumb (43) +0,90 %, 53 %. Fin del soporte, el
+  primer aviso de Upbit o Bithumb (25): cae en los primeros segundos; a los 2 s, 5 min, mediana +3,73 %, 80 %; a los
+  10 s, +0,60 %. Son las reglas de `decision/korean_notices.py` (REGLAS v3.7, C-4).
 - **Upbit, avisos negativos, segundo a segundo en Binance** (5-nov, `estudios/upbit_negativos.py`): advertencias (n 13) sin ventaja; fin del soporte (n 6) cae de a poco en el primer minuto (−3 % a los 10 s, −6 % al minuto) y el corto a los 10 s con 4 h dio +4 %, −4 %, +1 %, +17 %, +19 % y −11 %: seguir midiendo.
 - **Camino interno del agente** (5-nov): de un aviso a la orden, ~30 ms (antes ~220 ms: el lector de libros dejaba 200 ms entre pedidos; ahora balde de fichas, 5 por segundo con ráfaga).
 - **Funding extremo** (4-nov, `estudios/funding.py`, 114 perpetuos 2020-2026): sin ventaja estable (se da vuelta según
@@ -579,6 +636,10 @@ dueño qué hiciste y por qué.
     (`~/diag/bithumb_demora.py`, nice 19, ~20 MB, un pedido por segundo a cada fuente; resultados en
     `~/diag/bithumb-demora.jsonl`: filas `nuevo` con la demora de cada fuente; `http` 403 seguido = nos bloquearon).
     No matarlo. Si gw muestra los avisos a ~1 s, la regla como Upbit leyendo gw (PR protegido, lo aprueba el dueño).
+    **Desde el 7-nov el agente ya lee gw** (`bithumb.avisos`, cada 1 s, REGLAS v3.7), pero solo para el fin del
+    soporte (corto; en los avisos conjuntos con Upbit, Bithumb publica primero o junto): sus listados todavía no se
+    operan. Cuando el medidor (o el diario del agente) muestre la demora real de gw en avisos de verdad, decidir la
+    regla de listados de Bithumb con su ventana de ~1 s.
     Pagas, si no: cryptolisting.ws (WebSocket de Binance, Upbit y Bithumb, precio a pedido) o PKCryptoListing (dice
     < 1 s, tiene plan gratis); las dos piden una cuenta del dueño.
 
@@ -787,6 +848,11 @@ sección 11). Un estudio nuevo va con su línea acá.
 | 7-nov | **Hipótesis 1: corto por deslistado de Binance** (pedido del dueño: "a los ~40-100 ms de publicado"; 49 monedas desde feb-2025) | el precio cae entre los 3 y los 5 s: entrar a 0,1, 1,3 o 2 s da lo mismo. A 2 s, salida a las 4 h (la regla de hoy): mediana +17,96 %, media +13,43 %, 84 % (1.ª mitad +7,0 %, 2.ª +19,6 % de media); a los 60 s +7,50 %; stops que siguen al pico, +1,9 a +4,0 %. El piso llega a los ~78 min (mediana). La límite IOC con tope de 0,5 % se llena 33 de 49 a los 2 s (con 2 %, 43). El deslistado del propio perpetuo (20): primero sube, sin ventaja | ya es un módulo (`deslistado_corto`, en el simulacro); con plata lo decide el dueño; el tope de 0,5 % es del sobre (limits.yaml, suyo) | `estudios/hipotesis_direccionales.py` |
 | 7-nov | **Hipótesis 2: largo en BNB por Launchpool** (30 desde 2024; 64 HODLer y 5 Megadrop para comparar) | BNB salta entre los 2 y los 3 s (+0,6 a +0,8 %). Entrando a 0,1-1,3 s: mediana +0,54 %, media +0,83 %, 77-80 % a los 45 s; a los 2 s, +0,27 % y +0,49 %; a los 2,7 s, nada. HODLer (BNB retroactivo): nada. Desde 2025 hubo 9 Launchpool (el último en mar-2026) | no: ventaja chica, rara y solo si se llega antes de los 2 s | `estudios/hipotesis_direccionales.py` |
 | 7-nov | **Hipótesis 3: corto por advertencia de Upbit y Bithumb (DAXA)** (desde 2025) | Upbit (42): sin salto; a los 2 s, salida a las 4 h: mediana +2,02 %, media +2,77 %, 69 % (las dos mitades positivas); a los 45-60 s, +0,5-0,7 %; el piso llega a ~1,5 h. Bithumb (43): más flojo, a las 4 h +0,90 %, 53 %. Liquidez de sobra (0,5 % de tope se llena siempre). Su fin del soporte es más fuerte: Upbit (16) a los 5 min +4,59 %, 88 %; Bithumb (20) +1,33 %, media +3,47 %, 75 %. Levantada y prórroga: sin ventaja | candidatos: corto por advertencia de Upbit (salida 4 h) y por fin del soporte (Upbit y Bithumb); los decide el dueño (PR protegido) | `estudios/hipotesis_direccionales.py` |
+| 7-nov | **Las reglas coreanas, como las opera el agente** (el dueño: "Sí, armalas") | Fin del soporte con el PRIMER aviso (Upbit o Bithumb) por moneda y día: 25 monedas, 11 anunciadas por los dos a la vez, y Bithumb publicó primero o junto en las 11 (0 a 6 s antes). Corto a los 2 s, salida a los 5 min: mediana +3,73 %, media +4,28 %, 80 % (mitades +5,1 / +3,5 %); a 1 s +5,03 %; a 5 s +3,59 %; a 10 s la mediana +0,60 %. Freno "ya cayó más de 6 %" desde la apertura del minuto: las que deja afuera rinden menos (−0,8 % a −2 % a los 2-5 s). Advertencia de Upbit: a los 30 s todavía +1,56 % de mediana (4 h); con el freno de 3 %, las que deja afuera perdían (−10 %, −6 %). Los 3 "cambio de fecha" (변경) no tenían perpetuo: excluirlos no cambia la muestra | `decision/korean_notices.py`: advertencia hasta 30 s y 3 %; fin del soporte hasta 5 s y 6 %, salida 5 min | `estudios/hipotesis_direccionales.py` (bloque 5) |
+| 7-nov | **¿Cuánto ensanchar el tope de la orden?** (el dueño: "tenes autorizacion para ensanchar") | Con la límite IOC y la orden a los 2 s, por aviso (las no llenadas, 0): deslistado de Binance con su freno de 4 %, tope 0,5 % → 33 de 45 (+7,23 %), 1 % → 40 (+10,77 %), 2 % → 43 (+12,27 %), 3 % → 44 (+12,48 %): las que solo entran con más tope son las caídas más rápidas (+15 a +36 %). A 1,3 s: 0,5 % → 38, 2 % → 43. Fin del soporte: 0,5 % → 21 de 24 (+4,54 %), 2 % → 23 (+4,47 %): no suma. Advertencia: 0,5 % → 42 de 42 | deslistado 2 % (`policy.EXITS`); lo demás 0,5 %; el sobre pasa a 200 pb de techo y una orden sin tope pedido va con 0,5 % (`safety.DEFAULT_SLIPPAGE_BPS`); REGLAS L-11 | `estudios/hipotesis_direccionales.py` (bloque 5) |
+| 7-nov | **Las alarmas del libro en las caídas al instante** | No hay datos para medirlas: el archivo público de Binance dejó de guardar el mejor precio de los perpetuos en mar-2024 (`bookTicker`) y no hubo ningún deslistado desde que existe la regla (4-nov). El estudio mide entrar EN la caída (la primera operación después de la orden), así que mirarlas era apartarse de lo medido | sin alarmas en el deslistado, la vigilancia y el fin del soporte (como los listados al instante); quedan anotadas en `alarmas_del_libro` para medirlas en vivo (REGLAS B-4) | `research/shadow.py` |
+| 7-nov | **El candado del operador con posiciones abiertas** | Prueba de la PC: con 4 posiciones abiertas, un listado de Upbit esperó 156 ms el candado: la vigilancia de cada segundo pedía los 4 libros de a uno con el candado tomado. Ahora los pide juntos y antes del candado: 5-6 ms | arreglado (`live.watch_once`); importa más ahora que los cortos de 4 h dejan posiciones abiertas | `deploy/tokio/prueba_listado.py --pc` |
+| 7-nov | **Pruebas para el dinero real de los cortos** | (1) Prueba de punta a punta en la PC (Binance falso a ~3 ms y un Bithumb falso leído por el lector de verdad): DOGE 35 ms, XRP (advertencia) 44 ms, ADA (fin del soporte, leído a <1 s de publicado) 48 ms; la IA confirmó los títulos coreanos en 1,1-1,2 s; ETH y PEPE frenaron solo por el sobre; sin errores. (2) Ida y vuelta de un corto en la DEMO de Binance con el venue del dinero real (XRPUSDT, 20 USDT ficticios): venta IOC con límite exacto −2,00 % bajo el mejor comprador, llenada al mejor comprador; posición −16,9; stop de emergencia STOP_MARKET de compra al +30,0 % de cierre total; salida "solo reducir" llenada a los 6,5 s; sin posición ni stop al final. (3) `binance-real-check --demo`: todo OK, con el paso nuevo de la venta en corto con tope de 2 % | listo para que el dueño arme (sección 6); falta `binance-real-check` en Tokio con la clave real (lo corre el dueño) | `deploy/tokio/prueba_listado.py --pc`, `deploy/demo_corto.py` |
 | 6-nov | **Binance: ¿el perpetuo va 10 s detrás del listado?** (pedido del dueño; 66 monedas de 58 avisos con perpetuo, ene-2025 a oct-2026, operación por operación) | no hay 10 s ni es en la apertura del spot (ahí el perpetuo no sigue al spot: comprar pierde, mediana −1,6 %): es en el AVISO. El perpetuo salta a los 2,30 s de publicado (mediana; mitad central 2,15-2,58 s); a los 2 s, nada. Comprar a los 2 s con la regla de Upbit (stop 10 %, 15 min): mediana +7,50 %, media +18,58 %, 77 % (1.ª mitad +13,8 %, 2.ª +4,1 %); a los 2,5 s +2,0 %; a los 3,5 s (esperando a la IA) −0,5 %. El canal llega a Tokio a 1,2-1,8 s (5 avisos; 2,6 s uno a hora redonda) | candidato a regla al instante como la de Upbit, con freno de demora; lo decide el dueño (PR protegido) y se mide primero en el simulacro | `estudios/binance_listados_segundos.py` |
 | 5-nov | **Agente completo en Tokio (simulacro)** | Claude 1,8 s; Binance 2-5 ms (PC ~320 ms); fuentes OK salvo el sitio de Upbit (403); memoria: agente 77 MB y relé 63 MB de 416 | andando (`agente-tokio`); telemetría al tablero de la PC; la pausa de la PC frena a Tokio | RELE-TOKIO |
 | 5-nov | **1.ª operación del simulacro** | Wendy's, resultados: entró a los 120 s, salió a los 30 min, −0,27 USDT (−0,5 %); su comunicado salió minutos antes del 8-K | normal (pierden ~35 %) | simulacro |

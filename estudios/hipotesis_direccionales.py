@@ -27,6 +27,10 @@ Resultado (7-nov; docs/TRASPASO.md §12):
   2025). HODLer: nada.
 - Advertencia de Upbit (42): sin salto, baja de a poco; a las 4 h mediana +2,02 %, 69 %. Bithumb (43): +0,90 %, 53 %. Su
   fin del soporte: Upbit (16) a los 5 min +4,59 %, 88 %; Bithumb (20) +1,33 %, 75 %.
+- 5. Como la opera el agente (7-nov, decision/korean_notices.py y el tope de la orden): el fin del soporte con el
+  PRIMER aviso de Upbit o Bithumb (25 monedas; en las 11 conjuntas Bithumb publicó primero o junto): a los 2 s, 5 min,
+  mediana +3,73 %, 80 %. El tope de la límite IOC: en el deslistado (freno de 4 %, orden a los 2 s) 0,5 % se llena 33 de
+  45 (+7,2 % por aviso) y 2 %, 43 (+12,3 %): las que faltaban eran las mejores. En lo coreano, 0,5 % ya alcanza.
 
 Uso: python estudios/hipotesis_direccionales.py <deslistados|launchpool|advertencias> <carpeta de datos>
 (en la PC: Tokio solo produce; el CMS de Binance, una página cada 30 s: L-7).
@@ -182,9 +186,13 @@ def upbit_notices() -> list[dict]:
 
 def korean(exchange: str, t0: int, title: str) -> list[dict]:
     """Un título de Upbit o Bithumb → (moneda, tipo, lado) por cada moneda. Los títulos mezclados ("A 지정 연장, B
-    거래지원 종료") se parten y cada tramo toma el tipo del que lo sigue."""
+    거래지원 종료") se parten y cada tramo toma el tipo del que lo sigue. Un cambio de fecha (변경) no cuenta (7-nov: los tres
+    de la muestra no tenían perpetuo; las mismas reglas que decision/korean_notices.py)."""
     out, kind = [], None
     for seg in reversed(re.split(r",\s*|\s+및\s+", title)):
+        if "변경" in seg:                              # un cambio de fecha de un aviso anterior: no es nuevo
+            kind = None
+            continue
         for name, side, rx in UPBIT_KINDS:
             if rx.search(seg) or (name == "advertencia" and re.search(r"거래유의종목\s*지정(?!\s*(?:연장|해제))", seg)):
                 kind = (name, side)
@@ -486,6 +494,74 @@ def report(name: str, rows: list) -> None:
         f"tope {c * 100:g} %: {sum(r['ioc'][c] for r in rows)} de {len(rows)}" for c in CAPS))
 
 
+# -- 5. como la opera el agente (7-nov) -------------------------------------------------------------------------------
+CAPS_FINE = (0.0025, 0.005, 0.0075, 0.01, 0.015, 0.02, 0.03, 0.05)
+
+
+def cached_tape(ev: dict):
+    """La ventana del evento desde la caché (sin bajar nada): la misma que usó el informe."""
+    for sym in (f"{ev['coin']}USDT", f"1000{ev['coin']}USDT"):
+        if (CACHE / f"{sym}-{ev['t0']}.json").exists():
+            rows = tape(sym, ev["t0"])
+            if rows:
+                tp = Tape(rows, klines_1m(sym, ev["t0"]))
+                pre = tp.last_before(ev["t0"])
+                if pre is not None and ev["t0"] - tp.t[pre] <= BEFORE_S * 1000:
+                    return tp
+    return None
+
+
+def agent_view(name: str, events: list, delays: tuple, hold_s: int, stop: float, brake: float) -> None:
+    """Con los frenos del agente: entra si a la demora no cayó más que `brake` desde la apertura del minuto del aviso
+    (lo que mira en vivo). Por demora: lo que rinde y, por tope de la límite IOC, cuántas se llenan y lo que rinde POR
+    AVISO (las que no se llenan, 0): si las que solo se llenan con más tope son las mejores, conviene ensancharlo."""
+    rows = []
+    for ev in sorted(events, key=lambda e: e["t0"]):
+        tp = cached_tape(ev)
+        if tp is None:
+            continue
+        i0 = tp.first_at(ev["t0"] // 60000 * 60000)
+        for d in delays:
+            i = tp.first_at(ev["t0"] + d * 1000)
+            moved = None if i is None or i0 is None else ev["side"] * (tp.p[i] / tp.p[i0] - 1)
+            if moved is not None and moved > brake:
+                rows.append({"d": d, "out": True})
+                continue
+            rows.append({"d": d, "out": False, "ret": tp.run(ev["t0"] + d * 1000, ev["side"], hold_s, stop),
+                         "fills": {c: tp.ioc(ev["t0"], d, ev["side"], c) for c in CAPS_FINE}})
+    print(f"\n== {HYP} · {name}: como la opera el agente (freno de {brake * 100:g} % desde la apertura del minuto, "
+          f"salida {label(hold_s)}, stop {stop * 100:g} %) ==")
+    for d in delays:
+        rs = [r for r in rows if r["d"] == d and not r["out"] and r["ret"] is not None]
+        out = sum(1 for r in rows if r["d"] == d and r["out"])
+        if not rs:
+            continue
+        half = len(rs) // 2
+        a, b = [r["ret"] for r in rs[:half]], [r["ret"] for r in rs[half:]]
+        print(f"  a {d:>4} s: {summary([r['ret'] for r in rs])} · mitades {pct(statistics.mean(a)) if a else '—'} / "
+              f"{pct(statistics.mean(b)) if b else '—'} · afuera por el freno {out}")
+        print("    tope IOC: " + " · ".join(
+            f"{c * 100:g} % {sum(r['fills'][c] for r in rs)}/{len(rs)} "
+            f"({pct(sum(r['ret'] for r in rs if r['fills'][c]) / len(rs))} por aviso)" for c in CAPS_FINE))
+
+
+def first_notice(events: list) -> list:
+    """El fin del soporte como lo opera el agente: el PRIMER aviso de Upbit o Bithumb por moneda y día (en los
+    conjuntos, Bithumb publica primero o junto)."""
+    first: dict = {}
+    for e in events:
+        key = (e["coin"], time.strftime("%Y-%m-%d", time.gmtime(e["t0"] / 1000)))
+        if key not in first or e["t0"] < first[key]["t0"]:
+            first[key] = e
+    exchanges: dict = {}
+    for e in events:
+        key = (e["coin"], time.strftime("%Y-%m-%d", time.gmtime(e["t0"] / 1000)))
+        exchanges.setdefault(key, set()).add(e["kind"].split("_")[0])
+    both = sum(1 for k in first if len(exchanges[k]) == 2)
+    print(f"\nfin del soporte: {len(first)} monedas-día, {both} anunciadas por los dos")
+    return list(first.values())
+
+
 def main() -> None:
     CACHE.mkdir(parents=True, exist_ok=True)
     events = {"deslistados": events_deslistados, "launchpool": events_launchpool,
@@ -523,6 +599,13 @@ def main() -> None:
     print(f"\nafuera: {skipped}")
     for kind in sorted(by_kind):
         report(f"{HYP} · {kind}", by_kind[kind])
+    if HYP == "deslistados":                          # 5. el tope de la orden con el freno de la regla (4 %)
+        agent_view("deslistado", [e for e in events if e["kind"] == "deslistado"], (1.3, 2.0), 14400, 0.20, 0.04)
+    elif HYP == "advertencias":                       # 5. las dos reglas de decision/korean_notices.py
+        agent_view("advertencia de Upbit", [e for e in events if e["kind"] == "upbit_advertencia"],
+                   (1.0, 2.0, 3.0, 5.0, 10.0, 30.0), 14400, 0.10, 0.03)
+        agent_view("fin del soporte, el primer aviso", first_notice(
+            [e for e in events if e["kind"].endswith("fin_del_soporte")]), (1.0, 2.0, 3.0, 5.0, 10.0), 300, 0.10, 0.06)
 
 
 if __name__ == "__main__":

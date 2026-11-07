@@ -254,8 +254,11 @@ EXITS = {"listado": ExitProfile(max_age_s=120, stop=0.10, hold_s=900, target=Fal
                                           max_slippage_bps=50, max_x=0.065),
          # Deslistados de Binance (decision/delistings.py, docs/ESTUDIO-DESLISTADOS.md): corto apenas llega el aviso si
          # el precio todavía no cayó, stop FIJO de 20 % y salida a las 4 h. Muestra chica: 0,10 veces = 2 % al stop.
+         # Tope de la orden de 2 % (estudios/hipotesis_direccionales.py, 7-nov): las que no se llenan con 0,5 % son
+         # las caídas más rápidas, las mejores; con la orden a los 2 s, 0,5 % se llena 33 de 45 (+7,2 % por aviso) y 2 %,
+         # 43 (+12,3 %). Más de 2 % casi no suma.
          "deslistado_corto": ExitProfile(max_age_s=60, stop=0.20, hold_s=4 * 3600, target=False, b_kelly=1.0,
-                                         max_slippage_bps=50, max_x=0.10),
+                                         max_slippage_bps=200, max_x=0.10),
          # Etiqueta de vigilancia de Binance (mismo estudio): cae menos (−4 % a los 5 s): stop FIJO de 10 %, salida a
          # las 4 h y 0,10 veces el saldo = 1 % al stop (muestra chica y muy sensible a la demora).
          "vigilancia_corto": ExitProfile(max_age_s=60, stop=0.10, hold_s=4 * 3600, target=False, b_kelly=1.0,
@@ -269,7 +272,16 @@ EXITS = {"listado": ExitProfile(max_age_s=120, stop=0.10, hold_s=900, target=Fal
          # largo apenas llega el aviso, si llegó a <= 2,2 s de publicado; la misma salida y el mismo tamaño que
          # Upbit (el dueño, 6-nov): stop FIJO de 10 %, 15 min, 0,30 veces = el 3 % del sobre al stop.
          "listado_binance": ExitProfile(max_age_s=10, stop=0.10, hold_s=900, target=False, b_kelly=1.5,
-                                        max_slippage_bps=50, max_x=0.30)}
+                                        max_slippage_bps=50, max_x=0.30),
+         # Advertencia de Upbit (decision/korean_notices.py, estudios/hipotesis_direccionales.py advertencias): corto
+         # apenas llega por Telegram si no cayó más de 3 %, stop FIJO de 10 % y salida a las 4 h. 42 monedas: 0,20 veces
+         # el saldo = 2 % al stop.
+         "advertencia_upbit": ExitProfile(max_age_s=30, stop=0.10, hold_s=4 * 3600, target=False, b_kelly=1.0,
+                                          max_slippage_bps=50, max_x=0.20),
+         # Fin del soporte de Upbit o Bithumb (mismo estudio): cae en los primeros segundos; corto si llegó a <= 5 s y no
+         # cayó más de 6 %, stop FIJO de 10 % y salida a los 5 min. 25 monedas: 0,10 veces el saldo = 1 % al stop.
+         "fin_soporte_corto": ExitProfile(max_age_s=5, stop=0.10, hold_s=300, target=False, b_kelly=1.0,
+                                          max_slippage_bps=50, max_x=0.10)}
 
 
 def chase_blocks(move: float | None, sl_frac: float, tp_frac: float, category: str = "") -> list[str]:

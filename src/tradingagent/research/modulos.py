@@ -60,17 +60,20 @@ def _exits(cat: str) -> list[list[str]]:
     hold = p.hold_s
     hold_txt = f"{_num(hold / 3600)} h" if hold >= 3600 else f"{_num(hold / 60)} min"
     return [["Stop", f"fijo de {_num(p.stop * 100)} %"], ["Salida", f"a las {hold_txt}" if hold >= 3600 else f"a los {hold_txt}"],
-            ["Tamaño", f"{_num(p.max_x)} veces el saldo: {_num(round(p.max_x * p.stop * 100, 1))} % al stop"]]
+            ["Tamaño", f"{_num(p.max_x)} veces el saldo: {_num(round(p.max_x * p.stop * 100, 1))} % al stop"],
+            ["Tope de la orden", f"{_num(p.max_slippage_bps / 100)} % del mejor precio"]]
 
 
 def catalog(home: Path, now: float | None = None) -> list[dict]:
     from ..decision import binance_listings as bl
     from ..decision import delistings as dl
     from ..decision import earnings as er
+    from ..decision import korean_notices as kn
     from ..decision import launches as la
     from ..decision import upbit_listings as ul
     real, sim, practice = status_of(home, now)
     dsl, vig = dl.BY_CATEGORY["deslistado_corto"], dl.BY_CATEGORY["vigilancia_corto"]
+    adv, fin = kn.BY_CATEGORY["advertencia_upbit"], kn.BY_CATEGORY["fin_soporte_corto"]
     mods = [
         {"id": ul.CATEGORY, "nombre": "Listados de Upbit al instante", "lado": "largo",
          "fuente": "canal oficial de Upbit en Telegram (@upbit_news), por el relé de Tokio",
@@ -93,8 +96,9 @@ def catalog(home: Path, now: float | None = None) -> list[dict]:
          "ia": "lee después de entrar; si no confirma, cierra",
          "parametros": [["Llega a tiempo", f"hasta {_num(dl.MAX_LATE_S)} s de publicado"],
                         ["Freno de precio", f"no entra si ya cayó más de {_num(dsl.max_drop * 100)} %"], *_exits(dsl.category)],
-         "estudio": {"texto": "34 monedas de 17 avisos desde 2025: a los 2 s mediana +18,2 %, media +12,8 %, 79 % "
-                              "positivas", "mediana_pct": 18.2, "acierto_pct": 79, "donde": "docs/ESTUDIO-DESLISTADOS.md"}},
+         "estudio": {"texto": "49 monedas desde feb-2025, entrando a los 2 s y saliendo a las 4 h: mediana +17,96 %, "
+                              "media +13,43 %, 84 % positivas; con tope de 2 % la orden se llena 43 de 45",
+                     "mediana_pct": 17.96, "acierto_pct": 84, "donde": "estudios/hipotesis_direccionales.py"}},
         {"id": vig.category, "nombre": "Etiqueta de vigilancia de Binance (corto)", "lado": "corto",
          "fuente": "canal de anuncios de Binance y su catálogo",
          "ia": "lee después de entrar; si no confirma, cierra",
@@ -102,6 +106,24 @@ def catalog(home: Path, now: float | None = None) -> list[dict]:
                         ["Freno de precio", f"no entra si ya cayó más de {_num(vig.max_drop * 100)} %"], *_exits(vig.category)],
          "estudio": {"texto": "31 monedas de 14 avisos desde 2025: a los 2 s, si no cayó 2 %, mediana +3,6 %, 85 % "
                               "positivas", "mediana_pct": 3.6, "acierto_pct": 85, "donde": "docs/ESTUDIO-DESLISTADOS.md"}},
+        {"id": adv.category, "nombre": "Advertencia de Upbit (corto)", "lado": "corto",
+         "fuente": "canal oficial de Upbit en Telegram (@upbit_news), por el relé de Tokio",
+         "ia": "lee después de entrar; si no confirma, cierra",
+         "parametros": [["Llega a tiempo", f"hasta {_num(adv.max_late_s)} s del mensaje"],
+                        ["Freno de precio", f"no entra si ya cayó más de {_num(adv.max_drop * 100)} %"],
+                        *_exits(adv.category)],
+         "estudio": {"texto": "42 monedas desde ene-2025, entrando a los 2 s y saliendo a las 4 h: mediana +2,02 %, "
+                              "media +2,77 %, 69 % positivas", "mediana_pct": 2.02, "acierto_pct": 69,
+                     "donde": "estudios/hipotesis_direccionales.py"}},
+        {"id": fin.category, "nombre": "Fin del soporte en Upbit o Bithumb (corto)", "lado": "corto",
+         "fuente": "Upbit por su canal de Telegram; Bithumb, la lista de avisos de su web (cada 1 s); el primero que llega",
+         "ia": "lee después de entrar; si no confirma, cierra",
+         "parametros": [["Llega a tiempo", f"hasta {_num(fin.max_late_s)} s de publicado"],
+                        ["Freno de precio", f"no entra si ya cayó más de {_num(fin.max_drop * 100)} %"],
+                        *_exits(fin.category)],
+         "estudio": {"texto": "25 monedas desde abr-2025 con el primer aviso que llega, entrando a los 2 s y saliendo "
+                              "a los 5 min: mediana +3,73 %, media +4,28 %, 80 % positivas",
+                     "mediana_pct": 3.73, "acierto_pct": 80, "donde": "estudios/hipotesis_direccionales.py"}},
         {"id": er.CATEGORY, "nombre": "Resultados de empresas con impulso", "lado": "largo o corto",
          "fuente": "8-K de resultados de la SEC (EDGAR), en los perpetuos TradFi de Binance",
          "ia": "no hace falta: la dirección la da el precio a los 2 min",

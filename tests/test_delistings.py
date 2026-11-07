@@ -86,6 +86,25 @@ async def test_si_todavia_no_cayo_va_corto_con_stop_de_20_y_salida_a_las_4_horas
     assert any("lo_opera_la_regla_de_deslistados" in r["motivos"] for r in rows if r["decision"] == "no_entrar")
 
 
+async def test_en_la_caida_no_frenan_las_alarmas_del_libro_quedan_anotadas_y_el_tope_es_de_2(tmp_path):
+    from tradingagent.decision.policy import PolicyConfig
+    from tradingagent.research.shadow import entry_slippage
+    clock = ManualClock(T0 + 3)
+    fake = FakeBinance(price=market(149.0), clock=clock, spread_bps=80.0)            # spread de 80 pb: B-4 frenaría
+    home = tmp_path / "home"
+    async with serve(fake.app()) as url, aiohttp.ClientSession() as s:
+        t = await trader(s, url, clock, home)
+        await t.on_news(notice("d3"))
+        await asyncio.gather(*t.pending)
+        assert "SOLUSDT" in t.st["positions"]
+    got = next(r for r in decisions(home) if r["decision"] == "entrar")
+    assert any(a.startswith("spread:") for a in got["analisis"]["alarmas_del_libro"])  # se ve cuáles saltaron
+    lim = limits_mod.load()
+    assert entry_slippage(PolicyConfig(), "deslistado_corto", lim) == 200                # 2 % (7-nov)
+    assert entry_slippage(PolicyConfig(), "vigilancia_corto", lim) == 50
+    assert entry_slippage(PolicyConfig(), "listado_upbit", lim) == 50
+
+
 async def test_si_ya_cayo_llegamos_tarde_y_no_entra(tmp_path):
     clock = ManualClock(T0 + 8)
     fake = FakeBinance(price=market(140.0), clock=clock)                # −6,7 %: ya pasó
