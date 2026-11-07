@@ -40,8 +40,9 @@ fuente (`bithumb.avisos`, la lista de avisos de su web, cada 1 s; solo alimenta 
 pasa a tope de orden de 2 % (el sobre: techo de 200 pb; lo demás sigue ≤ 0,5 %) y, como las caídas al instante, no mira
 las alarmas del libro (B-4; quedan anotadas en `alarmas_del_libro`). Probado: la prueba de punta a punta en la PC (con
 el lector de Bithumb de verdad contra un Bithumb falso), una ida y vuelta de un corto de verdad en la DEMO de Binance con
-el venue del dinero real y `binance-real-check --demo` con el paso nuevo del corto. Las tres corren en el simulacro de
-Tokio al instalar; con dinero real, las arma el dueño (sección 6).
+el venue del dinero real y `binance-real-check --demo` con el paso nuevo del corto. **Instalado en Tokio el 7-nov a
+las 09:13 UTC** (#80, `953bb9b`), sin posiciones reales abiertas: las tres corren en el simulacro; el dinero real sigue
+con los dos listados hasta que el dueño las sume (sección 6). Prueba de punta a punta allá, con el Binance real: OK.
 
 **6-nov a la tarde: listados de Binance al instante** (REGLAS v3.6, `decision/binance_listings.py`): apenas llega "Binance Will List …" o un HODLer Airdrop de una moneda con perpetuo, si la orden sale a ≤ 2,2 s de publicado y el precio no subió más de 8 %, largo sin esperar a la IA (stop 10 %, 15 min, 3 % al stop, como Upbit). El dueño pidió armarla ya con dinero real ("siendo tan pocos los avisos [...] quizá sea bueno armarlo ya para dinero real"): la arma él sumándola al armado (sección 6). Hasta entonces corre en el simulacro de Tokio.
 
@@ -203,6 +204,10 @@ a Tokio como motor. Lee este archivo primero, y lo que manda es esta lista:
      - A los 400 MB (`MemoryHigh`) el sistema empieza a frenar al agente, y a los 500 MB lo reinicia.
      - Bucle: la mediana es ~0,2 ms y el máximo de cada minuto 10-45 ms. Un máximo de más de ~100 ms que se repite
        (cada 2 min, cada 15 min) es trabajo pesado que frena las entradas al instante: buscarlo (sección 11).
+   - **Conexiones tibias con Binance** (pedido del dueño, 7-nov: "mantener las conexiones con binance en tibio"; #69):
+     `PID=$(systemctl show -p MainPID --value agente-tokio); ss -tnp state established | grep "pid=$PID," | grep ':443'`
+     tiene que mostrar ~8 conexiones a máquinas de AWS en Tokio (`ec2-…ap-northeast-1`): 4 del dinero real y 4 del
+     simulacro. Si no hay, la primera entrada al instante paga ~45 ms de saludo TLS: revisar el registro del agente.
    - Si no responde tres veces seguidas: avisar al dueño para que lo reinicie desde la consola de Lightsail, y no
      tocar nada más.
 3. **Simulacro de Tokio** (o el dinero real, si el dueño lo armó):
@@ -430,8 +435,11 @@ real [...] si fin de soporte o corto por advertencia upbit es bueno preparemos t
 | `advertencia_upbit` | corto apenas llega la advertencia de Upbit por Telegram (hasta 30 s, si no cayó 3 %), stop 10 %, 4 h | 0,20 veces: 2 % al stop | 42 monedas: mediana +2,02 %, 69 %, las dos mitades positivas |
 | `fin_soporte_corto` | corto con el primer fin del soporte de Upbit (Telegram) o Bithumb (su web, cada 1 s), hasta 5 s si no cayó 6 %, stop 10 %, 5 min | 0,10 veces: 1 % al stop | 25 monedas: mediana +3,73 %, 80 %; Bithumb sin probar en vivo |
 
-1. Fusionar el PR (protegido: lo fusiona el dueño). Claude lo instala en Tokio **sin posiciones reales abiertas** y
-   corre la prueba de punta a punta allá (`prueba_listado.py`).
+1. ✅ Fusionado (#80) e instalado en Tokio el 7-nov a las 09:13 UTC (`953bb9b`), sin posiciones reales abiertas. Prueba
+   de punta a punta allá con el Binance real: deslistado 27 ms, advertencia 24 ms, fin del soporte de Bithumb 23 ms de
+   recibido (350 ms de publicado), la IA confirmando en ~1 s, sin errores. Las conexiones tibias con Binance (pedido
+   del dueño: "mantener las conexiones con binance en tibio") corren para el dinero real y para el simulacro: 8
+   conexiones abiertas (4 por grupo).
 2. En el servidor, por SSH (los corre el dueño), con `TRADING_HOME=/home/ubuntu/.trading` y desde `~/trading`:
    - `.venv/bin/python -m tradingagent binance-real-check`: la prueba sin riesgo; desde el 7-nov valida también la venta
      en corto IOC con el tope de 2 % (en la demo ya pasó).
@@ -854,6 +862,7 @@ sección 11). Un estudio nuevo va con su línea acá.
 | 7-nov | **Las alarmas del libro en las caídas al instante** | No hay datos para medirlas: el archivo público de Binance dejó de guardar el mejor precio de los perpetuos en mar-2024 (`bookTicker`) y no hubo ningún deslistado desde que existe la regla (4-nov). El estudio mide entrar EN la caída (la primera operación después de la orden), así que mirarlas era apartarse de lo medido | sin alarmas en el deslistado, la vigilancia y el fin del soporte (como los listados al instante); quedan anotadas en `alarmas_del_libro` para medirlas en vivo (REGLAS B-4) | `research/shadow.py` |
 | 7-nov | **El candado del operador con posiciones abiertas** | Prueba de la PC: con 4 posiciones abiertas, un listado de Upbit esperó 156 ms el candado: la vigilancia de cada segundo pedía los 4 libros de a uno con el candado tomado. Ahora los pide juntos y antes del candado: 5-6 ms | arreglado (`live.watch_once`); importa más ahora que los cortos de 4 h dejan posiciones abiertas | `deploy/tokio/prueba_listado.py --pc` |
 | 7-nov | **¿Los cortos de 4 h le quitan lugar a los listados?** (el sobre deja 4 posiciones) | Con los avisos del estudio desde 2025 (49 deslistados, 43 advertencias y 25 fines del soporte con perpetuo; 291 avisos de listado de Upbit y Binance): al llegar cada listado había 0 posiciones abiertas en 267, 1 en 20, 2 en 1, 3 en 2 y 4 en 1 (13-may-2026, un deslistado de 4 monedas). Limitar los cortos a 3 a la vez lo evitaba, pero dejaba afuera 18 de 117 cortos (a 2, 42) | sin límite aparte: el cupo de 4 alcanza | cálculo con la caché del estudio |
+| 7-nov | **Instalado v3.7 en Tokio** (#80, 09:13 UTC) | Sin posiciones reales. 14 fuentes funcionando (Bithumb registró sus 5 avisos como historia); módulos: los dos listados en dinero real, el resto en simulacro. Prueba de punta a punta en Tokio con el Binance real: SOL 69 ms (en frío), DOGE 27 ms, XRP 24 ms, ADA 23 ms de recibido (350 ms de publicado, por el lector de Bithumb), ETH y PEPE frenados solo por el sobre; IA 0,97-1,5 s; sin errores; memoria libre igual antes y después (403 MB). Conexiones tibias: 8 abiertas con Binance (AWS Tokio), 4 del dinero real y 4 del simulacro (`ss -tnp state established`, el pid de `agente-tokio`). Memoria del agente antes de reinstalar: 181 MB a las 4,8 h (157 a las 0,7 h: ~6 MB/h); después, 151 MB; bucle p99 2 ms | falta que el dueño arme las estrategias nuevas (sección 6) | `deploy/tokio/prueba_listado.py` |
 | 7-nov | **Pruebas para el dinero real de los cortos** | (1) Prueba de punta a punta en la PC (Binance falso a ~3 ms y un Bithumb falso leído por el lector de verdad): DOGE 35 ms, XRP (advertencia) 44 ms, ADA (fin del soporte, leído a <1 s de publicado) 48 ms; la IA confirmó los títulos coreanos en 1,1-1,2 s; ETH y PEPE frenaron solo por el sobre; sin errores. (2) Ida y vuelta de un corto en la DEMO de Binance con el venue del dinero real (XRPUSDT, 20 USDT ficticios): venta IOC con límite exacto −2,00 % bajo el mejor comprador, llenada al mejor comprador; posición −16,9; stop de emergencia STOP_MARKET de compra al +30,0 % de cierre total; salida "solo reducir" llenada a los 6,5 s; sin posición ni stop al final. (3) `binance-real-check --demo`: todo OK, con el paso nuevo de la venta en corto con tope de 2 % | listo para que el dueño arme (sección 6); falta `binance-real-check` en Tokio con la clave real (lo corre el dueño) | `deploy/tokio/prueba_listado.py --pc`, `deploy/demo_corto.py` |
 | 6-nov | **Binance: ¿el perpetuo va 10 s detrás del listado?** (pedido del dueño; 66 monedas de 58 avisos con perpetuo, ene-2025 a oct-2026, operación por operación) | no hay 10 s ni es en la apertura del spot (ahí el perpetuo no sigue al spot: comprar pierde, mediana −1,6 %): es en el AVISO. El perpetuo salta a los 2,30 s de publicado (mediana; mitad central 2,15-2,58 s); a los 2 s, nada. Comprar a los 2 s con la regla de Upbit (stop 10 %, 15 min): mediana +7,50 %, media +18,58 %, 77 % (1.ª mitad +13,8 %, 2.ª +4,1 %); a los 2,5 s +2,0 %; a los 3,5 s (esperando a la IA) −0,5 %. El canal llega a Tokio a 1,2-1,8 s (5 avisos; 2,6 s uno a hora redonda) | candidato a regla al instante como la de Upbit, con freno de demora; lo decide el dueño (PR protegido) y se mide primero en el simulacro | `estudios/binance_listados_segundos.py` |
 | 5-nov | **Agente completo en Tokio (simulacro)** | Claude 1,8 s; Binance 2-5 ms (PC ~320 ms); fuentes OK salvo el sitio de Upbit (403); memoria: agente 77 MB y relé 63 MB de 416 | andando (`agente-tokio`); telemetría al tablero de la PC; la pausa de la PC frena a Tokio | RELE-TOKIO |
