@@ -64,6 +64,14 @@ def started_s(unit):
     return up - since if since > 0 else None
 
 
+# 0. Recién arrancado (después de instalar o de un reinicio), el agente tarda ~1 min en leer sus fuentes, conectar el
+#    canal de anuncios y abrir las conexiones tibias: se espera a que lleve 60 s andando (el 7-nov, a los 7 s de un
+#    reinicio, todo eso aparecía como falla y al minuto estaba bien).
+up = started_s("agente-tokio")
+if up is not None and up < 60:
+    print(f"esperando que el agente termine de arrancar ({60 - up:.0f} s)...", flush=True)
+    time.sleep(60 - up)
+
 # 1. Servicios: andando y habilitados para arrancar solos después de un reinicio (esperan la red y se relanzan solos)
 for unit in ("rele-tokio", "agente-tokio", "vigia-red.timer"):
     active, enabled = sh("systemctl", "is-active", unit), sh("systemctl", "is-enabled", unit)
@@ -138,8 +146,10 @@ age = now - float(hb.get("ts") or 0)
 src = hb.get("sources") or {}
 if src:
     failing = src.get("failing") or []
-    (ok if not failing else ojo)(f"fuentes: {src.get('ok')} de {src.get('total')} andando" +
-                                 (f" · fallan: {', '.join(map(str, failing))}" if failing else ""))
+    (ok if not failing and src.get("ok") == src.get("total") else ojo)(
+        f"fuentes: {src.get('ok')} de {src.get('total')} andando" +
+        (f" · fallan: {', '.join(map(str, failing))}" if failing else "" if src.get("ok") == src.get("total")
+         else " (las demás todavía no leyeron)"))
 ws = next((s for s in hb.get("streams") or [] if isinstance(s, dict) and "conectada" in s), None)
 if ws is not None:
     (ok if ws.get("conectada") else falla)("canal de anuncios de Binance (WebSocket): " +
@@ -150,9 +160,6 @@ if lag is not None:
 
 # 6. Conexiones tibias con Binance: 4 por grupo de conexiones (el del dinero real y el del simulacro), cada 10 s
 pid = sh("systemctl", "show", "-p", "MainPID", "--value", "agente-tokio")
-up = started_s("agente-tokio")
-if up is not None and up < 25:
-    time.sleep(25 - up)                                # recién arrancado: la primera vuelta de las tibias
 peers = []
 for line in sh("ss", "-tnpH", "state", "established").splitlines():
     if f"pid={pid}," in line:
@@ -179,11 +186,12 @@ if tg and last and "escuchando" in last[-1]:
     ok("relé: escuchando el canal oficial de Upbit en Telegram")
 else:
     falla("relé: Telegram no está conectado (los avisos de Upbit no llegan)")
-pc = [x for x in log.splitlines() if "estado: PC" in x]
-if pc and "agente de Tokio sí" in pc[-1]:
+pc = [x for x in log.splitlines() if "estado: PC" in x]          # su informe de cada 5 min
+hello = "la PC habla desde" in log and "el agente de Tokio habla desde" in log   # o el saludo de cada uno al arrancar
+if (pc and "agente de Tokio sí" in pc[-1]) or (not pc and hello):
     ok("relé: habla con la PC y con el agente")
 else:
-    ojo("relé: todavía no informó que habla con la PC y el agente (cada 5 min)")
+    ojo("relé: no informó que habla con la PC y con el agente")
 
 # 8. Errores de los últimos 15 minutos y pausa
 errs = sh("sudo", "-n", "journalctl", "-u", "agente-tokio", "-u", "rele-tokio", "--since", "-15min", "-p", "err",

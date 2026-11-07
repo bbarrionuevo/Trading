@@ -40,6 +40,6 @@ sudo systemctl daemon-reload
 sudo systemctl enable -q rele-tokio agente-tokio
 sudo systemctl restart rele-tokio agente-tokio
 # La revisión de siempre (servicios, arranque solo, conexiones tibias, Telegram, fuentes, errores...), ya con la versión
-# nueva: a los 30 s el agente leyó sus fuentes y abrió las conexiones tibias.
-sleep 30
+# nueva. Espera sola a que el agente lleve 60 s andando (lee sus fuentes y abre las conexiones tibias).
+sleep 5
 bash "$REPO/deploy/tokio/revisar.sh"

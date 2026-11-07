@@ -195,7 +195,11 @@ PC, los errores de los últimos 15 min y la pausa.
 - **Reiniciar el servidor**: `sudo reboot`. En 1 a 2 minutos todo arranca solo: los servicios están habilitados,
   esperan a la red y, si se caen, systemd los relanza cada 5-10 s sin límite. Con el armado en disco, el dinero real
   sigue armado; el agente concilia las posiciones con Binance al arrancar y cierra las que vencieron mientras estuvo
-  apagado. Después, `revisar.sh`. Comprobado el 6-nov (el dueño reinició por el kernel nuevo y todo volvió solo).
+  apagado. Después, `revisar.sh`. Comprobado el 6-nov (el dueño reinició por el kernel nuevo y todo volvió solo) y
+  el 7-nov a las 09:49 UTC, con el dinero real armado (reinicio de prueba del dueño): el relé y el agente arrancaron
+  solos en el mismo segundo, Telegram escuchando a los 4 s, y al minuto la revisión dio todo OK (14 fuentes, el canal
+  de anuncios conectado, las 8 conexiones tibias, 0 errores). En el primer minuto las fuentes y el canal todavía están
+  arrancando: `revisar.sh` espera sola a que el agente lleve 60 s.
   Lo que no vuelve solo: un estudio o medidor lanzado a mano en `~/diag` (no es producción).
 
 ### Vigilancia (qué revisar en cada pasada, también la vigilancia programada de cada 3 h)
