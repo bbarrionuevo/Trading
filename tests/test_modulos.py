@@ -93,7 +93,7 @@ def test_el_tablero_muestra_cada_modulo_y_no_publica_la_plata_real(tmp_path):
     local = dashboard.gather(tmp_path, NOW, include_real=True)
     html = dashboard.fragment(local)
     assert "Módulos (estrategias)" in html and "Listados de Upbit al instante" in html
-    assert 'class="badge real">dinero real' in html and "hasta 3 s del mensaje" in html
+    assert 'class="badge real">dinero real' in html and "3 s en un alta en wones" in html
     assert "+9.11 %" in html and "+16.4 % a los 15 s" in html and "1.05 s" in html and "31 ms" in html
     assert "3.12" in html                                                        # el PnL real se ve solo en la PC
     public = dashboard.gather(tmp_path, NOW, include_real=False)

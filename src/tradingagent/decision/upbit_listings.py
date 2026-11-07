@@ -19,6 +19,12 @@ lambda de Kyle, distancia a la marca): no se miran; protege el tope de precio de
 sobre al stop (0,30 veces el saldo con el stop fijo de 10 % de A-5; el dueño, 5-nov: "arriesga el 3%") y sale a los
 15 min. Más que eso o apalancamiento, no (estudios/upbit_tamano.py: con 5 % la mitad de las veces se toca el freno de
 8 %): lineamiento L-3 de REGLAS.
+
+v3.9 (7-nov): el cruce con la hora REAL de cada mensaje de Telegram (`estudios/upbit_telegram_cruce.py`) mostró que el
+listado nuevo y el alta en wones son dos cosas distintas. El alta en wones (una moneda que ya estaba en Upbit) sube y se
+sostiene: entrando a 0,6-0,8 s del mensaje, +13,5 a +15,9 % por aviso a los 15 min, y todavía +11 % a los 2 s. El
+listado nuevo depende de décimas: +3,2 % por aviso a 0,6 s y ~0 pasado 1 s. Por eso el freno sube a 25 % para los dos
+y el listado nuevo solo entra hasta 1 s del mensaje (MAX_LATE_BY_KIND).
 """
 from ..intelligence import vector as vec
 from ..intelligence.classifier import Signal
@@ -28,13 +34,20 @@ from .policy import Assessment
 SOURCES = {"upbit.avisos"}                 # el lector de Upbit y el canal oficial de Telegram (por el relé)
 KINDS = ("listado_spot", "listado_krw")    # listado nuevo y alta en el mercado en wones
 CATEGORY = "listado_upbit"
-VERSION = "listado-upbit-1"
+VERSION = "listado-upbit-2"                # v3.9: freno de 25 % y el listado nuevo hasta 1 s
 RULE = "listado_upbit_al_instante"
 NAME = "listado de Upbit"
-# Desde la hora del mensaje de Telegram (≈ 1 s después del sitio, en segundos enteros): a los 5 s del sitio la mediana
-# ya es negativa. El sondeo del sitio (~8 s) queda afuera: lo opera la regla general de listados, como siempre.
+# Desde la hora del mensaje de Telegram (en segundos enteros; sale 0 a 2 s después del sitio, casi siempre "+1 s"). El
+# sondeo del sitio (~8 s) queda afuera: lo opera la regla general de listados, como siempre.
 MAX_LATE_S = 3.0
-MAX_RISE = 0.16                            # el tope de Binance en los primeros segundos es +15 %: más, llegamos tarde
+# v3.9 (7-nov, `estudios/upbit_telegram_cruce.py`: 27 altas en wones y 65 listados nuevos desde may-2025, con la hora
+# REAL de cada mensaje de Telegram y entrando a 0,2-2 s de él, como el agente):
+# - El freno: los que ya subieron 16 % siguen subiendo. Con 25 % rinde más por aviso en casi todas las demoras y en los
+#   dos tipos (+0,9 a +1,9 puntos); sin freno, nada protege de una operación rara del primer segundo.
+# - La demora por tipo: el listado nuevo solo rinde si entramos temprano (por aviso +6,6 % a 0,2 s, +2,1 % a 1 s, +0,6 %
+#   a 1,2-2 s con mediana de −1,5 a −2,5 %); el alta en wones rinde hasta los 2 s y más (+11 a +12 % por aviso).
+MAX_RISE = 0.25
+MAX_LATE_BY_KIND = {"listado_spot": 1.0, "listado_krw": MAX_LATE_S}
 HIT_RATE = 0.58                            # a los 2 s, salida a los 15 min: 58 % positivas
 HOLD_MIN = 15
 NOT_COINS = {"KRW", "BTC", "USDT"}         # los mercados del título, no monedas
@@ -56,6 +69,16 @@ def notice(source: str, title: str) -> tuple[str | None, tuple[str, ...]]:
                     out.append(c)
             return kind, tuple(out)
     return None, ()
+
+
+def max_rise(kind: str | None) -> float:
+    """El freno de precio (desde la apertura del minuto del aviso): el mismo para los dos tipos."""
+    return MAX_RISE
+
+
+def max_late(kind: str | None) -> float:
+    """Hasta cuántos segundos desde la hora del mensaje se entra, según el tipo de listado."""
+    return MAX_LATE_BY_KIND.get(kind, min(MAX_LATE_BY_KIND.values()))
 
 
 def signal(asset: str) -> Signal:

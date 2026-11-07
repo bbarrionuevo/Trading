@@ -108,6 +108,9 @@ def test_l_lineamientos_medidos_trabados_en_el_codigo():
     from tradingagent.decision import delistings as delistings_mod
     from tradingagent.research import shadow
     assert upbit_listings.MAX_LATE_S <= 3.0                                  # L-1: al instante, por Telegram
+    assert all(upbit_listings.max_rise(k) <= 0.25 for k in (*upbit_listings.KINDS, None))     # L-1, v3.9
+    assert upbit_listings.max_late("listado_spot") <= 1.0 and upbit_listings.max_late(None) <= 1.0   # el nuevo, temprano
+    assert upbit_listings.max_late("listado_krw") <= upbit_listings.MAX_LATE_S
     assert binance_listings.MAX_LATE_S <= 2.5 and binance_listings.MAX_RISE <= 0.08   # L-10: a los 3,5 s ya es tarde
     live_src = (SRC / "live.py").read_text(encoding="utf-8")
     start = live_src.index("    async def on_news(")

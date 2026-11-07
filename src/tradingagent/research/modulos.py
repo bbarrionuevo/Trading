@@ -78,11 +78,14 @@ def catalog(home: Path, now: float | None = None) -> list[dict]:
         {"id": ul.CATEGORY, "nombre": "Listados de Upbit al instante", "lado": "largo",
          "fuente": "canal oficial de Upbit en Telegram (@upbit_news), por el relé de Tokio",
          "ia": "lee después de entrar; si no confirma, cierra",
-         "parametros": [["Llega a tiempo", f"hasta {_num(ul.MAX_LATE_S)} s del mensaje"],
-                        ["Freno de precio", f"no entra si ya subió más de {_num(ul.MAX_RISE * 100)} %"], *_exits(ul.CATEGORY)],
-         "estudio": {"texto": "31 listados (may-oct 2026), entrando a 1 s de Telegram: mediana +9,16 %, media "
-                              "+12,02 %, 71 % positivas", "mediana_pct": 9.16, "acierto_pct": 71,
-                     "donde": "estudios/upbit_salidas.py"}},
+         "parametros": [["Llega a tiempo", f"hasta {_num(ul.max_late('listado_spot'))} s del mensaje en un listado "
+                                           f"nuevo y {_num(ul.max_late('listado_krw'))} s en un alta en wones"],
+                        ["Freno de precio", f"no entra si ya subió más de {_num(ul.MAX_RISE * 100)} %"],
+                        *_exits(ul.CATEGORY)],
+         "estudio": {"texto": "92 listados desde may-2025 con la hora real de Telegram, entrando a 0,7 s del mensaje y "
+                              "saliendo a los 15 min: +6,0 % por aviso (altas en wones +13,8 %), mediana +0,39 %, 53 % "
+                              "positivas", "mediana_pct": 0.39, "acierto_pct": 53,
+                     "donde": "estudios/upbit_telegram_cruce.py"}},
         {"id": bl.CATEGORY, "nombre": "Listados de Binance al instante", "lado": "largo",
          "fuente": "canal de anuncios de Binance (WebSocket) y su catálogo de listados",
          "ia": "lee después de entrar; si no confirma, cierra",

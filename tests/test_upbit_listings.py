@@ -83,7 +83,7 @@ def test_solo_los_listados_de_upbit_con_las_reglas_del_estudio():
 
 
 async def test_llega_a_tiempo_y_entra_largo_aunque_el_libro_dispare_las_alarmas(tmp_path):
-    clock = ManualClock(T0 + 1.5)                                      # 1,5 s después del mensaje
+    clock = ManualClock(T0 + 0.6)                                      # 0,6 s después del mensaje (listado nuevo: ≤ 1 s)
     fake = FakeBinance(price=market(160.0), clock=clock, spread_bps=80)  # spread de 80 bps: B-4 frenaría
     home = tmp_path / "home"
     async with serve(fake.app()) as url, aiohttp.ClientSession() as s:
@@ -98,21 +98,53 @@ async def test_llega_a_tiempo_y_entra_largo_aunque_el_libro_dispare_las_alarmas(
         assert 0.20 * 120 < entry * float(pos["qty"]) <= 0.30 * 120 + 0.5   # 3 % del saldo al stop
         assert len(t.st["positions"]) == 1                                   # FOO no tiene perpetuo
     got = rows(home)
-    assert next(r for r in got if r["decision"] == "entrar")["signal"]["version"] == "listado-upbit-1"
+    assert next(r for r in got if r["decision"] == "entrar")["signal"]["version"] == "listado-upbit-2"
     assert any("lo_opera_la_regla_de_listados_de_upbit" in r["motivos"] for r in got if r["decision"] == "no_entrar")
 
 
-async def test_si_ya_subio_mas_que_el_tope_de_binance_no_entra(tmp_path):
-    clock = ManualClock(T0 + 2.5)                                      # ya en el minuto siguiente
-    fake = FakeBinance(price=market(180.0), clock=clock)                # +20 %: se escapó
+async def test_si_ya_subio_mas_que_el_freno_no_entra(tmp_path):
+    clock = ManualClock(T0 + 2.3)                                      # el mensaje a los 59,5 s: 0,8 s, minuto siguiente
+    fake = FakeBinance(price=market(195.0), clock=clock)                # +30 %: se escapó (el freno es 25 %)
     home = tmp_path / "home"
     async with serve(fake.app()) as url, aiohttp.ClientSession() as s:
         t = await trader(s, url, clock, home)
-        await t.on_news(notice("u2"))
+        await t.on_news(notice("u2", published=T0 + 1.5))
         await settle(t)
         assert not any(p["category"] == "listado_upbit" for p in t.st["positions"].values())
     why = [r["motivos"] for r in rows(home) if r["signal"].get("category") == "listado_upbit"]
-    assert why and why[0][0].startswith("ya_subio:+20.00")
+    assert why and why[0][0].startswith("ya_subio:+30.00")
+
+
+async def test_v39_freno_de_25_y_la_demora_por_tipo(tmp_path):
+    """v3.9 (7-nov, estudios/upbit_telegram_cruce.py, con la hora real de Telegram): los que ya subieron 16 % siguen
+    subiendo, así que el freno es 25 % para los dos tipos; el listado nuevo solo entra hasta 1 s del mensaje (después la
+    operación típica pierde) y el alta en wones hasta 3 s (todavía +11 % por aviso a los 2 s)."""
+    krw = "솔라나(SOL) KRW 마켓 디지털 자산 추가"
+    assert upbit_listings.max_rise("listado_krw") == upbit_listings.max_rise("listado_spot") == 0.25
+    assert upbit_listings.max_late("listado_spot") == 1.0 and upbit_listings.max_late("listado_krw") == 3.0
+    clock = ManualClock(T0 + 2.5)                                      # el alta en wones a 2,5 s, ya en el minuto siguiente
+    for after, nid, entra in ((180.0, "k1", True), (195.0, "k2", False)):           # +20 % entra, +30 % no
+        home = tmp_path / nid
+        fake = FakeBinance(price=market(after), clock=clock)
+        async with serve(fake.app()) as url, aiohttp.ClientSession() as s:
+            t = await trader(s, url, clock, home)
+            await t.on_news(notice(nid, title=krw))
+            await settle(t)
+            assert ("SOLUSDT" in t.st["positions"]) is entra
+        got = [r for r in rows(home) if r["signal"].get("category") == "listado_upbit"]
+        assert got and got[0]["params"]["max_rise"] == 0.25 and got[0]["params"]["tipo"] == "listado_krw"
+    clock = ManualClock(T0 + 1.5)                                      # a 1,5 s: el nuevo no entra, el alta en wones sí
+    for title, nid, entra in ((TITLE, "n3", False), (krw, "k3", True)):
+        home = tmp_path / nid
+        fake = FakeBinance(price=market(160.0), clock=clock)
+        async with serve(fake.app()) as url, aiohttp.ClientSession() as s:
+            t = await trader(s, url, clock, home)
+            await t.on_news(notice(nid, title=title))
+            await settle(t)
+            assert ("SOLUSDT" in t.st["positions"]) is entra
+        if not entra:
+            why = [r["motivos"] for r in rows(home) if r["signal"].get("category") == "listado_upbit"]
+            assert why and why[0][0] == "listado_upbit_tarde:1.5s"
 
 
 async def test_el_sondeo_del_sitio_llega_tarde_y_no_usa_la_regla_al_instante(tmp_path):
@@ -129,7 +161,7 @@ async def test_el_sondeo_del_sitio_llega_tarde_y_no_usa_la_regla_al_instante(tmp
 
 
 async def test_si_la_ia_no_confirma_el_listado_se_cierra(tmp_path):
-    clock = ManualClock(T0 + 1.5)
+    clock = ManualClock(T0 + 0.6)
     llm = FakeLlm(Signal("advertencia", -0.6, 0.6, ("SOL",), 60))      # la IA lee otra cosa
     async with serve(FakeBinance(price=market(160.0), clock=clock).app()) as url, aiohttp.ClientSession() as s:
         t = await trader(s, url, clock, tmp_path / "home", llm)
@@ -141,7 +173,7 @@ async def test_si_la_ia_no_confirma_el_listado_se_cierra(tmp_path):
 
 
 async def test_si_la_ia_confirma_el_listado_queda_abierto(tmp_path):
-    clock = ManualClock(T0 + 1.5)
+    clock = ManualClock(T0 + 0.6)
     llm = FakeLlm(Signal("listado", 0.8, 0.7, ("SOL",), 15))
     async with serve(FakeBinance(price=market(160.0), clock=clock).app()) as url, aiohttp.ClientSession() as s:
         t = await trader(s, url, clock, tmp_path / "home", llm)

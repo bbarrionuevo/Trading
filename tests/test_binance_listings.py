@@ -208,7 +208,7 @@ async def test_guarda_lo_que_sirve_para_mejorar(tmp_path):
         assert "SOLUSDT" not in t.st["positions"]
     entry = next(r for r in rows(home) if r["decision"] == "entrar")
     assert entry["aviso"]["demora_s"] == 1.17 and isinstance(entry["camino_ms"], int) and entry["camino_ms"] >= 0
-    assert entry["params"] == {"max_late_s": 2.2, "max_rise": 0.08} and entry["ref"]["precio_base"] == 150.0
+    assert entry["params"] == {"max_late_s": 2.2, "max_rise": 0.08, "tipo": "listado_spot"} and entry["ref"]["precio_base"] == 150.0
     out = next(r for r in rows(home, "operaciones") if r.get("tipo") == "salida")
     tray = out["trayectoria"]
     assert out["motivo"] == "stop_loss" and tray["max_pct"] > 2 and tray["min_pct"] < -10

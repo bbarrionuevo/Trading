@@ -3,7 +3,7 @@ simulacro), SIN tocar nada de verdad:
 - un agente aparte (otra carpeta TRADING_HOME): simulacro de 100 USDT de mentira, sin bot de Telegram, sin fuentes y
   sin aprendizaje;
 - un relé de prueba en otro puerto, sin Telegram (la sesión de Upbit sigue siendo solo del relé de verdad).
-Le manda, armados a mano: un listado de Upbit (SOL, como si Telegram lo trajera 1 s después del sitio), un deslistado de
+Le manda, armados a mano: un listado de Upbit (SOL, por Telegram a 0,5 s de la hora del mensaje: v3.9, el listado nuevo entra hasta 1 s), un deslistado de
 Binance (DOGE, por la lista de anuncios: entra corto), una advertencia de Upbit (XRP, por Telegram: entra corto), un fin
 del soporte de Bithumb (ADA: lo publica un Bithumb falso local y lo lee el lector de verdad del agente de prueba,
 `bithumb.avisos`, cada 1 s, así se mide también la demora del sondeo), otro listado de Upbit con la misma plantilla
@@ -257,13 +257,13 @@ async def main() -> int:
         print("en la PC, contra un Binance falso con los tiempos de Tokio (~3 ms)" if PC else "en Tokio, Binance real")
         await asyncio.sleep(2)
 
-        def upbit(title: str, tag: str) -> str:                # como Telegram: 1 s después del sitio
+        def upbit(title: str, tag: str) -> str:                # como Telegram: 0,5 s después de la hora del mensaje
             now = time.time()
             assert relay.forward(NewsItem(id="prueba-" + secrets.token_hex(4), source="upbit.avisos", tier=1,
-                                          kind="telegram", title=title, published_at=now - 1.0, received_at=now,
+                                          kind="telegram", title=title, published_at=now - 0.5, received_at=now,
                                           url=f"https://upbit.com/service_center/notice?id=prueba-{tag}")), \
                 "el relé de prueba no tenía a quién mandar"
-            return "por Telegram (1 s después del sitio)"
+            return "por Telegram (0,5 s después de la hora del mensaje)"
 
         def binance(title: str, tag: str, lag: float) -> str:  # otro enlace: con el mismo, es "el mismo aviso"
             now = time.time()
