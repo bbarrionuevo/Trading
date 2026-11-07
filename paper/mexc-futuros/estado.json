@@ -29,7 +29,7 @@
    "mmr": "0.001",
    "max_leverage": 500,
    "trading": true,
-   "ts": 1793935704
+   "ts": 1794043363
   },
   "ETH_USDT": {
    "symbol": "ETH_USDT",
@@ -44,7 +44,7 @@
    "mmr": "0.001",
    "max_leverage": 500,
    "trading": true,
-   "ts": 1793935704
+   "ts": 1794043363
   },
   "SOL_USDT": {
    "symbol": "SOL_USDT",
@@ -59,30 +59,30 @@
    "mmr": "0.0023",
    "max_leverage": 300,
    "trading": true,
-   "ts": 1793935704
+   "ts": 1794043363
   }
  },
  "spreads": {
   "ETH_USDT": {
-   "mean": 0.044065,
+   "mean": 0.044077,
    "var": 0.0,
-   "n": 18,
-   "ts": 1794019872.746956
+   "n": 19,
+   "ts": 1794043362.880238
   },
   "SOL_USDT": {
-   "mean": 1.084934,
-   "var": 0.000352,
-   "n": 18,
-   "ts": 1794019872.746956
+   "mean": 1.085639,
+   "var": 0.000359,
+   "n": 19,
+   "ts": 1794043362.880238
   },
   "BTC_USDT": {
-   "mean": 0.012947,
+   "mean": 0.012952,
    "var": 0.0,
-   "n": 16,
-   "ts": 1794019872.746956
+   "n": 17,
+   "ts": 1794043362.880238
   }
  },
- "last_check": 1794019872.7469556,
+ "last_check": 1794043362.8802383,
  "created_at": 1793670086,
  "strategy_tag": "reglas-2+riesgo-2",
  "stats": {
@@ -94,5 +94,5 @@
  "fees": "0",
  "realized": "0",
  "equity": "120.000000",
- "updated_at": 1794019873
+ "updated_at": 1794043363
 }
