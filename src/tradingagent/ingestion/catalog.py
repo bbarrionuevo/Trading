@@ -9,11 +9,12 @@ Latencia: un RSS sondeado cada 30-60 s llega minutos tarde frente a un feed pago
 Para eso existe el receptor de webhooks (ingestion/webhook.py): cualquier feed rápido se enchufa ahí.
 """
 import itertools
+import math
 import os
 from dataclasses import replace
 
 from ..core.events import TIER_MEDIA, TIER_OFFICIAL
-from .announcements import BINANCE_LISTINGS, BITGET_LISTINGS, BITHUMB_NOTICES, OKX_LISTINGS, UPBIT_NOTICES
+from .announcements import BINANCE_ALL, BINANCE_LISTINGS, BITGET_LISTINGS, BITHUMB_NOTICES, OKX_LISTINGS, UPBIT_NOTICES
 from .sources import SourceSpec
 
 # 100 por página (en el pico de los resultados se presentan decenas de 8-K por minuto) y cada 20 s: el 8-K de
@@ -26,14 +27,26 @@ PRN_EARNINGS = "https://www.prnewswire.com/rss/financial-services-latest-news/ea
 
 
 def binance_variants(sizes=(10, 15, 20)) -> tuple[str, ...]:
-    """La misma lista de anuncios de Binance pedida de 72 formas (orden de los parámetros y tamaño de página). El
-    CDN (CloudFront) guarda cada forma ~120 s: con una sola URL, un listado llegaba en promedio ~60 s tarde
-    (medido en la PC el 4-nov: la "edad" de la copia iba de 10 a 115 s). Rotando 72 formas cada 3 s, cada una
-    vuelve a pedirse a los ~216 s, ya vencida: la respuesta sale del servidor de Binance, fresca. CloudFront solo
-    acepta tamaños 5, 10, 15, 20 y 50 (otro valor o un parámetro extra da HTTP 400)."""
+    """La lista de anuncios de Binance pedida de muchas formas (orden de los parámetros y tamaño de página). El CDN
+    (CloudFront) guarda cada forma ~120 s: con una sola URL, un listado llegaba en promedio ~60 s tarde (medido en la
+    PC el 4-nov: la "edad" de la copia iba de 10 a 115 s). Rotando las formas, cada una vuelve a pedirse ya vencida:
+    la respuesta sale del servidor de Binance, fresca. CloudFront solo acepta tamaños 5, 10, 15, 20 y 50 (otro valor o
+    un parámetro extra da HTTP 400).
+
+    Desde el 7-nov (`estudios/binance_catalogos_cache.py`), una vuelta el catálogo 48 (listados: 72 formas) y la otra
+    la lista SIN catálogo, que trae los 7 juntos (deslistados, la etiqueta de vigilancia en "noticias", HODLer en
+    "airdrops", mantenimiento, actividades, API): 40 formas, por las dos direcciones que dan la misma respuesta
+    (composite y apex), con los 5 órdenes que no usa la web de Binance (el de la web siempre sale de la copia, de hasta
+    ~115 s) y 4 tamaños. Con un pedido cada 3 s: los listados siguen cada 3 s y los demás catálogos quedan cada 6 s,
+    con los MISMOS pedidos de antes (el límite de www.binance.com es por IP); cada forma vuelve a los 240 s o más."""
     base, params = BINANCE_LISTINGS.split("?")[0], ["type=1", "catalogId=48", "pageNo=1"]
-    return tuple(f"{base}?{'&'.join(order)}" for size in sizes
-                 for order in itertools.permutations([*params, f"pageSize={size}"]))
+    listings = [f"{base}?{'&'.join(order)}" for size in sizes
+                for order in itertools.permutations([*params, f"pageSize={size}"])]
+    every = [f"{path}?{'&'.join(order)}" for path in BINANCE_ALL for size in (5, 10, 15, 20)
+             for order in itertools.permutations(["type=1", "pageNo=1", f"pageSize={size}"])
+             if order != ("type=1", "pageNo=1", f"pageSize={size}")]
+    n = math.lcm(len(listings), len(every))
+    return tuple(u for i in range(n) for u in (listings[i % len(listings)], every[i % len(every)]))
 
 CNBC = "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id={id}"
 
@@ -69,8 +82,10 @@ DEFAULT_SOURCES = (
     SourceSpec("investing", "https://www.investing.com/rss/news.rss", tier=TIER_MEDIA, interval_s=60,
                max_age_s=300, category="bolsa"),
     # Anuncio OFICIAL de listados de Binance (API pública en JSON): la noticia que más mueve un precio. Estudio del
-    # 3-nov (docs/ESTUDIO-LISTADOS.md): entrando al minuto gana, a los 5 minutos ya no. Cada 3 s y rotando 72
-    # formas de la URL para saltar la copia de ~120 s del CDN (binance_variants).
+    # 3-nov (docs/ESTUDIO-LISTADOS.md): entrando al minuto gana, a los 5 minutos ya no. Cada 3 s y rotando formas de
+    # la URL para saltar la copia de ~120 s del CDN (binance_variants). Desde el 7-nov, una vuelta sí y otra no trae
+    # TODOS los catálogos: es el respaldo del canal de anuncios (WebSocket) también para deslistados y vigilancia. El
+    # id sigue siendo "binance.listados" (lo usan las reglas y el relé). Lo lee el relé de Tokio, no el agente.
     SourceSpec("binance.listados", BINANCE_LISTINGS, tier=TIER_OFFICIAL, interval_s=3, max_age_s=600,
                category="listado", format="binance", url_variants=binance_variants()),
     # Avisos de mercado de Upbit (en coreano). Estudio del 4-nov (180 días, en MEXC): listado nuevo +13,5 % a 5 min

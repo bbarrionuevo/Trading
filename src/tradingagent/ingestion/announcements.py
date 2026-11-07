@@ -13,6 +13,10 @@ from .feeds import FeedEntry, FeedError
 
 BINANCE_LISTINGS = ("https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&catalogId=48"
                     "&pageNo=1&pageSize=20")
+# La lista SIN catálogo trae los 7 juntos (48, 49, 51, 93, 128, 157 y 161), con la misma forma; las dos direcciones
+# dan la misma respuesta (7-nov, estudios/binance_catalogos_cache.py).
+BINANCE_ALL = ("https://www.binance.com/bapi/composite/v1/public/cms/article/list/query",
+               "https://www.binance.com/bapi/apex/v1/public/apex/cms/article/list/query")
 OKX_LISTINGS = "https://www.okx.com/api/v5/support/announcements?annType=announcements-new-listings"
 BITGET_LISTINGS = "https://api.bitget.com/api/v2/public/annoucements?language=en_US&annType=coin_listings"
 UPBIT_NOTICES = "https://api-manager.upbit.com/api/v1/announcements?os=web&page=1&per_page=20&category=trade"

@@ -11,7 +11,8 @@ Quién le habla (cada uno con su latido firmado, "hb"):
 
 Fuentes (medido el 5-nov, docs/RELE-TOKIO.md): el canal OFICIAL de Upbit en Telegram (relay/telegram_upbit.py:
 cada aviso sale 0 a 2 s después del sitio; el sitio de Upbit bloquea las IP de AWS) y la lista de anuncios de Binance
-(una sola lectura por IP: el agente de Tokio no la lee por su cuenta, la recibe de acá).
+(una sola lectura por IP: el agente de Tokio no la lee por su cuenta, la recibe de acá). Desde el 7-nov esa lectura
+trae, una vuelta sí y otra no, todos los catálogos: es el respaldo del WebSocket también para deslistados y vigilancia.
 
 Uso en el servidor:  python -m tradingagent.relay.server --clave ~/relay.key --puerto 50005
 """

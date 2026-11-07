@@ -35,16 +35,18 @@ SOURCE_ID = "binance.ws"
 RENEW_S = 23 * 3600
 PING_S = 25.0
 BACKOFF_S = (5, 10, 20, 40, 80, 120)
-# Catálogos de Binance → pista de categoría (el clasificador y la IA deciden por el texto).
-CATALOGS = {48: "listado", 161: "deslistado", 49: "noticias", 50: "listado", 93: "actividad", 128: "airdrop",
-            157: "mantenimiento"}
+# Catálogos de Binance → pista de categoría (el clasificador y la IA deciden por el texto). Los 7 que trae la lista sin
+# catálogo (7-nov: 48, 49, 51, 93, 128, 157 y 161) y el 50. Uno que no esté acá se avisa una vez por Telegram.
+CATALOGS = {48: "listado", 161: "deslistado", 49: "noticias", 50: "listado", 51: "api", 93: "actividad",
+            128: "airdrop", 157: "mantenimiento"}
+NEW_CATALOGS_MAX = 50          # por si el canal manda basura: no se anotan más que estos
 
 
 class BinanceAnnouncements:
     """Fuente empujada: mantiene la conexión y entrega cada anuncio a `on_item(item, max_age_s=...)`."""
 
     def __init__(self, key: str, secret: str, on_item, clock, *, url: str = WSS, time_url: str = TIME_URL,
-                 max_age_s: float = 600.0, backoff_s=BACKOFF_S, renew_s: float = RENEW_S):
+                 max_age_s: float = 600.0, backoff_s=BACKOFF_S, renew_s: float = RENEW_S, on_new_catalog=None):
         if not key or not secret:
             raise ValueError("faltan BINANCE_LECTURA_KEY y BINANCE_LECTURA_SECRET")
         self._key, self._secret = key, secret
@@ -53,6 +55,8 @@ class BinanceAnnouncements:
         self.health = SourceHealth()
         self.connected = False
         self.counts = {"anuncios": 0, "conexiones": 0, "cortes": 0}
+        self.on_new_catalog = on_new_catalog            # (número, nombre, título) de un catálogo que no está en CATALOGS
+        self.new_catalogs: set = set()
 
     def snapshot(self) -> dict:
         return {"conectada": self.connected, **self.counts, "estado": self.health.state,
@@ -76,10 +80,32 @@ class BinanceAnnouncements:
             return None
         pub = a.get("publishDate")
         cat = a.get("catalogId")
+        if cat not in CATALOGS:
+            self._seen_new_catalog(cat, a.get("catalogName"), title)
         return NewsItem(id=stable_id(SOURCE_ID, f"{cat}:{title}:{pub}"), source=SOURCE_ID, tier=TIER_OFFICIAL,
                         kind="websocket", title=title, body=clean_text(str(a.get("body") or ""))[:2000],
                         published_at=float(pub) / 1000 if pub else None, received_at=self.clock.time(),
                         category_hint=CATALOGS.get(cat, clean_text(str(a.get("catalogName") or ""), 30)))
+
+    def _seen_new_catalog(self, cat, name, title: str) -> None:
+        """Un catálogo que no conocemos (pedido del dueño, 7-nov: avisar las categorías nuevas): una vez por catálogo,
+        DESPUÉS de entregar el anuncio (call_soon: no le suma nada a la entrada). El anuncio sigue su camino como
+        cualquier otro: lo decide la IA por el texto."""
+        if cat in self.new_catalogs or len(self.new_catalogs) >= NEW_CATALOGS_MAX:
+            return
+        self.new_catalogs.add(cat)
+        try:
+            asyncio.get_running_loop().call_soon(self._new_catalog, cat, clean_text(str(name or ""), 60), title)
+        except RuntimeError:                                  # sin bucle andando (pruebas): ya
+            self._new_catalog(cat, clean_text(str(name or ""), 60), title)
+
+    def _new_catalog(self, cat, name: str, title: str) -> None:
+        log.warning("catálogo de Binance que no conocía: %s «%s» (primer anuncio: %s)", cat, name, title[:100])
+        if self.on_new_catalog is not None:
+            try:
+                self.on_new_catalog(cat, name, title)
+            except Exception:                                  # un aviso nunca corta el canal
+                log.exception("no pude avisar el catálogo nuevo %s", cat)
 
     async def _offset(self, session) -> int:
         try:
